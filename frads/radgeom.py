@@ -7,137 +7,21 @@ T.Wang
 import math
 
 
-class Point(object):
-    """3D point class."""
-
-    def __init__(self, x=0, y=0, z=0):
-        """Class instantiation.
-
-        Parameters:
-            x, y, z: cartesian coordiantes
-
-        """
-        errmsg = "float or integer required"
-        assert all([type(i) in [float, int] for i in [x, y, z]]), errmsg
-        self.x = x
-        self.y = y
-        self.z = z
-
-    def __str__(self):
-        """Class string representation."""
-        return "\t{}\t{}\t{}\n".format(self.x, self.y, self.z)
-
-    def __add__(self, other):
-        """Add a point to another point/vector."""
-        result = [self.x + other.x, self.y + other.y, self.z + other.z]
-        if isinstance(other, Point):
-            return Vector(*result)
-        elif isinstance(other, Vector):
-            return Point(*result)
-        else:
-            raise "Can't subtract {} from {}".format(self, other)
-
-    def __sub__(self, other):
-        """Subtract a point from another point/vector."""
-        result = [self.x - other.x, self.y - other.y, self.z - other.z]
-        if isinstance(other, Point):
-            return Vector(*result)
-        elif isinstance(other, Vector):
-            return Point(*result)
-        else:
-            raise "Can't subtract {} from {}".format(self, other)
-
-    def __eq__(self, other):
-        if self.x == other.x and self.y == other.y and self.z == other.z:
-            return True
-        else:
-            return False
-
-    def __mul__(self, other):
-        """Multiply a point by a vector."""
-        return Point(self.x * other.x, self.y * other.y, self.z * other.z)
-
-    def distance_from(self, other):
-        """Calculate the distance between two points."""
-        dx = math.fabs(self.x - other.x)
-        dy = math.fabs(self.y - other.y)
-        dz = math.fabs(self.z - other.z)
-        return math.sqrt(dx**2 + dy**2 + dz**2)
-
-    def as_vector(self):
-        """Convert the Point to a Vector."""
-        return Vector(self.x, self.y, self.z)
-
-    def rotate3D(self, vector, theta):
-        """Rotate the point around the vector theta radians.
-
-        Parameters:
-            vector (Vector): rotation axis;
-            theta (float): rotation radians;
-        Return:
-            the rotated point (Point)
-
-        """
-        cosa = math.cos(theta)
-        sina = math.sin(theta)
-
-        row1 = [(vector.x * vector.x) + ((1 - (vector.x * vector.x)) * cosa),
-                (vector.x * vector.y * (1 - cosa)) - (vector.z * sina),
-                (vector.x * vector.z * (1 - cosa)) + (vector.y * sina), 0.0]
-        row2 = [(vector.x * vector.y * (1 - cosa)) + (vector.z * sina),
-                (vector.y * vector.y) + ((1 - (vector.y * vector.y)) * cosa),
-                (vector.y * vector.z * (1 - cosa)) - (vector.x * sina), 0.0]
-        row3 = [(vector.x * vector.z * (1.0 - cosa)) - (vector.y * sina),
-                (vector.y * vector.z * (1.0 - cosa)) + (vector.x * sina),
-                (vector.z * vector.z) + ((1.0 - (vector.z * vector.z)) * cosa),
-                0.0]
-
-        row4 = [0.0] * 4
-
-        rx = (self.x * row1[0]) + (self.y * row2[0]) + (self.z *
-                                                        row3[0]) + row4[0]
-        ry = (self.x * row1[1]) + (self.y * row2[1]) + (self.z *
-                                                        row3[1]) + row4[1]
-        rz = (self.x * row1[2]) + (self.y * row2[2]) + (self.z *
-                                                        row3[2]) + row4[2]
-
-        return Point(rx, ry, rz)
-
-    def to_sphr(self):
-        r = self.distance_from(Point())
-        theta = math.atan(self.y / self.x)
-        phi = math.atan(math.sqrt(self.x**2 + self.y**2) / self.z)
-        return theta, phi, r
-
-    def to_list(self):
-        return [self.x, self.y, self.z]
-
-
-class PointSph(Point):
-    """Define a point in spherical coordinate."""
-
-    def __init__(self, theta=0, phi=0, r=0):
-        self.theta = theta
-        self.phi = phi
-        self.r = r
-        self.x = math.sin(theta) * math.cos(phi) * r
-        self.y = math.sin(theta) * math.cos(phi) * r
-        self.z = math.cos(phi) * r
-
-
 class Vector(object):
     """3D vector class."""
 
     def __init__(self, x=0, y=0, z=0):
         """Initialize vector."""
+        errmsg = "float or integer required to define a vector"
+        assert all([type(i) in [float, int] for i in [x, y, z]]), errmsg
         self.x = x
         self.y = y
         self.z = z
         self.length = math.sqrt(x**2 + y**2 + z**2)
 
-    def __mul__(self, other):
-        """Return the dot produce between two vectors."""
-        return self.x * other.x + self.y * other.y + self.z * other.z
+    def __str__(self):
+        """Class string representation."""
+        return "{}\t{}\t{}".format(self.x, self.y, self.z)
 
     def __add__(self, other):
         """Add the two vectors."""
@@ -146,12 +30,12 @@ class Vector(object):
     def __sub__(self, other):
         return Vector(self.x - other.x, self.y - other.y, self.z - other.z)
 
+    def __mul__(self, other):
+        """Return the dot produce between two vectors."""
+        return self.x * other.x + self.y * other.y + self.z * other.z
+
     def __eq__(self, other):
         return self.to_list() == other.to_list()
-
-    def __str__(self):
-        """Class string representation."""
-        return "{}\t{}\t{}".format(self.x, self.y, self.z)
 
     def cross(self, other):
         """Return the cross product of the two vectors."""
@@ -159,6 +43,13 @@ class Vector(object):
         y_ = self.z * other.x - self.x * other.z
         z_ = self.x * other.y - self.y * other.x
         return Vector(x_, y_, z_)
+
+    def distance_from(self, other):
+        """Calculate the distance between two points."""
+        dx = math.fabs(self.x - other.x)
+        dy = math.fabs(self.y - other.y)
+        dz = math.fabs(self.z - other.z)
+        return math.sqrt(dx**2 + dy**2 + dz**2)
 
     def unitize(self):
         """Return the unit vector."""
@@ -221,6 +112,12 @@ class Vector(object):
 
         return Vector(rx, ry, rz)
 
+    def to_sphr(self):
+        r = self.distance_from(Vector())
+        theta = math.atan(self.y / self.x)
+        phi = math.atan(math.sqrt(self.x**2 + self.y**2) / self.z)
+        return VecSph(theta, phi, r)
+
     def coplanar(self, other1, other2):
         """Test if the vector is coplanar with the other two vectors."""
         triple_prod = self * other1.cross(other2)
@@ -229,6 +126,18 @@ class Vector(object):
 
     def to_list(self):
         return [self.x, self.y, self.z]
+
+
+class VecSph(Vector):
+    """Define a vector in spherical coordinate."""
+
+    def __init__(self, theta=0, phi=0, r=0):
+        self.theta = theta
+        self.phi = phi
+        self.r = r
+        self.x = math.sin(theta) * math.cos(phi) * r
+        self.y = math.sin(theta) * math.cos(phi) * r
+        self.z = math.cos(phi) * r
 
 
 class Polygon(object):
@@ -280,7 +189,7 @@ class Polygon(object):
             sum(i) / self.vert_cnt
             for i in zip(*[i.to_list() for i in self.vertices])
         ]
-        return Point(*ctr)
+        return Vector(*ctr)
 
     def area(self):
         """Calculate the area of the polygon."""
@@ -301,7 +210,7 @@ class Polygon(object):
 
         Parameters:
             scale_vect (Vector): scale along x, y, z;
-            center (Point): center of scaling
+            center (Vector): center of scaling
         Return:
             Scaled polygon (Polygon)
 
@@ -311,7 +220,7 @@ class Polygon(object):
             sx = center.x + (vert.x - center.x) * scale_vect.x
             sy = center.y + (vert.y - center.y) * scale_vect.y
             sz = center.z + (vert.z - center.z) * scale_vect.z
-            new_vertices.append(Point(sx, sy, sz))
+            new_vertices.append(Vector(sx, sy, sz))
         return Polygon(new_vertices)
 
     def extrude(self, vector):
