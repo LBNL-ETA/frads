@@ -54,36 +54,7 @@ def parse_decor(fpath):
     return decor, cmd
 
 
-def parse_primitive(fpath):
-    """Parse Radiance primitives inside a file path into a list of dictionary."""
-    with open(fpath, 'r') as rd:
-        content = rd.readlines()
-    content = ' '.join([
-        i.strip() for i in content
-        if i.strip() != '' and i[0] != '#' and i[0] != '!'
-    ]).split()
-    primitives = []
-    idx = 0
-    while idx < len(content):
-        primitive = {}
-        primitive['modifier'] = content[idx]
-        primitive['type'] = content[idx + 1]
-        primitive['identifier'] = content[idx + 2]
-        str_arg_cnt = int(content[idx + 3])
-        primitive['str_args'] = ' '.join(content[idx + 3:idx + 4 +
-                                                 str_arg_cnt])
-        primitive['int_arg'] = content[idx + 4 + str_arg_cnt]
-        idx += 5 + str_arg_cnt
-        real_arg_cnt = int(content[idx])
-        primitive['real_args'] = ' '.join(content[idx:idx + 1 + real_arg_cnt])
-        idx += real_arg_cnt + 1
-        if primitive['type'] == 'polygon':
-            primitive = parse_polygon(primitive)
-        primitives.append(primitive)
-    return primitives
-
-
-def _parse_primitive(content):
+def parse_primitive(content):
     """Parse Radiance primitives inside a file path into a list of dictionary."""
     content = ' '.join([
         i.strip() for i in content
