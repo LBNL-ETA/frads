@@ -21,7 +21,7 @@ class Vector(object):
 
     def __str__(self):
         """Class string representation."""
-        return "{}\t{}\t{}".format(self.x, self.y, self.z)
+        return "{}\t{}\t{}\t".format(self.x, self.y, self.z)
 
     def __add__(self, other):
         """Add the two vectors."""
@@ -290,7 +290,7 @@ class Polygon(object):
     def to_real(self):
         """Convert the vertices to real arg string format."""
         real_str = "{}\n".format(3 * len(self.vertices))
-        vert_str = ''.join([i.__str__() for i in self.vertices])
+        vert_str = ''.join([str(i) for i in self.vertices])
         return real_str + vert_str
 
 
