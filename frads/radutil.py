@@ -536,11 +536,11 @@ class pt_inclusion(object):
         return wn
 
 
-def gen_grid(fpath, height, spacing, op=False):
+def gen_grid(polygon, height, spacing, op=False):
     """Generate a grid of points for orthogonal planar surfaces.
 
     Parameters:
-            fpath: file path of radiance primitives
+            polygon: a polygon object
             height: points' distance from the surface in its normal direction
             spacing: distance between the grid points
             visualize: set to True to visualize the resulting grid points
@@ -548,61 +548,46 @@ def gen_grid(fpath, height, spacing, op=False):
             write the point file to pts directory
 
     """
-    primitives = parse_primitive(fpath)
-    polygons = [i for i in primitives if i['type'] == 'polygon']
-    grid_list = []
-    for pg in polygons:
-        name = pg['identifier']
-        modifier = pg['modifier']
-        polygon = pg['polygon']
-        normal = polygon.normal()
-        abs_norm = [abs(i) for i in normal.to_list()]
-        drop_idx = abs_norm.index(max(abs_norm))
-        pg_pts = [i.to_list() for i in polygon.vertices]
-        pt_cnt = len(pg_pts)
-        plane_height = sum([i[drop_idx] for i in pg_pts]) / pt_cnt
-        [i.pop(drop_idx) for i in pg_pts]  # dimension reduction
-        _ilist = [i[0] for i in pg_pts]
-        _jlist = [i[1] for i in pg_pts]
-        imax = max(_ilist)
-        imin = min(_ilist)
-        jmax = max(_jlist)
-        jmin = min(_jlist)
-        xlen_spc = ((imax - imin) / spacing)
-        ylen_spc = ((jmax - jmin) / spacing)
-        xstart = ((xlen_spc - int(xlen_spc) + 1)) * spacing / 2
-        ystart = ((ylen_spc - int(ylen_spc) + 1)) * spacing / 2
-        x0 = [
-            float('%g' % x) + xstart for x in frange_inc(imin, imax, spacing)
-        ]
-        y0 = [
-            float('%g' % x) + ystart for x in frange_inc(jmin, jmax, spacing)
-        ]
-        raw_pts = [[i, j] for i in x0 for j in y0]
-        if polygon.normal() == radgeom.Vector(0, 0, 1):
-            pt_incls = pt_inclusion(pg_pts)
-        else:
-            pt_incls = pt_inclusion(pg_pts[::-1])
-        _grid = [p for p in raw_pts if pt_incls.test_inside(p) > 0]
-        if op:
-            grid_dir = normal.reverse()
-        else:
-            grid_dir = normal
-        p_height = sum([height * i for i in grid_dir.to_list()]) + plane_height
-        grid = []
-        _idx = list(range(3))
-        _idx.pop(drop_idx)
-        for g in _grid:
-            tup = [0.0] * 3 + grid_dir.to_list()
-            tup[drop_idx] = p_height
-            tup[_idx[0]] = g[0]
-            tup[_idx[1]] = g[1]
-            grid.append(tup)
-
-        grid_list.append(grid)
-
-    output = '\n'.join([
-        '\n'.join([' '.join(map(str, row)) for row in gl]) for gl in grid_list
-    ])
-
-    return output
+    name = polygon['identifier']
+    modifier = polygon['modifier']
+    polygon = polygon['polygon']
+    normal = polygon.normal()
+    abs_norm = [abs(i) for i in normal.to_list()]
+    drop_idx = abs_norm.index(max(abs_norm))
+    pg_pts = [i.to_list() for i in polygon.vertices]
+    pt_cnt = len(pg_pts)
+    plane_height = sum([i[drop_idx] for i in pg_pts]) / pt_cnt
+    [i.pop(drop_idx) for i in pg_pts]  # dimension reduction
+    _ilist = [i[0] for i in pg_pts]
+    _jlist = [i[1] for i in pg_pts]
+    imax = max(_ilist)
+    imin = min(_ilist)
+    jmax = max(_jlist)
+    jmin = min(_jlist)
+    xlen_spc = ((imax - imin) / spacing)
+    ylen_spc = ((jmax - jmin) / spacing)
+    xstart = ((xlen_spc - int(xlen_spc) + 1)) * spacing / 2
+    ystart = ((ylen_spc - int(ylen_spc) + 1)) * spacing / 2
+    x0 = [float('%g' % x) + xstart for x in frange_inc(imin, imax, spacing)]
+    y0 = [float('%g' % x) + ystart for x in frange_inc(jmin, jmax, spacing)]
+    raw_pts = [[i, j] for i in x0 for j in y0]
+    if polygon.normal() == radgeom.Vector(0, 0, 1):
+        pt_incls = pt_inclusion(pg_pts)
+    else:
+        pt_incls = pt_inclusion(pg_pts[::-1])
+    _grid = [p for p in raw_pts if pt_incls.test_inside(p) > 0]
+    if op:
+        grid_dir = normal.reverse()
+    else:
+        grid_dir = normal
+    p_height = sum([height * i for i in grid_dir.to_list()]) + plane_height
+    grid = []
+    _idx = list(range(3))
+    _idx.pop(drop_idx)
+    for g in _grid:
+        tup = [0.0] * 3 + grid_dir.to_list()
+        tup[drop_idx] = p_height
+        tup[_idx[0]] = g[0]
+        tup[_idx[1]] = g[1]
+        grid.append(tup)
+    return '\n'.join([' '.join(map(str, row)) for row in grid])
