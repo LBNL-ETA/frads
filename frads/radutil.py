@@ -86,7 +86,7 @@ def parse_polygon(primitive):
     real_args = primitive['real_args'].split()
     coords = [float(i) for i in real_args[1:]]
     arg_cnt = int(real_args[0])
-    vertices = [radgeom.Point(*coords[i:i + 3]) for i in range(0, arg_cnt, 3)]
+    vertices = [radgeom.Vector(*coords[i:i + 3]) for i in range(0, arg_cnt, 3)]
     primitive['polygon'] = radgeom.Polygon(vertices)
     return primitive
 
@@ -156,24 +156,22 @@ def put_primitive(prim):
 
 def surface_normal(prim):
     """Get the surface normal from a polygon primitive."""
-    real_args = prim['real_args'].split()
     if prim['type'] == 'polygon':
-        normal = prim['polygon'].normal()
+        return prim['polygon'].normal()
     elif prim['type'] == 'ring':
-        normal = radgeom.Vector(*[float(i) for i in real_args[4:7]])
-    return normal
+        real_args = prim['real_args'].split()
+        return radgeom.Vector(*[float(i) for i in real_args[4:7]])
 
 
 def surface_area(prim):
-    """Get the surface area from a polygon primitive."""
-    real_args = prim['real_args'].split()
+    """Get the surface area from a primitive."""
     if prim['type'] == 'polygon':
-        area = prim['polygon'].area()
+        return prim['polygon'].area()
     elif prim['type'] == 'ring':
+        real_args = prim['real_args'].split()
         inner_radi = float(real_args[-2])
         outter_radi = float(real_args[-1])
-        area = math.pi * (outter_radi**2 - inner_radi**2)
-    return area
+        return math.pi * (outter_radi**2 - inner_radi**2)
 
 
 def samp_dir(plist):
@@ -328,12 +326,9 @@ def bsdf_prim(mod, ident, xml_fpath, up_vec, thickness=0.0, real_args='0'):
     return prim
 
 
-def parse_idf(fpath):
+def parse_idf(content):
     """Parse an IDF file into a dictionary."""
-    with open(fpath, 'r', errors='ignore') as rd:
-        raw = rd.read()
-
-    sections = raw.rstrip().split(';')
+    sections = content.rstrip().split(';')
     sub_sections = []
     for sec in sections:
         sec_lines = sec.splitlines()
@@ -548,9 +543,9 @@ def gen_grid(polygon, height, spacing, op=False):
             write the point file to pts directory
 
     """
-    name = polygon['identifier']
-    modifier = polygon['modifier']
-    polygon = polygon['polygon']
+    #name = polygon['identifier']
+    #modifier = polygon['modifier']
+    #polygon = polygon['polygon']
     normal = polygon.normal()
     abs_norm = [abs(i) for i in normal.to_list()]
     drop_idx = abs_norm.index(max(abs_norm))
@@ -590,4 +585,19 @@ def gen_grid(polygon, height, spacing, op=False):
         tup[_idx[0]] = g[0]
         tup[_idx[1]] = g[1]
         grid.append(tup)
-    return '\n'.join([' '.join(map(str, row)) for row in grid])
+    return [' '.join(map(str, row)) for row in grid]
+
+
+def material_lib():
+    mlib = []
+    #carpet .25
+    mlib.append(plastic_prim('void', 'carpet_25', .25, 128, 128, 128, 0, 0))
+    # Paint .5
+    mlib.append(plastic_prim('void', 'white_paint_50', .5, 128, 128, 128, 0,
+                             0))
+    # Paint .75
+    mlib.append(plastic_prim('void', 'white_paint_80', .8, 128, 128, 128, 0,
+                             0))
+    # Glass .8
+    mlib.append(glass_prim('void', 'glass_80', .8, .8, .8))
+    return mlib

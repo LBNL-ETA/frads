@@ -159,18 +159,20 @@ class Polygon(object):
 
         """
         pt1 = self.vertices[0]
-        reverse = False if self.normal() == other.normal() else True
+        #opposite = False if self.normal() == other.normal() else True
+        opposite = False
         distances1 = [pt1.distance_from(i) for i in other.vertices]
         idx_min = distances1.index(min(distances1))
         new_other_vert = other.vertices[idx_min:] + other.vertices[:idx_min]
         results = [pt1]
-        results.extend(new_other_vert)
-        results.append(other.vertices[idx_min])
-        if reverse:
-            results.append(self.vertices[0])
-            results.extend(self.vertices[:0:-1])
+        if opposite:
+            results.extend(new_other_vert)
+            results.append(other.vertices[idx_min])
         else:
-            results.extend(self.vertices)
+            results.append(new_other_vert[0])
+            results.extend(reversed(new_other_vert[1:]))
+            results.append(new_other_vert[0])
+        results.extend(self.vertices)
         return Polygon(results)
 
     def flip(self):
@@ -195,11 +197,11 @@ class Polygon(object):
         """Calculate the area of the polygon."""
         total = Vector()
         for i in range(self.vert_cnt):
-            vect1 = self.vertices[i].as_vector()
+            vect1 = self.vertices[i]
             if i == self.vert_cnt - 1:
-                vect2 = self.vertices[0].as_vector()
+                vect2 = self.vertices[0]
             else:
-                vect2 = self.vertices[i + 1].as_vector()
+                vect2 = self.vertices[i + 1]
             prod = vect1.cross(vect2)
             total += prod
         area = abs(total * self.normal() / 2)

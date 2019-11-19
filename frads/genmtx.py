@@ -15,7 +15,7 @@ T.Wang
 """
 
 import argparse
-import make_sky
+import makesky
 import radgeom
 import os
 import subprocess as sp
@@ -163,9 +163,9 @@ class Sender(object):
         if isinstance(li[0], list):
             grid_str = '\n'.join([' '.join(map(str, l)) for l in li])
         else:
-            grid_str = ' '.join([map(str, i) for i in li])
+            grid_str = '\n'.join(li)
         fd, path = tf.mkstemp(prefix='sndr_grid')
-        with open(path, 'wb') as wtr:
+        with open(path, 'w') as wtr:
             wtr.write(grid_str)
         return path
 
@@ -195,10 +195,10 @@ class Receiver(object):
             logger.info("receiver is sky with {}".format(basis))
             assert basis.startswith(
                 'r'), 'Sky basis need to be Treganza/Reinhart'
-            str_repr = make_sky.basis_glow(basis)
+            str_repr = makesky.basis_glow(basis)
             logger.info(str_repr)
         elif rcvr == 'sun':
-            gensun = make_sky.Gensun(int(basis[-1]))
+            gensun = makesky.Gensun(int(basis[-1]))
             if (smx_path is None) and (window_paths is None):
                 str_repr, self.mod_lines = gensun.gen_full()
             else:
@@ -227,6 +227,7 @@ class Genmtx(object):
                  out_path=None,
                  receiver=None,
                  env=None,
+                 env_path=None,
                  opt_path=None,
                  **kwargs):
         """Initialize with inputs."""
@@ -234,10 +235,15 @@ class Genmtx(object):
         self.sender = sender
         self.receiver = receiver
         self.out_path = out_path
-        if type(env) is list:
-            self.env_path = ' '.join(env)
-        else:
-            self.env_path = env
+        self.tempd = tf.mkdtemp()
+        env_str = [radutil.put_primitive(e) for e in env]
+        self.env_path = os.path.join(self.tempd, 'env')
+        with open(self.env_path, 'w') as wtr:
+            [wtr.write(envs) for envs in env_str]
+        #if type(env) is list:
+        #    self.env_path = ' '.join(env)
+        #else:
+        #    self.env_path = env
         self.rfd, self.rcvr_path = tf.mkstemp(prefix='receiver')
         opt_dict = {}
         if opt_path is not None:
@@ -312,7 +318,7 @@ class Genmtx(object):
         else:
             with open(self.sender.path) as rdr:
                 first_row = rdr.readlines()[0]
-                first_pt = radgeom.Point(*map(float, first_row.split()[:3]))
+                first_pt = radgeom.Vector(*map(float, first_row.split()[:3]))
             if self.receiver.rcvr != 'sky':
                 rcvr_cntr = self.receiver.rcvr[0]['polygon'].centroid()
                 rcvr2sndr = first_pt - rcvr_cntr

@@ -1,7 +1,9 @@
 *.rad
+*.cfg
 __pycache__
 *.xml
 frads.egg-info
 build
 dist
 .DS_Store
+tags
