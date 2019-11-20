@@ -6,11 +6,11 @@ T.Wang
 """
 
 import argparse
-import genmtx
-import radgeom
+from frads import genmtx
+from frads import radgeom
 import math
 import os
-import radutil
+from frads import radutil
 import shutil
 import subprocess as sp
 import tempfile as tf

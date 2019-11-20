@@ -15,12 +15,12 @@ T.Wang
 """
 
 import argparse
-import makesky
-import radgeom
+from frads import makesky
+from frads import radgeom
 import os
 import subprocess as sp
 import tempfile as tf
-import radutil
+from frads import radutil
 import logging
 
 logger = logging.getLogger(__name__)

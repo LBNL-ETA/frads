@@ -6,7 +6,7 @@ import datetime
 import pdb
 import tempfile as tf
 import subprocess as sp
-import radutil
+from frads import radutil
 
 
 def basis_glow(sky_basis):
