@@ -5,6 +5,7 @@ import csv
 import datetime
 import pdb
 import tempfile as tf
+import os
 import subprocess as sp
 from frads import radutil
 
@@ -149,10 +150,13 @@ def gendaymtx(data_entry,
     sun_only = ' -d' if direct else ''
     spect = ' -O1' if solar else ' -O0'
     _five = ' -5 .533' if onesun else ''
-    bi = '' if binary == False else ' -o' + binary
-    wea_head = "place test\\nlatitude {}\\nlongitude {}\\n".format(lat, lon)
-    wea_head += "time_zone {}\\nsite_elevation {}\\n".format(timezone, ele)
-    wea_head += "weather_data_file_units 1\\n"
+    bi = '' if binary == False or os.name == 'nt' else ' -o' + binary
+    linesep = r'& echo' if os.name == 'nt' else r'\n'
+    wea_head = "place test{2}latitude {0}{2}longitude {1}{2}".format(
+        lat, lon, linesep)
+    wea_head += "time_zone {0}{2}site_elevation {1}{2}".format(
+        timezone, ele, linesep)
+    wea_head += "weather_data_file_units 1{}".format(linesep)
     skv_cmd = "gendaymtx -r {} -m {}{}{}{}{}".format(rotate, mf, sun_only,
                                                      _five, spect, bi)
     if len(data_entry) > 1000:
@@ -163,8 +167,11 @@ def gendaymtx(data_entry,
         cmd = skv_cmd + " {}".format(_path)
         return cmd, _path
     else:
-        wea_data = '\\n'.join(data_entry)
-        wea_cmd = 'echo "{}{}" | '.format(wea_head, wea_data)
+        wea_data = linesep.join(data_entry)
+        if os.name == 'nt':
+            wea_cmd = '(echo {}{}) | '.format(wea_head, wea_data)
+        else:
+            wea_cmd = 'echo "{}{}" | '.format(wea_head, wea_data)
         cmd = wea_cmd + skv_cmd
         return cmd, None
 
