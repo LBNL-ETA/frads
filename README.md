@@ -1,6 +1,10 @@
-Radiance matrix-based simulation control
+# Radiance matrix-based simulation control
 
-
+This library tries to facilitate Radiance matrix-based simulation workflow setup.
+Core functionalities include:
+  Radiance primitive parsing, manipulation, and modfication
+  Automated matrix generation
+  ... (more to come)
 
 
 
