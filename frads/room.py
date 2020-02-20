@@ -110,7 +110,19 @@ class Wall(object):
 
     def facadize(self, thickness):
         direction = self.polygon.normal().scale(thickness)
-        self.facade = self.polygon.extrude(direction)
+        if thickness > 0:
+            self.facade = self.polygon.extrude(direction)[:2]
+            [self.facade.extend(self.windows[wname].extrude(direction)[2:])
+             for wname in self.windows]
+            uniq = []
+            uniq = self.facade.copy()
+            for idx in range(len(swall.facade)):
+                for re in swall.facade[:idx]+swall.facade[idx+1:]:
+                    if set(swall.facade[idx].to_list()) == set(re.to_list()):
+                        uniq.remove(re)
+            self.facade = uniq
+        else:
+            self.facade = [self.polygon]
         offset_wndw = {}
         for wndw in self.windows:
             offset_wndw[wndw] = radgeom.Polygon(
@@ -119,15 +131,26 @@ class Wall(object):
 
 
 if __name__ == "__main__":
-    rm1 = Room(10, 15, 11)
+    rm1 = Room(3.05, 4.57, 2.74)
     swall = rm1.swall
-    swin = swall.make_window(.5, 1, 9, 8.3)
-    swall.add_window(swin)
-    swall.facadize(.33)
-    prims = rm1.to_prim()
-    if rm1.window_prim():
-        with open('window.rad', 'w') as wtr:
-            wtr.write(radutil.put_primitive(rm1.win_prim))
-    prim_str = [radutil.put_primitive(i) for i in list(prims.values())]
+    swin1 = swall.make_window(.165, .18, 1.32, 1.4)
+    swin2 = swall.make_window(1.56, .18, 1.32, 1.4)
+    swin3 = swall.make_window(.165, 1.64, 1.32, .42)
+    swin4 = swall.make_window(1.56, 1.64, 1.32, .42)
+    swall.add_window('win1',swin1)
+    swall.add_window('win2',swin2)
+    swall.add_window('win3',swin3)
+    swall.add_window('win4',swin4)
+    #swin1 = swall.make_window(.165, .18, 2.71, .7)
+    #swin2 = swall.make_window(.165, .88, 2.71, .7)
+    #swin3 = swall.make_window(.165, 1.64, 2.71, .42)
+    #swall.add_window('win1',swin1)
+    #swall.add_window('win2',swin2)
+    #swall.add_window('win3',swin3)
+    swall.facadize(0.1)
+    rm1.surface_prim()
+    rm1.window_prim()
+    with open('window.rad', 'w') as wtr:
+        [wtr.write(radutil.put_primitive(rm1.wndw_prims[i])) for i in rm1.wndw_prims]
     with open('test.rad', 'w') as wtr:
-        [wtr.write(i) for i in prim_str]
+        [wtr.write(radutil.put_primitive(i)) for i in rm1.srf_prims]

@@ -54,10 +54,10 @@ def parse_decor(fpath):
     return decor, cmd
 
 
-def parse_primitive(content):
+def parse_primitive(lines):
     """Parse Radiance primitives inside a file path into a list of dictionary."""
     content = ' '.join([
-        i.strip() for i in content
+        i.strip() for i in lines
         if i.strip() != '' and i[0] != '#' and i[0] != '!'
     ]).split()
     primitives = []
@@ -543,9 +543,6 @@ def gen_grid(polygon, height, spacing, op=False):
             write the point file to pts directory
 
     """
-    #name = polygon['identifier']
-    #modifier = polygon['modifier']
-    #polygon = polygon['polygon']
     normal = polygon.normal()
     abs_norm = [abs(i) for i in normal.to_list()]
     drop_idx = abs_norm.index(max(abs_norm))
@@ -585,7 +582,7 @@ def gen_grid(polygon, height, spacing, op=False):
         tup[_idx[0]] = g[0]
         tup[_idx[1]] = g[1]
         grid.append(tup)
-    return [' '.join(map(str, row)) for row in grid]
+    return grid
 
 
 def material_lib():

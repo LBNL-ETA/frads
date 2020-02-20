@@ -21,7 +21,7 @@ class Vector(object):
 
     def __str__(self):
         """Class string representation."""
-        return "{}\t{}\t{}\t".format(self.x, self.y, self.z)
+        return "\t{:02f}\t{:02f}\t{:02f}".format(self.x, self.y, self.z)
 
     def __add__(self, other):
         """Add the two vectors."""
@@ -127,6 +127,9 @@ class Vector(object):
     def to_list(self):
         return [self.x, self.y, self.z]
 
+    def to_tuple(self):
+        return (round(self.x,3), round(self.y, 3), round(self.z, 3))
+
 
 class VecSph(Vector):
     """Define a vector in spherical coordinate."""
@@ -136,8 +139,9 @@ class VecSph(Vector):
         self.phi = phi
         self.r = r
         self.x = math.sin(theta) * math.cos(phi) * r
-        self.y = math.sin(theta) * math.cos(phi) * r
+        self.y = math.sin(theta) * math.sin(phi) * r
         self.z = math.cos(phi) * r
+        self.length = r
 
 
 class Polygon(object):
@@ -239,15 +243,11 @@ class Polygon(object):
         polygons.append(polygon2)
         for i in range(len(self.vertices) - 1):
             polygons.append(
-                Polygon([
-                    self.vertices[i], polygon2.vertices[i],
-                    polygon2.vertices[i + 1], self.vertices[i + 1]
-                ]))
+                Polygon([self.vertices[i], polygon2.vertices[i],
+                         polygon2.vertices[i + 1], self.vertices[i + 1]]))
         polygons.append(
-            Polygon([
-                self.vertices[-1], polygon2.vertices[-1], polygon2.vertices[0],
-                self.vertices[0]
-            ]))
+            Polygon([self.vertices[-1], polygon2.vertices[-1],
+                     polygon2.vertices[0], self.vertices[0]]))
         return polygons
 
     def __add__(self, other):
@@ -287,12 +287,12 @@ class Polygon(object):
         return min(xs), max(xs), min(ys), max(ys), min(zs), max(zs)
 
     def to_list(self):
-        return [p.to_list() for p in self.vertices]
+        return [p.to_tuple() for p in self.vertices]
 
     def to_real(self):
         """Convert the vertices to real arg string format."""
         real_str = "{}\n".format(3 * len(self.vertices))
-        vert_str = ''.join([str(i) for i in self.vertices])
+        vert_str = '\n'.join([str(i) for i in self.vertices])
         return real_str + vert_str
 
 
