@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """."""
 
 import csv
@@ -9,7 +8,7 @@ import os
 import subprocess as sp
 from frads import radutil
 
-LINESEP = os.linesep
+LSEP = os.linesep
 
 def basis_glow(sky_basis):
     grnd_str = grndglow()
@@ -18,20 +17,20 @@ def basis_glow(sky_basis):
 
 
 def skyglow(basis, upvect='+Y'):
-    sky_string = f"#@rfluxmtx u={upvect} h={basis}\n\n"
-    sky_string += "void glow skyglow\n"
-    sky_string += "0\n0\n4 1 1 1 0\n\n"
-    sky_string += "skyglow source sky\n"
-    sky_string += "0\n0\n4 0 0 1 180\n"
+    sky_string = f"#@rfluxmtx u={upvect} h={basis}{LSEP*2}"
+    sky_string += "void glow skyglow{LSEP}"
+    sky_string += "0{LSEP}0{LSEP}4 1 1 1 0{LSEP*2}"
+    sky_string += "skyglow source sky{LSEP}"
+    sky_string += "0{LSEP}0{LSEP}4 0 0 1 180{LSEP}"
     return sky_string
 
 
 def grndglow(basis='u'):
-    ground_string = f"#@rfluxmtx h={basis}\n\n"
-    ground_string += "void glow groundglow\n"
-    ground_string += "0\n0\n4 1 1 1 0\n\n"
-    ground_string += "groundglow source ground\n"
-    ground_string += "0\n0\n4 0 0 -1 180\n\n"
+    ground_string = f"#@rfluxmtx h={basis}{LSEP*2}"
+    ground_string += "void glow groundglow{LSEP}"
+    ground_string += "0{LSEP}0{LSEP}4 1 1 1 0{LSEP*2}"
+    ground_string += "groundglow source ground{LSEP}"
+    ground_string += "0{LSEP}0{LSEP}4 0 0 -1 180{LSEP*2}"
     return ground_string
 
 
@@ -42,7 +41,7 @@ class Gensun(object):
         """."""
         self.runlen = 144 * mf**2 + 3
         self.rsrc = radutil.reinsrc(mf)
-        self.mod_str = '\n'.join([f'sol{i}' for i in range(1, self.runlen)])
+        self.mod_str = '{LSEP}'.join([f'sol{i}' for i in range(1, self.runlen)])
 
     def gen_full(self):
         """Generate full treganza based sun sources."""
@@ -54,7 +53,7 @@ class Gensun(object):
             line += "source sun 0 0 4 {:.6g} {:.6g} {:.6g} 0.533".format(*dirs)
             out_lines.append(line)
             mod_lines.append(f'sol{i}')
-        return LINESEP.join(out_lines)+LINESEP, LINESEP.join(mod_lines)+LINESEP
+        return LSEP.join(out_lines)+LSEP, LSEP.join(mod_lines)+LSEP
 
     def gen_cull(self, smx_path=None, window_paths=None):
         """Generate culled sun sources based on window orientation and climate based
@@ -91,7 +90,7 @@ class Gensun(object):
             line += "source sun 0 0 4 {:.6g} {:.6g} {:.6g} 0.533".format(*dirs)
             out_lines.append(line)
             mod_lines.append(f'sol{i}')
-        return '\n'.join(out_lines), '\n'.join(mod_lines)
+        return LSEP.join(out_lines), LSEP.join(mod_lines)
 
 
 def epw2sunmtx(epw_path):
@@ -108,12 +107,12 @@ def epw2sunmtx(epw_path):
 def loc2sunmtx(basis, lat, lon, ele):
     """Generate a psuedo reinhart 6 sun matrix file given lat, lon, etc..."""
     tz = int(5 * round(lon / 5))
-    header = "place city_country\n"
-    header += f"latitude {lat}\n"
-    header += f"longitude {lon}\n"
-    header += f"time_zone {tz}\n"
-    header += f"site_elevation {ele}\n"
-    header += "weather_data_file_units 1\n"
+    header = f"place city_country{LSEP}"
+    header += f"latitude {lat}{LSEP}"
+    header += f"longitude {lon}{LSEP}"
+    header += f"time_zone {tz}{LSEP}"
+    header += f"site_elevation {ele}{LSEP}"
+    header += "weather_data_file_units 1{LSEP}"
     header = str.encode(header)
     string = ""
     mday = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
@@ -138,7 +137,7 @@ def gendaymtx(data_entry, lat, lon, timezone, ele, mf=4, direct=False,
     spect = ' -O1' if solar else ' -O0'
     _five = ' -5 .533' if onesun else ''
     bi = '' if binary == False or os.name == 'nt' else ' -o' + binary
-    linesep = r'& echo' if os.name == 'nt' else r'\n'
+    linesep = r'& echo' if os.name == 'nt' else rLSEP
     wea_head = f"place test{linesep}latitude {lat}{linesep}longitude {lon}{linesep}"
     wea_head += f"time_zone {timezone}{linesep}site_elevation {ele}{linesep}"
     wea_head += f"weather_data_file_units 1{linesep}"
@@ -227,9 +226,9 @@ def sky_cont(mon, day, hrs, lat, lon, mer, dni, dhi, year=None, grefl=.2, spect=
     out_str += f'-a {lat} -o {lon} -m {mer} '
     if year is not None:
         out_str += f'-y {year} '
-    out_str += f'-W {dni} {dhi} -g {grefl} -O {spect}\n\n'
-    out_str += 'skyfunc glow skyglow\n0\n0\n4 1 1 1 0\n\n'
-    out_str += 'skyglow source sky\n0\n0\n4 0 0 1 180\n\n'
-    out_str += 'skyfunc glow groundglow\n0\n0\n4 1 1 1 0\n\n'
-    out_str += 'groundglow source ground\n0\n0\n4 0 0 -1 180\n'
+    out_str += f'-W {dni} {dhi} -g {grefl} -O {spect}{LSEP*2}'
+    out_str += 'skyfunc glow skyglow 0 0 4 1 1 1 0{LSEP*2}'
+    out_str += 'skyglow source sky 0 0 4 0 0 1 180{LSEP*2}'
+    out_str += 'skyfunc glow groundglow 0 0 4 1 1 1 0{LSEP*2}'
+    out_str += 'groundglow source ground 0 0 4 0 0 -1 180{LSEP}'
     return out_str

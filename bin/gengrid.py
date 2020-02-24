@@ -13,6 +13,5 @@ if __name__ == "__main__":
     with open(args.surface) as rdr:
         prim = radutil.parse_primitive(rdr.readlines())
     grid_list = radutil.gen_grid(prim[0]['polygon'], args.height, args.spacing, op=args.op)
-    print('\n'.join(grid_list))
     grid_str = '\n'.join([' '.join(map(str, row)) for row in grid_list])
-    #print(grid_str)
+    print(grid_str)

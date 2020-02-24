@@ -1,17 +1,7 @@
-#!/usr/bin/env python3
 """
-Generate matrices.
-
-Scenarios:
-1. polygon to polygon (e.g facade matrix)
-2. polygon to sky (e.g. daylight matrix)
-3. view to polygon (e.g. image based view matrix)
-4. grid to polygon (e.g. point based view matrix)
-5. view to suns (e.g 5PM direct sun coefficient)
-6. grid to suns
+Support matrices generation.
 
 T.Wang
-
 """
 
 import argparse
@@ -24,78 +14,79 @@ from frads import radutil
 import logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-file_handler = logging.FileHandler('radmtx.log')
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.WARNING)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 
 class Sender(object):
     """Sender object for matrix generation."""
 
-    def __init__(self, *, form, path, sender, basis, offset, xres, yres, c2c, linecnt):
+    def __init__(self, *, form, path, sender, xres, yres):
         """Instantiate the instance.
 
         Parameters:
-            sender: path to view file/ pts grid/ other surface file;
-            sampling: sender sampling basis, required when sender is a surface;
-            offset: move the sender surface in its normal direction
-            xres, yres: xy resolution of the image, required if sender is a viewfile;
-            c2c (bool): Set to True to trim the rays that are sent to the corner of
-            the image by setting the ray direction to 0 0 0;
+            form(str): Sender as {srf, vu, pts};
+            path(str): sender filepath;
+            sender(str):  content of the sender file;
+            xres(int): x resolution of the image;
+            yres(int): y resoluation or line count if form is pts;
         """
         self.form = form
         self.sender = sender
         self.path = path
-        self.offset = offset
-        self.basis = basis
         self.xres = xres
         self.yres = yres
-        self.c2c = c2c
-        self.linecnt = linecnt
         logger.info(f"Sender: {sender}")
 
     @classmethod
     def as_surface(cls, *, prim_list, basis, offset):
-        prim_str = prepare_surface(prim_list, basis, offset=offset)
+        """
+        basis: sender sampling basis, required when sender is a surface;
+        offset: move the sender surface in its normal direction;
+        """
+        prim_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
+                                   left=False, source=None, out=None)
         fd, path = tf.mkstemp(prefix='sndr_srf')
         with open(path, 'w') as wtr:
             wtr.write(prim_str)
-        return cls(formt='srf', path=path, sender=prim_str, basis=basis, offset=offset,
-            xres=None, yres=None, c2c=None, linecnt=None)
+        return cls(form='s', path=path, sender=prim_str, xres=None, yres=None)
 
     @classmethod
     def as_view(cls, *, vu_dict, ray_cnt, xres, yres, c2c):
+        """
+        c2c(bool): Set to True to trim the fisheye corner rays.
+        """
         assert None not in (xres, yres), "Need to specify resolution"
         vcmd = f"vwrays {radutil.opt2str(vu_dict)} -x {xres} -y {yres} -d"
         res_eval = sp.run(vcmd, shell=True, check=True, stdout=sp.PIPE).stdout.decode().split()
         xres = res_eval[1]
         yres = res_eval[3]
+        logger.info(f"Changed resolution to {xres} {yres}")
         cmd = f"vwrays -ff -x {xres} -y {yres} "
         if ray_cnt > 1:
             vu_dict['c'] = ray_cnt
             vu_dict['pj'] = 0.7 # placeholder
         logger.info(f"Ray count is {ray_cnt}")
-        vu_str = radutil.opt2str(vu_dict)
-        cmd += vu_str
+        cmd += radutil.opt2str(vu_dict)
         if vu_dict['vt'] == 'a' and c2c:
             cmd += Sender.crop2circle(ray_cnt, xres)
         fd, path = tf.mkstemp(prefix='vufile')
         cmd += f"> {path}"
         logger.info(cmd + "\n")
         sp.run(cmd, shell=True)
-        return cls(form='vu', path=path, sender=vu_dict, basis=None, offset=None, xres=xres,
-                   yres=yres, c2c=c2c, linecnt=None)
+        return cls(form='v', path=path, sender=vu_dict, xres=xres, yres=yres)
 
     @classmethod
     def as_pts(cls, pts_list):
-        grid_str = os.linesep.join([' '.join(map(str, l)) for l in pts_list]) + os.linesep
+        linsep = os.linesep
+        grid_str = linesep.join([' '.join(map(str, l)) for l in pts_list]) + linesep
         fd, path = tf.mkstemp(prefix='sndr_grid')
         with open(path, 'w') as wtr:
             wtr.write(grid_str)
-        return cls(form='pts', path=path, sender=grid_str, basis=None, offset=None, xres=None,
-                   yres=None, c2c=None, linecnt=len(pts_list))
+        return cls(form='p', path=path, sender=grid_str, xres=None, yres=len(pts_list))
 
     @staticmethod
     def crop2circle(ray_cnt, xres):
@@ -121,7 +112,6 @@ class Receiver(object):
 
         Parameters:
             receiver (str): filepath {sky | sun | file_path}
-            basis: receiver sampling basis {kf | r1 | sc25...}
         """
         self.receiver = receiver
         self.path = path
@@ -134,6 +124,9 @@ class Receiver(object):
 
     @classmethod
     def as_sun(cls, *, basis, smx_path, window_paths):
+        """
+        basis: receiver sampling basis {kf | r1 | sc25...}
+        """
         gensun = makesky.Gensun(int(basis[-1]))
         if (smx_path is None) and (window_paths is None):
             str_repr, mod_lines = gensun.gen_full()
@@ -150,6 +143,9 @@ class Receiver(object):
 
     @classmethod
     def as_sky(cls, basis):
+        """
+        basis: receiver sampling basis {kf | r1 | sc25...}
+        """
         assert basis.startswith('r'), 'Sky basis need to be Treganza/Reinhart'
         sky_str = makesky.basis_glow(basis)
         logger.info(sky_str)
@@ -160,7 +156,10 @@ class Receiver(object):
 
     @classmethod
     def as_surface(cls, *, prim_list, basis, offset, left, source, out):
-        rcvr_str = prepare_surface(prim_list, basis, offset=offset,
+        """
+        basis: receiver sampling basis {kf | r1 | sc25...}
+        """
+        rcvr_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
                                    left=left, source=source, out=out)
         fd, path = tf.mkstemp(prefix='rsrf')
         with open(path, 'w') as wtr:
@@ -208,16 +207,16 @@ def prepare_surface(*, prims, basis, left, offset, source, out):
             content += radutil.put_primitive(p)
     return header + content
 
-def gen_mtx(sender, receiver, env, out, opt):
-    if sender.form == 'srf':
+def gen_mtx(*, sender, receiver, env, out, opt):
+    if sender.form == 's':
         cmd = f"rfluxmtx {opt} {sender.path} {receiver.path} {' '.join(env)} > {out}"
     else:
         cmd = f"rfluxmtx < {sender.path} {opt} "
-        if sender.form == 'pts':
+        if sender.form == 'p':
             if 'c' in opt:
                 assert int(opt['c']) == 1, "ray count can't be greater than 1"
-            cmd += f"-I+ -faf -y {sender.linecnt} " #force illuminance calc
-        elif sender.form == 'vu':
+            cmd += f"-I+ -faf -y {sender.yres} " #force illuminance calc
+        elif sender.form == 'v':
             out = os.path.join(out, '%04d.hdr')
             cmd += f"-ffc -x {sender.xres} -y {sender.yres} -ld- "
         cmd += f"-o {out} - {receiver.path} {' '.join(env)}"
@@ -229,12 +228,12 @@ def gen_mtx(sender, receiver, env, out, opt):
 def sun_oct(receiver, env):
     """Generate an octree of the environment and the receiver."""
     fd, _env = tf.mkstemp()
-    ocmd = 'oconv {} {} > {}'.format(env, receiver.path, _env)
+    ocmd = f'oconv {env} {receiver.path} > {_env}'
     logger.info(ocmd)
     sp.call(ocmd, shell=True)
     return _env
 
-def sun_mtx(sender, receiver, env, out, opt):
+def sun_mtx(*, sender, receiver, env, out, opt):
     _env = sun_oct(receiver, env)
     cmd = f'rcontrib < {sender.path} {opt} -fo+ '
     if sender.form == 'pts':
@@ -245,6 +244,9 @@ def sun_mtx(sender, receiver, env, out, opt):
     cmd += f'-o {out} -M {receiver.modifier} {_env}'
     logger.info(cmd)
     sp.call(cmd, shell=True)
+    sender.remove()
+    receiver.remove()
+    os.remove(_env)
 
 
 if __name__ == '__main__':

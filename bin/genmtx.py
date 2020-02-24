@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""TWang"""
+"""
+Command-line tool for generating matrices for different scenarios.
+TWang
+"""
 
 from frads import radmtx as rm
 from frads import radutil
@@ -13,7 +16,7 @@ def main(**kwargs):
         sndrlines = rdr.readlines()
     # figure out sender
     if kwargs['st'] == 's':
-        prim_list = radutil.parse_primitives(sndrlines)
+        prim_list = radutil.parse_primitive(sndrlines)
         sender = rm.Sender.as_surface(prim_list=prim_list, basis=kwargs['ss'],
                                                                         offset=kwargs['so'])
     elif kwargs['st'] == 'v':
@@ -47,10 +50,13 @@ def main(**kwargs):
         receiver = receivers[0]
         for idx in range(1, len(receivers)):
             receiver += receivers[idx]
+    # generate matrices
     if kwargs['r'][0] == 'sun':
-        rm.sun_mtx(sender, receiver, kwargs['env'], kwargs['o'], kwargs['opt'])
+        rm.sun_mtx(sender=sender, receiver=receiver, env=kwargs['env'],
+                   out=kwargs['o'], opt=kwargs['opt'])
     else:
-        rm.gen_mtx(sender, receiver, kwargs['env'], kwargs['o'], kwargs['opt'])
+        rm.gen_mtx(sender=sender, receiver=receiver, env=kwargs['env'],
+                   out=kwargs['o'], opt=kwargs['opt'])
 
 
 def genmtx_args(parser):
@@ -75,8 +81,9 @@ def genmtx_args(parser):
     parser.add_argument('-c2c', action='store_true', help='Crop to circle?')
     parser.add_argument('-smx', help='Sky matrix file path')
     parser.add_argument('-wpths', nargs='+', help='Windows polygon paths')
-    parser.add_argument('-v', action='store_true', help='verbose')
+    parser.add_argument('-vbose', action='store_true', help='verbose mode')
     parser.add_argument('-debug', action='store_true', help='debug mode')
+    parser.add_argument('-silent', action='store_true', help='silent mode')
     return parser
 
 
@@ -91,6 +98,8 @@ if __name__ == "__main__":
         rm.logger.setLevel(logging.DEBUG)
     elif argmap['v'] == True:
         rm.logger.setLevel(logging.INFO)
+    elif argmap['silent'] == True:
+        rm.logger.setLevel(logging.ERROR)
     if argmap['rc'] > 1:
         argmap['opt'] += f" -c {argmap['rc']}"
     main(**argmap)
