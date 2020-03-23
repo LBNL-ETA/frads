@@ -28,8 +28,8 @@ class Sender(object):
         """Instantiate the instance.
 
         Parameters:
-            form(str): Sender as {srf, vu, pts};
-            path(str): sender filepath;
+            form(str): Sender as (s, v, p) for surface, view, and points;
+            path(str): sender file path;
             sender(str):  content of the sender file;
             xres(int): x resolution of the image;
             yres(int): y resoluation or line count if form is pts;
@@ -44,8 +44,11 @@ class Sender(object):
     @classmethod
     def as_surface(cls, *, prim_list, basis, offset):
         """
-        basis: sender sampling basis, required when sender is a surface;
-        offset: move the sender surface in its normal direction;
+        Construct a sender from a surface.
+        Parameters:
+            prim_list(list): a list of primitives(dictionary)
+            basis(str): sender sampling basis, required when sender is a surface;
+            offset(float): move the sender surface in its normal direction;
         """
         prim_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
                                    left=False, source=None, out=None)
@@ -57,7 +60,12 @@ class Sender(object):
     @classmethod
     def as_view(cls, *, vu_dict, ray_cnt, xres, yres, c2c):
         """
-        c2c(bool): Set to True to trim the fisheye corner rays.
+        Construct a sender from a view.
+        Parameters:
+            vu_dict(dict): a dictionary containing view parameters;
+            ray_cnt(int): ray count;
+            xres, yres(int): image resolution
+            c2c(bool): Set to True to trim the fisheye corner rays.
         """
         assert None not in (xres, yres), "Need to specify resolution"
         vcmd = f"vwrays {radutil.opt2str(vu_dict)} -x {xres} -y {yres} -d"
@@ -80,8 +88,14 @@ class Sender(object):
         return cls(form='v', path=path, sender=vu_dict, xres=xres, yres=yres)
 
     @classmethod
-    def as_pts(cls, pts_list):
+    def as_pts(cls, *, pts_list, ray_cnt):
+        """Construct a sender from a list of points.
+        Parameters:
+            pts_list(list): a list of list of float
+            ray_cnt(int): sender ray count
+        """
         linsep = os.linesep
+        pts_list = [i for i in pts_list for _ in range(ray_cnt)]
         grid_str = linesep.join([' '.join(map(str, l)) for l in pts_list]) + linesep
         fd, path = tf.mkstemp(prefix='sndr_grid')
         with open(path, 'w') as wtr:
@@ -90,6 +104,11 @@ class Sender(object):
 
     @staticmethod
     def crop2circle(ray_cnt, xres):
+        """Flush the corner rays from a fisheye view
+        Parameters:
+            ray_cnt(int): ray count;
+            xres(int): resolution of the square image;
+        """
         cmd = "| rcalc -if6 -of "
         cmd += f'-e "DIM:{xres};CNT:{ray_cnt}" '
         cmd += '-e "pn=(recno-1)/CNT+.5" '
@@ -101,6 +120,7 @@ class Sender(object):
         return cmd
 
     def remove(self):
+        """Remove the sender file."""
         os.remove(self.path)
 
 
@@ -109,7 +129,6 @@ class Receiver(object):
 
     def __init__(self, *, path, receiver, basis, modifier):
         """Instantiate the receiver object.
-
         Parameters:
             receiver (str): filepath {sky | sun | file_path}
         """
@@ -120,6 +139,8 @@ class Receiver(object):
 
     def __add__(self, other):
         self.receiver += other.receiver
+        with open(self.path, 'a') as wtr:
+            wtr.write(other.receiver)
         return self
 
     @classmethod
@@ -173,7 +194,7 @@ class Receiver(object):
 
 
 def prepare_surface(*, prims, basis, left, offset, source, out):
-    """."""
+    """Prepare the sender or receiver surface, adding appropriate tags."""
     assert basis is not None, 'Sampling basis cannot be None'
     upvector = radutil.up_vector(prims)
     basis = "-" + basis if left else basis
@@ -207,14 +228,13 @@ def prepare_surface(*, prims, basis, left, offset, source, out):
             content += radutil.put_primitive(p)
     return header + content
 
-def gen_mtx(*, sender, receiver, env, out, opt):
+def rfluxmtx(*, sender, receiver, env, out, opt):
+    """Calling rfluxmtx to generate the matrices."""
     if sender.form == 's':
         cmd = f"rfluxmtx {opt} {sender.path} {receiver.path} {' '.join(env)} > {out}"
     else:
         cmd = f"rfluxmtx < {sender.path} {opt} "
         if sender.form == 'p':
-            if 'c' in opt:
-                assert int(opt['c']) == 1, "ray count can't be greater than 1"
             cmd += f"-I+ -faf -y {sender.yres} " #force illuminance calc
         elif sender.form == 'v':
             out = os.path.join(out, '%04d.hdr')
@@ -225,7 +245,7 @@ def gen_mtx(*, sender, receiver, env, out, opt):
     sender.remove()
     receiver.remove()
 
-def sun_oct(receiver, env):
+def rcvr_oct(receiver, env):
     """Generate an octree of the environment and the receiver."""
     fd, _env = tf.mkstemp()
     ocmd = f'oconv {env} {receiver.path} > {_env}'
@@ -233,8 +253,9 @@ def sun_oct(receiver, env):
     sp.call(ocmd, shell=True)
     return _env
 
-def sun_mtx(*, sender, receiver, env, out, opt):
-    _env = sun_oct(receiver, env)
+def rcontrib(*, sender, receiver, env, out, opt):
+    """Calling rcontrib to generate the matrices."""
+    _env = rcvr_oct(receiver, env)
     cmd = f'rcontrib < {sender.path} {opt} -fo+ '
     if sender.form == 'pts':
         cmd = f'-faf '

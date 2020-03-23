@@ -8,31 +8,33 @@ from frads import radmtx as rm
 from frads import radutil
 
 def main(**kwargs):
+    """Generate a matrix."""
+    # figure out environment
+    env = ' '.join(kwargs['env']
     if kwargs['i'] is not None:
-        env = "{} -i {}".format(' '.join(kwargs['env']), kwargs['i'])
-    else:
-        env = ' '.join(kwargs['env'])
+        env = "{} -i {}".format(env, kwargs['i'])
+    # figure out sender
     with open(kwargs['s']) as rdr:
         sndrlines = rdr.readlines()
-    # figure out sender
     if kwargs['st'] == 's':
         prim_list = radutil.parse_primitive(sndrlines)
-        sender = rm.Sender.as_surface(prim_list=prim_list, basis=kwargs['ss'],
-                                                                        offset=kwargs['so'])
+        sender = rm.Sender.as_surface(
+            prim_list=prim_list, basis=kwargs['ss'], offset=kwargs['so'])
     elif kwargs['st'] == 'v':
-        vudict = radutil.parse_vu(sndrlines[0])
-        sender = rm.Sender.as_view(vu_dict=vudict, ray_cnt=kwargs['rc'],
-                                   xres=kwargs['xres'], yres=kwargs['yres'], c2c=kwargs['c2c'])
+        vudict = radutil.parse_vu(sndrlines[-1]) # use the last view from a view file
+        sender = rm.Sender.as_view(
+            vu_dict=vudict, ray_cnt=kwargs['rc'], xres=kwargs['xres'],
+            yres=kwargs['yres'], c2c=kwargs['c2c'])
     elif kwargs['st'] == 'p':
         pts_list = [l.split() for l in sndrlines]
-        sender = rm.Sender.as_pts(pts_list)
+        sender = rm.Sender.as_pts(pts_list=pts_list, ray_cnt=kwargs['rc'])
     # figure out receiver
     if kwargs['r'][0] == 'sky':
         receiver = rm.Receiver.as_sky(kwargs['rs'])
     elif kwargs['r'][0] == 'sun':
-        receiver = rm.Receiver.as_sun(basis=kwargs['rs'], smx_path=kwargs['smx'],
-                                      window_paths=kwargs['wpths'])
-    else:
+        receiver = rm.Receiver.as_sun(
+            basis=kwargs['rs'], smx_path=kwargs['smx'], window_paths=kwargs['wpths'])
+    else: # assuming multiple receivers
         rcvr_prims = []
         for path in kwargs['r']:
             with open(path) as rdr:
@@ -52,15 +54,15 @@ def main(**kwargs):
             receiver += receivers[idx]
     # generate matrices
     if kwargs['r'][0] == 'sun':
-        rm.sun_mtx(sender=sender, receiver=receiver, env=kwargs['env'],
+        rm.rcontrib(sender=sender, receiver=receiver, env=kwargs['env'],
                    out=kwargs['o'], opt=kwargs['opt'])
     else:
-        rm.gen_mtx(sender=sender, receiver=receiver, env=kwargs['env'],
+        rm.rfluxmtx(sender=sender, receiver=receiver, env=kwargs['env'],
                    out=kwargs['o'], opt=kwargs['opt'])
 
 
 def genmtx_args(parser):
-    parser.add_argument('-st', choices=['s','v','p'], help='Sender object')
+    parser.add_argument('-st', choices=['s','v','p'], help='Sender object type')
     parser.add_argument('-s', help='Sender object')
     parser.add_argument('-r', nargs='+', required=True, help='Receiver objects')
     parser.add_argument('-i', help='Scene octree file path')
@@ -75,7 +77,7 @@ def genmtx_args(parser):
     parser.add_argument('-so', type=float,
                         help='Move sender surface in normal direction')
     parser.add_argument('-opt', type=str, default='-ab 1', help='Simulation parameters')
-    parser.add_argument('-rc', type=int, default=1, help='Simulation parameters')
+    parser.add_argument('-rc', type=int, default=1, help='Ray count')
     parser.add_argument('-xres', type=int, help='X resolution')
     parser.add_argument('-yres', type=int, help='Y resolution')
     parser.add_argument('-c2c', action='store_true', help='Crop to circle?')

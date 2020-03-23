@@ -226,14 +226,14 @@ def getbbox(polygon_list, offset=0.0):
     zmin = min(lim[4]) - offset
     zmax = max(lim[5]) + offset
 
-    fp1 = radgeom.Point(xmin, ymin, zmin)
-    fp2 = radgeom.Point(xmax, ymin, zmin)
-    fp3 = radgeom.Point(xmax, ymax, zmin)
+    fp1 = radgeom.Vector(xmin, ymin, zmin)
+    fp2 = radgeom.Vector(xmax, ymin, zmin)
+    fp3 = radgeom.Vector(xmax, ymax, zmin)
     fpg = radgeom.Rectangle3P(fp1, fp2, fp3)
 
-    cp1 = radgeom.Point(xmin, ymin, zmax)
-    cp2 = radgeom.Point(xmax, ymin, zmax)
-    cp3 = radgeom.Point(xmax, ymax, zmax)
+    cp1 = radgeom.Vector(xmin, ymin, zmax)
+    cp2 = radgeom.Vector(xmax, ymin, zmax)
+    cp3 = radgeom.Vector(xmax, ymax, zmax)
     cpg = radgeom.Rectangle3P(cp3, cp2, cp1)
 
     swpg = radgeom.Rectangle3P(cp2, fp2, fp1)
