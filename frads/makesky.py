@@ -147,7 +147,7 @@ def gendaymtx(data_entry, lat, lon, timezone, ele, mf=4, direct=False,
         with open(_path, 'w') as wtr:
             wtr.write(wea_head.replace('\\n', '\n'))
             wtr.write('\n'.join(data_entry))
-        cmd = skv_cmd + " " + _path
+        Cmd = skv_cmd + " " + _path
         return cmd, _path
     else:
         wea_data = linesep.join(data_entry)

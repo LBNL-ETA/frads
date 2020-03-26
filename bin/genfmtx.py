@@ -1,7 +1,9 @@
+#!/usr/bin/env python3
+"""Commandline tool for generating facade matrix.
+T.Wang"""
+
 from frads import mfacade as fcd
 from frads import radutil
-import pdb
-
 
 
 def genfmtx_args(parser):
@@ -15,7 +17,6 @@ def genfmtx_args(parser):
     parser.add_argument('-refl', action='store_true', help='Crop to circle?')
     parser.add_argument('-wrap', action='store_true', help='Crop to circle?')
     parser.add_argument('-env', nargs='+', default=[], help='Environment file paths')
-    parser.add_argument('-rc', type=int, default=1, help='Ray count')
     return parser
 
 def main(**kwargs):
@@ -35,7 +36,6 @@ def main(**kwargs):
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
-    import logging
     parser = ArgumentParser()
     genfmtx_parser = genfmtx_args(parser)
     args = genfmtx_parser.parse_args()

@@ -598,3 +598,172 @@ def material_lib():
     # Glass .8
     mlib.append(glass_prim('void', 'glass_80', .8, .8, .8))
     return mlib
+
+def pcomb(inputs):
+    """Image operations with pcomb.
+    Parameter: inputs,
+        e.g: ['img1.hdr', '+', img2.hdr', '-', 'img3.hdr', 'output.hdr']
+    """
+    input_list = inputs[:-1]
+    out_dir = inputs[-1]
+    component_idx = range(0, len(input_list), 2)
+    components = [input_list[i] for i in component_idx]
+    color_op_list = []
+    for c in 'rgb':
+        color_op = input_list[:]
+        for i in component_idx:
+            color_op[i] = '%si(%d)' % (c, i/2+1)
+            cstr = '%so=%s' % (c, ''.join(color_op))
+        color_op_list.append(cstr)
+    rgb_str = ';'.join(color_op_list)
+    cmd = "pcomb -e '%s'" % rgb_str
+    img_name = radutil.basename(input_list[0])
+    cmd += " -o ".join([''] + components)
+    cmd += " > %s.hdr" % (os.path.join(out_dir, img_name))
+    sp.call(cmd, shell=True)
+
+def dctsop(inp, out, nproc=1):
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+    nproc = mp.cpu_count() if nproc is None else nproc
+    process = mp.Pool(nproc)
+    assert len(inputs) > 1
+    mtx_inp = inputs[:-1]
+    sky_dir = inputs[-1]
+    sky_files = (os.path.join(sky_dir, i) for i in os.listdir(sky_dir))
+    grouped = [mtx_inp+[skv] for skv in sky_files]
+    [sub.append(out_dir) for sub in grouped]
+    process.map(dctimestep, grouped)
+
+def pcombop(inp, out, nproc=1):
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+    nproc = mp.cpu_count() if nproc is None else nproc
+    process = mp.Pool(nproc)
+    assert len(inputs) > 2
+    assert len(inputs) % 2 == 1
+    inp_dir = [inputs[i] for i in range(0, len(inputs), 2)]
+    inp_cnt = len(inp_dir)
+    ops = [inputs[i] for i in range(1, len(inputs), 2)]
+    inp_lists = []
+    for i in inp_dir:
+        if os.path.isdir(i):
+            inp_lists.append(glob.glob(os.path.join(i, '*.hdr')))
+        else:
+            inp_lists.append(i)
+    inp_lists_full = []
+    for i in range(inp_cnt):
+        if os.path.isdir(inp_dir[i]):
+            inp_lists_full.append(inp_lists[i])
+        else:
+            inp_lists_full.append(inp_dir[i])
+    max_len = sorted([len(i) for i in inp_lists_full if type(i) == list])[0]
+    for i in range(len(inp_lists_full)):
+        if type(inp_lists_full[i]) is not list:
+            inp_lists_full[i] = [inp_lists_full[i]] * max_len
+    equal_len = all(len(i) == len(inp_lists_full[0]) for i in inp_lists_full)
+    if not equal_len:
+        print("Warning: input directories don't the same number of files")
+    grouped = [list(i) for i in zip(*inp_lists_full)]
+    [sub.insert(i, ops[int((i-1)/2)])
+     for sub in grouped for i in range(1, len(sub)+1, 2)]
+    [sub.append(out_dir) for sub in grouped]
+    process.map(pcomb, grouped)
+
+
+def dctimestep(input_list):
+    """Image operations in forms of Vs, VDs, VTDs, VDFs, VTDFs."""
+    inputs = input_list[:-1]
+    out_dir = input_list[-1]
+    inp_dir_count = len(inputs)
+    sky = input_list[-2]
+    img_name = radutil.basename(sky)
+    out_path = os.path.join(out_dir, img_name)
+
+    if inputs[1].endswith('.xml') is False\
+            and inp_dir_count > 2 and os.path.isdir(inputs[0]):
+        combined = "'!rmtxop %s" % (' '.join(inputs[1:-1]))
+        img = [i for i in os.listdir(inputs[0]) if i.endswith('.hdr')][0]
+        str_count = len(img.split('.hdr')[0])  # figure out unix %0d string
+        appendi = r"%0"+"%sd.hdr" % (str_count)
+        new_inp_dir = [os.path.join(inputs[0], appendi), combined]
+        cmd = "dctimestep %s %s' > %s.hdr" \
+            % (' '.join(new_inp_dir), sky, out_path)
+
+    else:
+        if not os.path.isdir(inputs[0]) and not inputs[1].endswith('.xml'):
+            combined = os.path.join(os.path.dirname(inputs[0]), "tmp.vfdmtx")
+            stderr = combine_mtx(inputs[:-1], combined)
+            if stderr != "":
+                print(stderr)
+                return
+            inputs_ = [combined]
+
+        elif inp_dir_count == 5:
+            combined = os.path.join(os.path.dirname(inputs[2]), "tmp.fdmtx")
+            stderr = combine_mtx(inputs[2:4], combined)
+            if stderr != "":
+                print(stderr)
+                return
+            inputs_ = [inputs[0], inputs[1], combined]
+
+        else:
+            inputs_ = inputs[:-1]
+
+        if os.path.isdir(inputs[0]):
+            img = [i for i in os.listdir(inputs[0])
+                   if i.endswith('.hdr')][0]
+            str_count = len(img.split('.hdr')[0])
+            appendi = r"%0"+"%sd.hdr" % (str_count)
+            inputs_[0] = os.path.join(inputs[0], appendi)
+            out_ext = ".hdr"
+        else:
+            out_ext = ".dat"
+
+        input_string = ' '.join(inputs_)
+        out_path = out_path + out_ext
+        cmd = "dctimestep %s %s > %s" % (input_string, sky, out_path)
+    sp.call(cmd, shell=True)
+
+
+def combine_mtx(mtxs, out_dir):
+    """."""
+    cmd = "rmtxop"
+    args = " -ff %s > %s" % (" ".join(mtxs), out_dir)
+    process = sp.Popen(cmd + args, stdout=sp.PIPE, stderr=sp.PIPE, shell=True)
+    stdout, stderr = process.communicate()
+    return stderr
+
+#def mtx2nparray(path):
+#    with open(path) as rdr:
+#        raw = rdr.read().split('\n\n')
+#    header = raw[0]
+#    nrow, ncol, ncomp = header_parser(header)
+#    data = raw[1].splitlines()
+#    rdata = np.array([i.split()[::ncomp] for i in data], dtype=float)
+#    gdata = np.array([i.split()[1::ncomp] for i in data], dtype=float)
+#    bdata = np.array([i.split()[2::ncomp] for i in data], dtype=float)
+#    assert len(bdata) == nrow
+#    assert len(bdata[0]) == ncol
+#    return rdata, gdata, bdata
+#
+#
+#def smx2nparray(path):
+#    with open(path) as rdr:
+#        raw = rdr.read().split('\n\n')
+#    header = raw[0]
+#    nrow, ncol, ncomp = header_parser(header)
+#    data = [i.splitlines() for i in raw[1:] if i != '']
+#    rdata = np.array([[i.split()[::ncomp][0] for i in row] for row in data],
+#                     dtype=float)
+#    gdata = np.array([[i.split()[1::ncomp][0] for i in row] for row in data],
+#                     dtype=float)
+#    bdata = np.array([[i.split()[2::ncomp][0] for i in row] for row in data],
+#                     dtype=float)
+#    assert np.size(bdata,1) == nrow
+#    assert np.size(bdata,0) == ncol
+#    if ncol ==1 :
+#        rdata = rdata.flatten()
+#        gdata = gdata.flatten()
+#        bdata = bdata.flatten()
+#    return rdata, gdata, bdata
