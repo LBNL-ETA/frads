@@ -16,7 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.WARNING)
+console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
@@ -94,7 +94,7 @@ class Sender(object):
             pts_list(list): a list of list of float
             ray_cnt(int): sender ray count
         """
-        linsep = os.linesep
+        linesep = os.linesep
         pts_list = [i for i in pts_list for _ in range(ray_cnt)]
         grid_str = linesep.join([' '.join(map(str, l)) for l in pts_list]) + linesep
         fd, path = tf.mkstemp(prefix='sndr_grid')
@@ -237,13 +237,14 @@ def rfluxmtx(*, sender, receiver, env, out, opt):
         if sender.form == 'p':
             cmd += f"-I+ -faf -y {sender.yres} " #force illuminance calc
         elif sender.form == 'v':
+            radutil.mkdir_p(out)
             out = os.path.join(out, '%04d.hdr')
             cmd += f"-ffc -x {sender.xres} -y {sender.yres} -ld- "
         cmd += f"-o {out} - {receiver.path} {' '.join(env)}"
     logger.info(cmd)
     sp.run(cmd, shell=True)
-    sender.remove()
-    receiver.remove()
+    #sender.remove()
+    #receiver.remove()
 
 def rcvr_oct(receiver, env):
     """Generate an octree of the environment and the receiver."""

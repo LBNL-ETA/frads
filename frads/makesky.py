@@ -18,19 +18,19 @@ def basis_glow(sky_basis):
 
 def skyglow(basis, upvect='+Y'):
     sky_string = f"#@rfluxmtx u={upvect} h={basis}{LSEP*2}"
-    sky_string += "void glow skyglow{LSEP}"
-    sky_string += "0{LSEP}0{LSEP}4 1 1 1 0{LSEP*2}"
-    sky_string += "skyglow source sky{LSEP}"
-    sky_string += "0{LSEP}0{LSEP}4 0 0 1 180{LSEP}"
+    sky_string += f"void glow skyglow{LSEP}"
+    sky_string += f"0{LSEP}0{LSEP}4 1 1 1 0{LSEP*2}"
+    sky_string += f"skyglow source sky{LSEP}"
+    sky_string += f"0{LSEP}0{LSEP}4 0 0 1 180{LSEP}"
     return sky_string
 
 
 def grndglow(basis='u'):
     ground_string = f"#@rfluxmtx h={basis}{LSEP*2}"
-    ground_string += "void glow groundglow{LSEP}"
-    ground_string += "0{LSEP}0{LSEP}4 1 1 1 0{LSEP*2}"
-    ground_string += "groundglow source ground{LSEP}"
-    ground_string += "0{LSEP}0{LSEP}4 0 0 -1 180{LSEP*2}"
+    ground_string += f"void glow groundglow{LSEP}"
+    ground_string += f"0{LSEP}0{LSEP}4 1 1 1 0{LSEP*2}"
+    ground_string += f"groundglow source ground{LSEP}"
+    ground_string += f"0{LSEP}0{LSEP}4 0 0 -1 180{LSEP*2}"
     return ground_string
 
 
@@ -41,7 +41,7 @@ class Gensun(object):
         """."""
         self.runlen = 144 * mf**2 + 3
         self.rsrc = radutil.reinsrc(mf)
-        self.mod_str = '{LSEP}'.join([f'sol{i}' for i in range(1, self.runlen)])
+        self.mod_str = LSEP.join([f'sol{i}' for i in range(1, self.runlen)])
 
     def gen_full(self):
         """Generate full treganza based sun sources."""

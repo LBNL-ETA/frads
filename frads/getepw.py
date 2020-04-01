@@ -45,7 +45,7 @@ class getEPW(object):
             raise e
         with open(epw_fname, 'wb') as wtr:
             wtr.write(raw)
-        self.epw_fname = epw_fname
+        self.fname = epw_fname
 
     @classmethod
     def from_zip(cls, zipcode):
@@ -56,10 +56,10 @@ class getEPW(object):
                 if row['GEOID'] == zipcode:
                     lat = row['INTPTLAT']
                     lon = row['INTPTLONG']
-                    cls(lat, lon)
                     break
             else:
-                print('zipcode not found in US')
+                raise 'zipcode not found in US'
+        return cls(lat, lon)
 
 
 if __name__ == "__main__":

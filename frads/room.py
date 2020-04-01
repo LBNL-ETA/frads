@@ -5,6 +5,14 @@ import pdb
 
 
 class Room(object):
+
+    def __init__(self, *, wall, floor, ceiling, window):
+        self.wall = wall
+        self.floor = floor
+        self.ceiling = ceiling
+        self.window = window
+
+class Shoebox(Room):
     """Make a shoebox."""
 
     def __init__(self, width, depth, height, origin=radgeom.Vector()):

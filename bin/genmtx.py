@@ -98,7 +98,7 @@ if __name__ == "__main__":
     argmap = vars(args)
     if argmap['debug'] == True:
         rm.logger.setLevel(logging.DEBUG)
-    elif argmap['v'] == True:
+    elif argmap['vbose'] == True:
         rm.logger.setLevel(logging.INFO)
     elif argmap['silent'] == True:
         rm.logger.setLevel(logging.ERROR)

@@ -94,16 +94,18 @@ class epw2wea(object):
         epw_header = raw[0].split(',')
         content = raw[8:]
         string = ""
+        self.dt_string = []
         for li in content:
             line = li.split(',')
             month = int(line[1])
             day = int(line[2])
-            hours = int(line[3]) - 0.5
+            hour = int(line[3]) - 1
+            hours = hour + 0.5
             dir_norm = float(line[14])
             dif_hor = float(line[15])
             string += "%d %d %2.3f %.1f %.1f\n" \
                 % (month, day, hours, dir_norm, dif_hor)
-
+            self.dt_string.append(f"{month:02d}{day:02d}_{hour:02d}30")
         self.string = string
         city = epw_header[1]
         country = epw_header[3]
