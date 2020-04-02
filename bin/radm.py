@@ -13,25 +13,62 @@ from frads import mfacade, makesky, radgeom, room
 from frads import getepw, epw2wea, radutil, radmtx
 
 
-class Mtxmethod(object):
+class MTXmethod(object):
     def __init__(self, config):
         self.config = config
-        self.vmx_opt = config.simctrl['vmx_opt'][3:]
+        nproc = self.config.simctrl['nprocess']
+        self.vmx_opt = config.simctrl['vmx_opt'][3:] + f' -n {nproc}'
         self.vmx_basis = config.simctrl['vmx_opt'][:2]
-        self.dmx_opt = config.simctrl['dmx_opt'][3:]
+        self.dmx_opt = config.simctrl['dmx_opt'][3:] + f' -n {nproc}'
         self.dmx_basis = config.simctrl['dmx_opt'][:2]
-        self.dsmx_opt = config.simctrl['dsmx_opt'][3:]
+        self.dsmx_opt = config.simctrl['dsmx_opt'][3:] + f' -n {nproc}'
         self.dsmx_basis = config.simctrl['dsmx_opt'][:2]
+        self.ray_cnt = config.simctrl['ray_cnt']
 
     def two_phase(self):
-        self.gen_dsmx()
         self.gen_smx()
-        res = self.rmtxop(self.pdsmx, self.smxpath)
+        if self.config.sensor_pts is not None:
+            self.gen_pdsmx()
+            res = self.rmtxop(self.pdsmx, self.smxpath).splitlines()
+            respath = os.path.join(self.config.filestrct['results'], 'pdsmx.txt')
+            with open(respath, 'w') as wtr:
+                for idx in range(len(res)):
+                    wtr.write(self.config.dts[idx] + '\t')
+                    wtr.write(res[idx] + os.linesep)
+        if self.config.vu_dict is not None:
+            self.gen_vdsmx()
 
     def three_phase(self):
-        self.gen_vmx()
+        append = ''
+        if direct:
+            append = '_d'
         self.gen_dmx()
         self.gen_smx()
+        if self.config.sensor_pts is not None:
+            self.gen_pvmx()
+            presl = []
+            for wname in self.config.windows_prims:
+                _wname = wname+append
+                _res = self.rmtxop(self.pvmxs[_wname], self.bsdf[_wname],
+                                   self.dmxs[_wname], self.smxpath)
+                presl.append(map(float, _res.splitlines()))
+            res = [sum(l) for l in zip(*presl)]
+            respath = os.path.join(self.config.filestrct['results'], 'pdsmx.txt')
+            with open(respath, 'w') as wtr:
+                for idx in range(len(res)):
+                    wtr.write(self.config.dts[idx] + '\t')
+                    wtr.write(res[idx] + os.linesep)
+        if self.config.vu_dict is not None:
+            self.gen_vvmx()
+
+    def four_phase(self):
+        pass
+
+    def five_phase(self):
+        pass
+
+    def six_phase(self):
+        pass
 
     def get_avgskv(self):
         sp.run(f"gendaymtx -m {self.mf_sky} -A {self.wea} > {avgskyv}", shell=True)
@@ -43,7 +80,7 @@ class Mtxmethod(object):
         mf = self.config.simctrl['dmx_opt'][1]
         self.smxpath = os.path.join(self.config.filestrct['matrices'],
                                     radutil.basename(self.config.wea_path)+'.smx')
-        cmd = f"gendaymtx -m {mf} {self.config.wea_path} > {self.smxpath}"
+        cmd = f"gendaymtx -ofd -m {mf} {self.config.wea_path} > {self.smxpath}"
         sp.run(cmd, shell=True)
 
     def gen_dmx(self, direct=False):
@@ -64,53 +101,70 @@ class Mtxmethod(object):
             radmtx.rfluxmtx(sender=sndr_wndw,receiver=rcvr_sky,
                        env=self.config.envpath, out=self.dmxs[wname+append], opt=opt)
 
-    def gen_vmx(self, direct=False):
+    def gen_pvmx(self, direct=False):
         opt = self.vmx_opt
         append = ''
         if direct:
             opt += ' -ab 1'
             append = '_d'
-        if self.config.sensor_pts is not None:
-            self.pvmxs = {}
-            sndr_pts = radmtx.Sender.as_pts(pts_list=self.config.sensor_pts, ray_cnt=1)
-            for wname in self.config.window_prims:
-                logger.info(f"Generating pvmx for {wname}")
-                self.pvmxs[wname+append] = os.path.join(self.config.filestrct['matrices'],
-                                                        f'pvmx_{wname}{append}')
-                rcvr_wndw = radmtx.Receiver.as_surface(
-                    prim_list=self.config.window_prims[wname], basis=self.vmx_basis,
-                    offset=None,left=None, source='glow', out=None)
-                radmtx.rfluxmtx(sender=sndr_pts, receiver=rcvr_wndw,
-                                env=self.config.envpath, opt=opt,
-                                out=self.pvmxs[wname+append])
-            sndr_pts.remove()
-            rcvr_wndw.remove()
-        if self.config.vu_dict is not None:
-            self.vvmxs = {}
-            sndr_v =  radmtx.Sender.as_view(
-                vu_dict=self.config.vu_dict, ray_cnt=1, xres=1000, yres=1000, c2c=True)
-            for wndw in self.config.window_prims:
-                self.vvmxs[wname+append] = os.path.join(
-                    self.config.filestrct['matrices'], f'vvmx_{wname}{append}')
-                rcvr_wndw = radmtx.Receiver.as_surface(
-                    prim_list=self.config.window_prims[wname], basis=self.vmx_basis,
-                offset=None, left=None, source='glow', out=None)
-                radmtx.rfluxmtx(sender=sndr_v,receiver=rcvr_wndw, env=self.config.envpath,
-                           out=self.vvmxs[wname+append], opt=opt)
-            sndr_v.remove()
-            rcvr_wndw.remove()
+        self.pvmxs = {}
+        sndr_pts = radmtx.Sender.as_pts(pts_list=self.config.sensor_pts, ray_cnt=1)
+        for wname in self.config.window_prims:
+            logger.info(f"Generating pvmx for {wname}")
+            self.pvmxs[wname+append] = os.path.join(self.config.filestrct['matrices'],
+                                                    f'pvmx_{wname}{append}.mtx')
+            rcvr_wndw = radmtx.Receiver.as_surface(
+                prim_list=self.config.window_prims[wname], basis=self.vmx_basis,
+                offset=None,left=None, source='glow', out=None)
+            radmtx.rfluxmtx(sender=sndr_pts, receiver=rcvr_wndw,
+                            env=self.config.envpath, opt=opt,
+                            out=self.pvmxs[wname+append])
+        sndr_pts.remove()
+        rcvr_wndw.remove()
 
-    def gen_dsmx(self):
+    def gen_vvmx(self, direct=False):
+        opt = self.vmx_opt
+        append = ''
+        if direct:
+            opt += ' -ab 1'
+            append = '_d'
+        self.vvmxs = {}
+        sndr_vu =  radmtx.Sender.as_view(
+            vu_dict=self.config.vu_dict, ray_cnt=1, xres=self.config.xres,
+            yres=self.config.yres, c2c=True)
+        for wndw in self.config.window_prims:
+            self.vvmxs[wname+append] = os.path.join(
+                self.config.filestrct['matrices'], f'vvmx_{wname}{append}.mtx')
+            rcvr_wndw = radmtx.Receiver.as_surface(
+                prim_list=self.config.window_prims[wname], basis=self.vmx_basis,
+            offset=None, left=None, source='glow', out=None)
+            radmtx.rfluxmtx(sender=sndr_vu,receiver=rcvr_wndw, env=self.config.envpath,
+                       out=self.vvmxs[wname+append], opt=opt)
+        sndr_vu.remove()
+        rcvr_wndw.remove()
+
+    def gen_pdsmx(self):
         env = self.config.envpath + self.config.windowpath
         sndr_pts = radmtx.Sender.as_pts(pts_list=self.config.sensor_pts, ray_cnt=1)
         rcvr_sky = radmtx.Receiver.as_sky(self.dsmx_basis)
-        self.pdsmx = os.path.join(self.config.filestrct['matrices'], 'pdsmx')
+        self.pdsmx = os.path.join(self.config.filestrct['matrices'], 'pdsmx.mtx')
         radmtx.rfluxmtx(sender=sndr_pts, receiver=rcvr_sky,
                         env=env, out=self.pdsmx, opt=self.dsmx_opt)
 
+    def gen_vdsmx(self):
+        env = self.config.envpath + self.config.windowpath
+        sndr_v =  radmtx.Sender.as_view(
+            vu_dict=self.config.vu_dict, ray_cnt=self.ray_cnt,
+            xres=self.config.xres, yres=self.config.yres)
+        rcvr_sky = radmtx.Receiver.as_sky(self.dsmx_basis)
+        self.pdsmx = os.path.join(self.config.filestrct['matrices'], 'pdsmx.mtx')
+        radmtx.rfluxmtx(sender=sndr_vu, receiver=rcvr_sky,
+                        env=env, out=self.pdsmx, opt=self.dsmx_opt)
 
-    def gen_fmx(self, direct=False):
+
+    def gen_fdmx(self, direct=False):
         pass
+
 
     def compute_sensor(self, direct=False):
         append = ''
@@ -126,9 +180,13 @@ class Mtxmethod(object):
         return [sum(l) for l in zip(*presl)]
 
     def rmtxop(self, *mtx):
-        cmd = f"rmtxop {' '.join(*mtx)} "
-        cmd += f'| rmtxop -fa -c 47.4 119.9 11.6 - | getinfo -'
-        return sp.run(cmd, check=True, stdout=sp.PIPE).stdout.decode()
+        cmd = f"rmtxop {' '.join(mtx)} "
+        cmd += f'| rmtxop -fa -c 47.4 119.9 11.6 - | rmtxop -fa -t - | getinfo -'
+        return sp.run(cmd, shell=True, check=True, stdout=sp.PIPE).stdout.decode()
+
+
+    def dcts(self, *mtx)
+        cmd = f"dctimstep {' '.join(mtx)} > {opath}"
 
     def compute_vu(self):
         append = ''
@@ -185,7 +243,10 @@ class Prepare(object):
         self.windowpath = [os.path.join(objdir, obj)
                            for obj in self.model['windows'].split()]
         if self.raysenders['view'] is not None:
-            self.viewpath = os.path.join(raydir, self.raysenders['view'])
+            viewline = self.raysenders['view'].split()
+            self.viewpath = os.path.join(raydir, viewline[0])
+            self.xres = viewline[1]
+            self.yres = viewline[2]
         if self.model['bsdf'] is not None:
             self.bsdfpath = [os.path.join(mtxdir, bsdf)
                              for bsdf in self.model['BSDF'].split()]
@@ -258,42 +319,40 @@ class Prepare(object):
             self.dts = wea.dt_string
 
 
-
 def main(cfgpath):
     setup = Prepare(cfgpath)
-    mrad = Mtxmethod(setup)
+    mrad = MTXmethod(setup)
+    ncp_shade = setup.model['ncp_shade']
     if setup.model['bsdf'] is None:
         mrad.two_phase()
     else:
         if setup.simctrl['separate_direct']:
-            mrad.five_phase()
+            if ncp_shade is not None and len(ncp_shade.split()) > 1:
+                mrad.six_phase()
+            else:
+                mrad.five_phase()
         else:
-            mrad.three_phase()
+            if ncp_shade is not None and len(ncp_shade.split()) > 1:
+                mrad.four_phase()
+            else:
+                mrad.three_phase()
 
 
 if __name__ == '__main__':
     import pdb
     import logging
-    log_level = 'info'  # set logging level
-    log_level_dict = {'info': 20, 'warning': 30, 'error': 40, 'critical': 50}
-    logger = logging.getLogger(__name__)
-    logger.setLevel(log_level_dict[log_level])
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
     parser = argparse.ArgumentParser()
-    parser.add_argument('cfg')
+    parser.add_argument('cfgpath')
     parser.add_argument('-vb', action='store_true', help='verbose mode')
-    parser.add_argument('-debug', action='store_true', help='debug mode')
-    parser.add_argument('-silent', action='store_true', help='silent mode')
+    parser.add_argument('-db', action='store_true', help='debug mode')
+    parser.add_argument('-si', action='store_true', help='silent mode')
     args = parser.parse_args()
     argmap = vars(args)
     logger = logging.getLogger('frads.radmtx')
-    if argmap['debug'] == True:
+    if argmap['db']:
         logger.setLevel(logging.DEBUG)
-    elif argmap['vb'] == True:
+    elif argmap['vb']:
         logger.setLevel(logging.INFO)
-    elif argmap['silent'] == True:
+    elif argmap['si']:
         logger.setLevel(logging.CRITICAL)
-    main(args.cfg)
+    main(args.cfgpath)

@@ -58,7 +58,7 @@ class Sender(object):
         return cls(form='s', path=path, sender=prim_str, xres=None, yres=None)
 
     @classmethod
-    def as_view(cls, *, vu_dict, ray_cnt, xres, yres, c2c):
+    def as_view(cls, *, vu_dict, ray_cnt, xres, yres):
         """
         Construct a sender from a view.
         Parameters:
@@ -79,7 +79,7 @@ class Sender(object):
             vu_dict['pj'] = 0.7 # placeholder
         logger.info(f"Ray count is {ray_cnt}")
         cmd += radutil.opt2str(vu_dict)
-        if vu_dict['vt'] == 'a' and c2c:
+        if vu_dict['vt'] == 'a':
             cmd += Sender.crop2circle(ray_cnt, xres)
         fd, path = tf.mkstemp(prefix='vufile')
         cmd += f"> {path}"
