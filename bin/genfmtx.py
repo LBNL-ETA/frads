@@ -96,8 +96,6 @@ def main(**kwargs):
         os.system(cmd)
         os.remove('temp.xml')
         os.remove('solar.xml')
-        [os.remove(vis_dict[k]) for k in vis_dict]
-        [os.remove(sol_dict[k]) for k in sol_dict]
         [os.remove(mtx) for mtx in mtxs]
 
 
