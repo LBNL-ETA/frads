@@ -79,20 +79,21 @@ def main(**kwargs):
         vis_dict = {}
         sol_dict = {}
         oname = radutil.basename(kwargs['o'])
+        dirname = os.path.dirname(kwargs['o'])
         for mtx in mtxs:
             if mtx.startswith(oname):
                 _direc = radutil.basename(mtx).split('_')[-1][:2]
-                vis_dict[_direc] = f"vis_{_direc}"
+                vis_dict[_direc] = os.path.join(dirname, f"vis_{_direc}")
                 klems_wrap(mtx, vis_dict[_direc])
             if mtx.startswith('_solar_'):
                 _direc = radutil.basename(mtx).split('_')[-1][:2]
-                sol_dict[_direc] = f"sol_{_direc}"
+                sol_dict[_direc] = os.path.join(dirname, f"sol_{_direc}")
                 klems_wrap(mtx, sol_dict[_direc])
         cmd = 'wrapBSDF -a kf -s Visible '
         cmd += ' '.join([f"-{key} {vis_dict[key]}" for key in vis_dict])
         cmd += ' -s Solar '
         cmd += ' '.join([f"-{key} {sol_dict[key]}" for key in sol_dict])
-        cmd += f" > {oname}.xml"
+        cmd += f" > {os.path.join(dirname, oname)}.xml"
         os.system(cmd)
         os.remove('temp.xml')
         os.remove('solar.xml')
