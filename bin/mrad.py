@@ -39,18 +39,14 @@ class MTXmethod(object):
             self.gen_vdsmx()
 
     def three_phase(self):
-        append = ''
-        if direct:
-            append = '_d'
         self.gen_dmx()
-        self.gen_smx()
+        self.gen_smx(self.dmx_basis)
         if self.config.sensor_pts is not None:
             self.gen_pvmx()
             presl = []
             for wname in self.config.windows_prims:
-                _wname = wname+append
-                _res = self.rmtxop(self.pvmxs[_wname], self.bsdf[_wname],
-                                   self.dmxs[_wname], self.smxpath)
+                _res = self.rmtxop(self.pvmxs[wname], self.bsdf[wname],
+                                   self.dmxs[wname], self.smxpath)
                 presl.append(map(float, _res.splitlines()))
             res = [sum(l) for l in zip(*presl)]
             respath = os.path.join(self.config.filestrct['results'], 'pdsmx.txt')
@@ -65,6 +61,25 @@ class MTXmethod(object):
         pass
 
     def five_phase(self):
+        self.gen_dmx()
+        self.gen_dmx(direct=True)
+        self.gen_smx(self.dmx_basis)
+        self.gen_smx(self.dmx_basis, direct=True)
+        self.gen_smx('r6', direct=True)
+        if self.config.sensor_pts is not None:
+            self.gen_pvmx()
+            self.gen_pvmx(direct=True)
+            self.gen_cdsmx()
+            presl = []
+            for wname in self.config.windows_prims:
+                _res = self.rmtxop(self.pvmxs[wname], self.bsdf[wname],
+                                   self.dmxs[wname], self.smxpath)
+                presl.append(map(float, _res.splitlines()))
+            res = [sum(l) for l in zip(*presl)]
+
+        if self.config.vu_dict is not None:
+            self.gen_vvmx()
+            self.gen_vvmx(direct=True)
         pass
 
     def six_phase(self):
@@ -76,11 +91,10 @@ class MTXmethod(object):
     def wndw_subdivide(self):
         pass
 
-    def gen_smx(self, direct=False):
-        mf = self.config.simctrl['dmx_opt'][1]
+    def gen_smx(self, mf, direct=False):
         self.smxpath = os.path.join(self.config.filestrct['matrices'],
                                     radutil.basename(self.config.wea_path)+'.smx')
-        cmd = f"gendaymtx -ofd -m {mf} {self.config.wea_path} > {self.smxpath}"
+        cmd = f"gendaymtx -ofd -m {mf[-1]} {self.config.wea_path} > {self.smxpath}"
         sp.run(cmd, shell=True)
 
     def gen_dmx(self, direct=False):
@@ -165,6 +179,23 @@ class MTXmethod(object):
     def gen_fdmx(self, direct=False):
         pass
 
+    def gen_pcdsmx(self):
+        env = self.config.envpath + self.config.windowpath
+        sndr_pts = radmtx.Sender.as_pts(pts_list=self.config.sensor_pts, ray_cnt=1)
+        rcvr_sky = radmtx.Receiver.as_sun()
+        self.pcdsmx = os.path.join(self.config.filestrct['matrices'], 'pcdsmx.mtx')
+        radmtx.rfluxmtx(sender=sndr_pts, receiver=rcvr_sky,
+                        env=env, out=self.pcdsmx, opt=self.cdsmx_opt)
+
+    def gen_vcdsmx(self):
+        env = self.config.envpath + self.config.windowpath
+        sndr_v =  radmtx.Sender.as_view(
+            vu_dict=self.config.vu_dict, ray_cnt=self.ray_cnt,
+            xres=self.config.xres, yres=self.config.yres)
+        rcvr_sky = radmtx.Receiver.as_sky(self.dsmx_basis)
+        self.pdsmx = os.path.join(self.config.filestrct['matrices'], 'pdsmx.mtx')
+        radmtx.rfluxmtx(sender=sndr_vu, receiver=rcvr_sky,
+                        env=env, out=self.pdsmx, opt=self.dsmx_opt)
 
     def compute_sensor(self, direct=False):
         append = ''
