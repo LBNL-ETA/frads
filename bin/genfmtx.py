@@ -51,6 +51,7 @@ def main(**kwargs):
     wrap2xml = kwargs['wrap']
     dirname = os.path.dirname(kwargs['o'])
     dirname = '.' if dirname=='' else dirname
+    print(f'Saving to directory: {dirname}')
     if kwargs['s'] and ncp_type=='BSDF':
         logger.info('Computing for solar and visible spectrum...')
         wrap2xml = False
