@@ -93,7 +93,7 @@ class Genfmtx(object):
         else:
             for key in src_dict:
                 out_name = f"{self.out_name}_{key}.mtx"
-                shutil.move(src_dict[key], out_name)
+                shutil.move(src_dict[key], os.path.join(self.outdir, out_name))
         shutil.rmtree(td, ignore_errors=True)
 
     def compute_front(self, src_dict):

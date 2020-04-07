@@ -9,6 +9,7 @@ import tempfile as tf
 import shutil
 import os
 import subprocess as sp
+import pdb
 
 def genfmtx_args(parser):
     parser.add_argument('-w', required=True, help='Window files')
@@ -49,6 +50,8 @@ def main(**kwargs):
             ncp_type = prim['type']
             break
     wrap2xml = kwargs['wrap']
+    dirname = os.path.dirname(kwargs['o'])
+    dirname = '.' if dirname=='' else dirname
     if kwargs['s'] and ncp_type=='BSDF':
         logger.info('Computing for solar and visible spectrum...')
         wrap2xml = False
@@ -72,7 +75,7 @@ def main(**kwargs):
         with open(_env_path, 'w') as wtr:
             for prim in all_prims:
                 wtr.write(radutil.put_primitive(prim))
-        outsolar = '_solar_' + radutil.basename(kwargs['o'])
+        outsolar = os.path.join(dirname, '_solar_' + radutil.basename(kwargs['o']))
         process_thread = Thread(target=fcd.Genfmtx,
                                 kwargs={'win_polygons':wndw_polygon,
                                        'port_prim':port_prims, 'out':outsolar,
@@ -91,15 +94,15 @@ def main(**kwargs):
         vis_dict = {}
         sol_dict = {}
         oname = radutil.basename(kwargs['o'])
-        dirname = os.path.dirname(kwargs['o'])
-        dirname = '.' if dirname=='' else dirname
-        mtxs = [mtx for mtx in os.listdir(dirname) if mtx.endswith('.mtx')]
+        mtxs = [os.path.join(dirname, mtx) for mtx in os.listdir(dirname) if mtx.endswith('.mtx')]
+        pdb.set_trace()
         for mtx in mtxs:
             _direc = radutil.basename(mtx).split('_')[-1][:2]
-            if mtx.startswith(oname):
+            mtxname = radutil.basename(mtx)
+            if mtxname.startswith(oname):
                 vis_dict[_direc] = os.path.join(dirname, f"vis_{_direc}")
                 klems_wrap(mtx, vis_dict[_direc])
-            if mtx.startswith('_solar_'):
+            if mtxname.startswith('_solar_'):
                 sol_dict[_direc] = os.path.join(dirname, f"sol_{_direc}")
                 klems_wrap(mtx, sol_dict[_direc])
         cmd = 'wrapBSDF -a kf -c -s Visible '
