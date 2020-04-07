@@ -370,7 +370,6 @@ def main(cfgpath):
 
 
 if __name__ == '__main__':
-    import pdb
     import logging
     parser = argparse.ArgumentParser()
     parser.add_argument('cfgpath')

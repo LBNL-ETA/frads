@@ -1,7 +1,7 @@
 import setuptools
 import os
 
-bin_path = [os.path.join('bin', p) for p in os.listdir('bin')]
+bin_path = [os.path.join('bin', p) for p in os.listdir('bin') if p.endswith('.py')]
 
 with open("README.md", "r") as fh:
     long_description = fh.read()

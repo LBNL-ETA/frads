@@ -14,7 +14,14 @@ from frads import radutil
 import shutil
 import subprocess as sp
 import tempfile as tf
-import pdb
+import logging
+
+logger = logging.getLogger(__name__)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 class Genfmtx(object):
     """Generate facade matrix."""
@@ -57,7 +64,6 @@ class Genfmtx(object):
             self.pctcull = 90
             self.ttlog2 = int(ttlog2)
             self.opt += ' -hd -ff'
-        #self.genport()
         td = tf.mkdtemp()
         src_dict = {}
         fwrap_dict = {}
@@ -92,7 +98,9 @@ class Genfmtx(object):
 
     def compute_front(self, src_dict):
         """compute front side calculation(backwards)."""
+        logger.info('Computing for front side')
         for i in range(len(self.win_polygon)):
+            logger.info(f'Front transmission for window {i}')
             front_rcvr = rm.Receiver.as_surface(
                 prim_list=self.port_prim, basis=self.rbasis,
                 left=None, offset=None, source='glow', out=src_dict[f'tf{i}'])
@@ -101,6 +109,7 @@ class Genfmtx(object):
             sndr = rm.Sender.as_surface(prim_list=[sndr_prim], basis=self.sbasis,
                                         offset=None)
             if self.refl:
+                logger.info(f'Front reflection for window {i}')
                 back_window = win_polygon.flip()
                 back_window_prim = polygon_prim(
                     back_window, 'breceiver', f'window{i}')
@@ -120,13 +129,16 @@ class Genfmtx(object):
             sndr_prim.append(np)
         sndr = rm.Sender.as_surface(
             prim_list=sndr_prim, basis=self.rbasis, offset=None)
+        logger.info('Computing for back side')
         for idx in range(len(self.win_polygon)):
+            logger.info(f'Back transmission for window {idx}')
             win_polygon = self.win_polygon[idx].flip()
             rcvr_prim = polygon_prim(win_polygon, 'breceiver', f'window{idx}')
             rcvr = rm.Receiver.as_surface(
                 prim_list=[rcvr_prim], basis=self.sbasis,
                 left=None, offset=None, source='glow', out=src_dict[f'tb{idx}'])
             if self.refl:
+                logger.info(f'Back reflection for window {idx}')
                 brcvr_prim = [
                     polygon_prim(self.port_prim[i]['polygon'], 'freceiver', 'window' + str(i))
                     for i in range(len(self.port_prim))]
@@ -217,15 +229,10 @@ class Genfmtx(object):
 
 def genport(*, wpolys, npolys, depth, scale):
     """Generate the appropriate aperture for F matrix generation."""
-    #polygon_prims = [p for p in wprims if p['type'] == 'polygon']
-    #self.win_polygon = [p['polygon'] for p in polygon_prims]
     if len(wpolys) > 1:
         wpoly = merge_windows(wpolys)
     else:
         wpoly = wpolys[0]
-    #win_polygon = win_prim['polygon']
-    #if self.merge:
-        #self.win_polygon = [win_polygon]
     wpoly = wpoly['polygon']
     wnorm = wpoly.normal()
     wcntr = wpoly.centroid()
@@ -310,28 +317,3 @@ def polygon_prim(polygon, mod, ident):
     new_prim['real_args'] = polygon.to_real()
     return new_prim
 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-wf', help='window rad file path')
-    parser.add_argument('-sf', help='shade rad file path')
-    parser.add_argument('-refl', action='store_true', help='Do reflection?')
-    parser.add_argument('-forw', help='Do forward calculation?')
-    parser.add_argument('-merge', help='merge window polygons')
-    parser.add_argument('-FN', action='store_true', help='FN matrix type')
-    parser.add_argument('-depth', type=float, help='specify system depth')
-    parser.add_argument('-scale',
-                        type=float,
-                        default=1.0,
-                        help='fmtx port scale')
-    parser.add_argument('-wrap',
-                        action='store_true',
-                        help='generate xml file instead')
-    parser = rm.genmtx_args(parser)
-    args = parser.parse_args()
-    win_prim = radutil.parse_primitive(args.wf)
-    ncs_prim = radutil.parse_primitive(args.sf)
-    Genfmtx(win_prim=win_prim,
-            ncs_prim=ncs_prim,
-            out_path=args.o,
-            **vars(args))

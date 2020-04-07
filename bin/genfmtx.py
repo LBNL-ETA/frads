@@ -4,8 +4,11 @@ T.Wang"""
 
 from frads import mfacade as fcd
 from frads import radutil
+from threading import Thread
+import tempfile as tf
 import shutil
 import os
+import subprocess as sp
 
 def genfmtx_args(parser):
     parser.add_argument('-w', required=True, help='Window files')
@@ -24,7 +27,7 @@ def genfmtx_args(parser):
 def klems_wrap(inp, out):
     """prepare wrapping for Klems basis."""
     cmd = f"rmtxop -fa -t -c .265 .67 .065 {inp} | getinfo - > {out}"
-    os.system(cmd)
+    sp.run(cmd, shell=True)
 
 def main(**kwargs):
     with open(kwargs['w']) as rdr:
@@ -47,9 +50,11 @@ def main(**kwargs):
             break
     wrap2xml = kwargs['wrap']
     if kwargs['s'] and ncp_type=='BSDF':
+        logger.info('Computing for solar and visible spectrum...')
         wrap2xml = False
-        shutil.copyfile(ncp_mat['str_args'].split()[2], 'temp.xml')
-        with open('temp.xml') as rdr:
+        xmlpath = ncp_mat['str_args'].split()[2]
+        td = tf.mkdtemp()
+        with open(xmlpath) as rdr:
             raw = rdr.read()
         raw = raw.replace('<Wavelength unit="Integral">Visible</Wavelength>',
                     '<Wavelength unit="Integral">Visible2</Wavelength>')
@@ -57,54 +62,71 @@ def main(**kwargs):
                     '<Wavelength unit="Integral">Visible</Wavelength>')
         raw = raw.replace('<Wavelength unit="Integral">Visible2</Wavelength>',
                     '<Wavelength unit="Integral">Solar</Wavelength>')
-        with open('solar.xml', 'w') as wtr:
+        solar_xml_path = os.path.join(td, 'solar.xml')
+        with open(solar_xml_path, 'w') as wtr:
             wtr.write(raw)
         _strarg = ncp_mat['str_args'].split()
-        _strarg[2] = 'solar.xml'
+        _strarg[2] = solar_xml_path
         ncp_mat['str_args'] = ' '.join(_strarg)
-        with open('env_solar.rad', 'w') as wtr:
+        _env_path = os.path.join(td, 'env_solar.rad')
+        with open(_env_path, 'w') as wtr:
             for prim in all_prims:
                 wtr.write(radutil.put_primitive(prim))
         outsolar = '_solar_' + radutil.basename(kwargs['o'])
-        fcd.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims, out=outsolar,
-                    env=['env_solar.rad'], sbasis=kwargs['ss'], rbasis=kwargs['rs'],
-                    opt=kwargs['opt'], refl=kwargs['refl'],
-                    forw=kwargs['forw'], wrap=wrap2xml)
+        process_thread = Thread(target=fcd.Genfmtx,
+                                kwargs={'win_polygons':wndw_polygon,
+                                       'port_prim':port_prims, 'out':outsolar,
+                                       'env':[_env_path], 'sbasis':kwargs['ss'],
+                                       'rbasis':kwargs['rs'], 'opt':kwargs['opt'],
+                                       'refl':kwargs['refl'], 'forw':kwargs['forw'],
+                                       'wrap':wrap2xml})
+        process_thread.start()
+
     fcd.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims, out=kwargs['o'],
                 env=kwargs['env'], sbasis=kwargs['ss'], rbasis=kwargs['rs'],
                 opt=kwargs['opt'], refl=kwargs['refl'],
                 forw=kwargs['forw'], wrap=wrap2xml)
     if kwargs['s'] and ncp_type == 'BSDF':
-        mtxs = [mtx for mtx in os.listdir() if mtx.endswith('.mtx')]
+        process_thread.join()
         vis_dict = {}
         sol_dict = {}
         oname = radutil.basename(kwargs['o'])
         dirname = os.path.dirname(kwargs['o'])
+        dirname = '.' if dirname=='' else dirname
+        mtxs = [mtx for mtx in os.listdir(dirname) if mtx.endswith('.mtx')]
         for mtx in mtxs:
+            _direc = radutil.basename(mtx).split('_')[-1][:2]
             if mtx.startswith(oname):
-                _direc = radutil.basename(mtx).split('_')[-1][:2]
                 vis_dict[_direc] = os.path.join(dirname, f"vis_{_direc}")
                 klems_wrap(mtx, vis_dict[_direc])
             if mtx.startswith('_solar_'):
-                _direc = radutil.basename(mtx).split('_')[-1][:2]
                 sol_dict[_direc] = os.path.join(dirname, f"sol_{_direc}")
                 klems_wrap(mtx, sol_dict[_direc])
-        cmd = 'wrapBSDF -a kf -s Visible '
+        cmd = 'wrapBSDF -a kf -c -s Visible '
         cmd += ' '.join([f"-{key} {vis_dict[key]}" for key in vis_dict])
         cmd += ' -s Solar '
         cmd += ' '.join([f"-{key} {sol_dict[key]}" for key in sol_dict])
         cmd += f" > {os.path.join(dirname, oname)}.xml"
         os.system(cmd)
-        os.remove('temp.xml')
-        os.remove('solar.xml')
+        shutil.rmtree(td)
         [os.remove(mtx) for mtx in mtxs]
 
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
+    import logging
     parser = ArgumentParser()
     genfmtx_parser = genfmtx_args(parser)
+    genfmtx_parser.add_argument('-vb', action='store_true', help='verbose mode')
+    genfmtx_parser.add_argument('-db', action='store_true', help='debug mode')
+    genfmtx_parser.add_argument('-si', action='store_true', help='silent mode')
     args = genfmtx_parser.parse_args()
     argmap = vars(args)
+    logger = logging.getLogger('frads.mfacade')
+    if argmap['db']:
+        logger.setLevel(logging.DEBUG)
+    elif argmap['vb']:
+        logger.setLevel(logging.INFO)
+    elif argmap['si']:
+        logger.setLevel(logging.CRITICAL)
     main(**argmap)
-

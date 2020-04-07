@@ -231,7 +231,9 @@ def prepare_surface(*, prims, basis, left, offset, source, out):
 def rfluxmtx(*, sender, receiver, env, out, opt):
     """Calling rfluxmtx to generate the matrices."""
     if sender.form == 's':
-        cmd = f"rfluxmtx {opt} {sender.path} {receiver.path} {' '.join(env)} > {out}"
+        cmd = f"rfluxmtx {opt} {sender.path} {receiver.path} {' '.join(env)}"
+        if out is not None:
+            cmd += f" > {out}"
     else:
         cmd = f"rfluxmtx < {sender.path} {opt} "
         if sender.form == 'p':
@@ -243,8 +245,6 @@ def rfluxmtx(*, sender, receiver, env, out, opt):
         cmd += f"-o {out} - {receiver.path} {' '.join(env)}"
     logger.info(cmd)
     sp.run(cmd, shell=True)
-    #sender.remove()
-    #receiver.remove()
 
 def rcvr_oct(receiver, env):
     """Generate an octree of the environment and the receiver."""
