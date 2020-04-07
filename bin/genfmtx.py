@@ -94,7 +94,6 @@ def main(**kwargs):
         sol_dict = {}
         oname = radutil.basename(kwargs['o'])
         mtxs = [os.path.join(dirname, mtx) for mtx in os.listdir(dirname) if mtx.endswith('.mtx')]
-        pdb.set_trace()
         for mtx in mtxs:
             _direc = radutil.basename(mtx).split('_')[-1][:2]
             mtxname = radutil.basename(mtx)
