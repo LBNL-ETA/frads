@@ -9,7 +9,6 @@ import tempfile as tf
 import shutil
 import os
 import subprocess as sp
-import pdb
 
 def genfmtx_args(parser):
     parser.add_argument('-w', required=True, help='Window files')
