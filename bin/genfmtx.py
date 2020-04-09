@@ -92,7 +92,7 @@ def main(**kwargs):
                 opt=kwargs['opt'], refl=kwargs['refl'],
                 forw=kwargs['forw'], wrap=wrap2xml)
     if kwargs['s'] and ncp_type == 'BSDF':
-        #process_thread.join()
+        process_thread.join()
         vis_dict = {}
         sol_dict = {}
         oname = radutil.basename(kwargs['o'])
