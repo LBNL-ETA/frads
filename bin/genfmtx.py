@@ -51,7 +51,6 @@ def main(**kwargs):
     wrap2xml = kwargs['wrap']
     dirname = os.path.dirname(kwargs['o'])
     dirname = '.' if dirname=='' else dirname
-    print(f'Saving to directory: {dirname}')
     if kwargs['s'] and ncp_type=='BSDF':
         logger.info('Computing for solar and visible spectrum...')
         wrap2xml = False
@@ -76,20 +75,17 @@ def main(**kwargs):
             for prim in all_prims:
                 wtr.write(radutil.put_primitive(prim))
         outsolar = os.path.join(dirname, '_solar_' + radutil.basename(kwargs['o']))
-        #process_thread = Thread(target=fcd.Genfmtx,
-        #                        kwargs={'win_polygons':wndw_polygon,
-        #                               'port_prim':port_prims, 'out':outsolar,
-        #                               'env':[_env_path], 'sbasis':kwargs['ss'],
-        #                               'rbasis':kwargs['rs'], 'opt':kwargs['opt'],
-        #                               'refl':kwargs['refl'], 'forw':kwargs['forw'],
-        #                               'wrap':wrap2xml})
-        #process_thread.start()
-        fcd.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims, out=outsolar,
-                                       env=[_env_path], sbasis=kwargs['ss'],
-                                       rbasis=kwargs['rs'], opt=kwargs['opt'],
-                                       refl=kwargs['refl'], forw=kwargs['forw'],
-                                       wrap=wrap2xml)
-
+        process_thread = Thread(target=fcd.Genfmtx,
+                                kwargs={'win_polygons':wndw_polygon,
+                                       'port_prim':port_prims, 'out':outsolar,
+                                       'env':[_env_path], 'sbasis':kwargs['ss'],
+                                       'rbasis':kwargs['rs'], 'opt':kwargs['opt'],
+                                       'refl':kwargs['refl'], 'forw':kwargs['forw'],
+                                       'wrap':wrap2xml})
+        process_thread.start()
+        #fcd.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims, out=outsolar,
+        #            env=[_env_path], sbasis=kwargs['ss'], rbasis=kwargs['rs'],
+        #            opt=kwargs['opt'], refl=kwargs['refl'], forw=kwargs['forw'], wrap=wrap2xml)
 
     fcd.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims, out=kwargs['o'],
                 env=kwargs['env'], sbasis=kwargs['ss'], rbasis=kwargs['rs'],
