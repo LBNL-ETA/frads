@@ -76,22 +76,22 @@ def main(**kwargs):
             for prim in all_prims:
                 wtr.write(radutil.put_primitive(prim))
         outsolar = os.path.join(dirname, '_solar_' + radutil.basename(kwargs['o']))
-        #process_thread = Thread(target=fcd.Genfmtx,
-        #                        kwargs={'win_polygons':wndw_polygon,
-        #                               'port_prim':port_prims, 'out':outsolar,
-        #                               'env':[_env_path], 'sbasis':kwargs['ss'],
-        #                               'rbasis':kwargs['rs'], 'opt':kwargs['opt'],
-        #                               'refl':kwargs['refl'], 'forw':kwargs['forw'],
-        #                               'wrap':wrap2xml})
-        #process_thread.start()
-        sprocess = Process(target=fcd.Genfmtx,
+        process_thread = Thread(target=fcd.Genfmtx,
                                 kwargs={'win_polygons':wndw_polygon,
                                        'port_prim':port_prims, 'out':outsolar,
                                        'env':[_env_path], 'sbasis':kwargs['ss'],
                                        'rbasis':kwargs['rs'], 'opt':kwargs['opt'],
                                        'refl':kwargs['refl'], 'forw':kwargs['forw'],
                                        'wrap':wrap2xml})
-        sprocess.start()
+        process_thread.start()
+        #sprocess = Process(target=fcd.Genfmtx,
+        #                        kwargs={'win_polygons':wndw_polygon,
+        #                               'port_prim':port_prims, 'out':outsolar,
+        #                               'env':[_env_path], 'sbasis':kwargs['ss'],
+        #                               'rbasis':kwargs['rs'], 'opt':kwargs['opt'],
+        #                               'refl':kwargs['refl'], 'forw':kwargs['forw'],
+        #                               'wrap':wrap2xml})
+        #sprocess.start()
         #fcd.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims, out=outsolar,
         #            env=[_env_path], sbasis=kwargs['ss'], rbasis=kwargs['rs'],
         #            opt=kwargs['opt'], refl=kwargs['refl'], forw=kwargs['forw'], wrap=wrap2xml)
@@ -101,8 +101,8 @@ def main(**kwargs):
                 opt=kwargs['opt'], refl=kwargs['refl'],
                 forw=kwargs['forw'], wrap=wrap2xml)
     if kwargs['s'] and ncp_type == 'BSDF':
-        sprocess.join()
-        #process_thread.join()
+        #sprocess.join()
+        process_thread.join()
         vis_dict = {}
         sol_dict = {}
         oname = radutil.basename(kwargs['o'])
