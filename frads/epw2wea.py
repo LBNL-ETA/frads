@@ -42,6 +42,14 @@ class epw2wea(object):
             self.daylight()  # filter out non-daylight hours if asked
 
         self.wea = self.header + self.string
+        self.dt_string = []
+        for line in self.string.splitlines():
+            entry = line.split()
+            mo = int(entry[0])
+            da = int(entry[1])
+            hr = int(float(entry[2]))
+            self.dt_string.append(f"{mo:02d}{da:02d}_{hr:02d}30")
+
 
     def solar_angle(self, month, day, hour):
         """Simplified translation from the Radiance sun.c and gensky.c code.
@@ -94,7 +102,6 @@ class epw2wea(object):
         epw_header = raw[0].split(',')
         content = raw[8:]
         string = ""
-        self.dt_string = []
         for li in content:
             line = li.split(',')
             month = int(line[1])
@@ -105,7 +112,6 @@ class epw2wea(object):
             dif_hor = float(line[15])
             string += "%d %d %2.3f %.1f %.1f\n" \
                 % (month, day, hours, dir_norm, dif_hor)
-            self.dt_string.append(f"{month:02d}{day:02d}_{hour:02d}30")
         self.string = string
         city = epw_header[1]
         country = epw_header[3]

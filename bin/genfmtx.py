@@ -5,7 +5,6 @@ T.Wang"""
 from frads import mfacade as fcd
 from frads import radutil
 from threading import Thread
-from multiprocessing import Process
 import tempfile as tf
 import shutil
 import os
@@ -84,14 +83,6 @@ def main(**kwargs):
                                        'refl':kwargs['refl'], 'forw':kwargs['forw'],
                                        'wrap':wrap2xml})
         process_thread.start()
-        #sprocess = Process(target=fcd.Genfmtx,
-        #                        kwargs={'win_polygons':wndw_polygon,
-        #                               'port_prim':port_prims, 'out':outsolar,
-        #                               'env':[_env_path], 'sbasis':kwargs['ss'],
-        #                               'rbasis':kwargs['rs'], 'opt':kwargs['opt'],
-        #                               'refl':kwargs['refl'], 'forw':kwargs['forw'],
-        #                               'wrap':wrap2xml})
-        #sprocess.start()
         #fcd.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims, out=outsolar,
         #            env=[_env_path], sbasis=kwargs['ss'], rbasis=kwargs['rs'],
         #            opt=kwargs['opt'], refl=kwargs['refl'], forw=kwargs['forw'], wrap=wrap2xml)
@@ -101,7 +92,6 @@ def main(**kwargs):
                 opt=kwargs['opt'], refl=kwargs['refl'],
                 forw=kwargs['forw'], wrap=wrap2xml)
     if kwargs['s'] and ncp_type == 'BSDF':
-        #sprocess.join()
         process_thread.join()
         vis_dict = {}
         sol_dict = {}

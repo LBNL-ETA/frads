@@ -9,8 +9,9 @@ from frads import radutil
 
 def main(**kwargs):
     """Generate a matrix."""
+    assert len(kwargs['r']) == len(kwargs['o'])
     # figure out environment
-    env = ' '.join(kwargs['env']
+    env = ' '.join(kwargs['env'])
     if kwargs['i'] is not None:
         env = "{} -i {}".format(env, kwargs['i'])
     # figure out sender
@@ -48,7 +49,7 @@ def main(**kwargs):
             if _receiver != []:
                 receivers.append(rm.Receiver.as_surface(
                     prim_list=_receiver, basis=kwargs['rs'], offset=kwargs['ro'],
-                    left=kwargs['left'], source=kwargs['src'], out=kwargs['o']))
+                    left=None, source='glow', out=kwargs['o']))
         receiver = receivers[0]
         for idx in range(1, len(receivers)):
             receiver += receivers[idx]
@@ -62,11 +63,11 @@ def main(**kwargs):
 
 
 def genmtx_args(parser):
-    parser.add_argument('-st', choices=['s','v','p'], help='Sender object type')
+    parser.add_argument('-st', choices=['s','v','p'], required=True, help='Sender object type')
     parser.add_argument('-s', help='Sender object')
     parser.add_argument('-r', nargs='+', required=True, help='Receiver objects')
     parser.add_argument('-i', help='Scene octree file path')
-    parser.add_argument('-o', required=True, help='Output file path | directory')
+    parser.add_argument('-o', nargs='+', required=True, help='Output file path | directory')
     parser.add_argument('-mod', help='modifier path for sun sources')
     parser.add_argument('-env', nargs='+', default='', help='Environment file paths')
     parser.add_argument('-rs', required=True, choices=['r1','r2','r4','r6','kf'],

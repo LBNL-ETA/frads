@@ -16,12 +16,7 @@ import subprocess as sp
 import tempfile as tf
 import logging
 
-logger = logging.getLogger(__name__)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+logger = logging.getLogger('frads.mfacade')
 
 class Genfmtx(object):
     """Generate facade matrix."""
@@ -224,7 +219,7 @@ class Genfmtx(object):
                 cmd2 = cmd + f" {src}"
             else:
                 cmd2 = f"rcollate -ho -oc 1 {src} | " + cmd
-        print(cmd2)
+        logger.info(cmd2)
         sp.call(cmd2, shell=True)
 
 def genport(*, wpolys, npolys, depth, scale):
@@ -257,11 +252,11 @@ def get_port(win_polygon, ncs_prims):
     """
     Generate ports polygons that encapsulate the window and NCP geometries.
 
-    Method: window and NCP geometries are rotated around +Z axis until
-    the area projected onto XY plane is the smallest. A boundary box is
-    then generated with a slight outward offset. This boundary box is
-    then rotated back the same amount to encapsulate the original window
-    and NCP geomteries.
+    window and NCP geometries are rotated around +Z axis until
+    the area projected onto XY plane is the smallest, thus the systems are facing
+    orthogonal direction. A boundary box is then generated with a slight
+    outward offset. This boundary box is then rotated back the same amount
+    to encapsulate the original window and NCP geomteries.
     """
     xax = [1, 0, 0]
     _xax = [-1, 0, 0]

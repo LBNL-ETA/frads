@@ -635,7 +635,11 @@ def dctsop(inp, out, nproc=1):
     [sub.append(out_dir) for sub in grouped]
     process.map(dctimestep, grouped)
 
-def pcombop(inp, out, nproc=1):
+def pcombop(inputs, out_dir, nproc=1):
+    """
+    inputs(list): e.g.[inpdir1,'+',inpdir2,'-',inpdir3]
+    out_dir: output directory
+    """
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
     nproc = mp.cpu_count() if nproc is None else nproc

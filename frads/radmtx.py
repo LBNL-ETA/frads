@@ -13,13 +13,7 @@ import tempfile as tf
 from frads import radutil
 import logging
 
-logger = logging.getLogger(__name__)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-
+logger = logging.getLogger('frads.radmtx')
 
 class Sender(object):
     """Sender object for matrix generation."""
@@ -39,10 +33,10 @@ class Sender(object):
         self.path = path
         self.xres = xres
         self.yres = yres
-        logger.info(f"Sender: {sender}")
+        logger.debug(f"Sender: {sender}")
 
     @classmethod
-    def as_surface(cls, *, prim_list, basis, offset):
+    def as_surface(cls, *, prim_list, basis, offset, tmpdir):
         """
         Construct a sender from a surface.
         Parameters:
@@ -52,13 +46,13 @@ class Sender(object):
         """
         prim_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
                                    left=False, source=None, out=None)
-        fd, path = tf.mkstemp(prefix='sndr_srf')
+        fd, path = tf.mkstemp(prefix='sndr_srf', dir=tmpdir)
         with open(path, 'w') as wtr:
             wtr.write(prim_str)
         return cls(form='s', path=path, sender=prim_str, xres=None, yres=None)
 
     @classmethod
-    def as_view(cls, *, vu_dict, ray_cnt, xres, yres):
+    def as_view(cls, *, vu_dict, ray_cnt, xres, yres, tmpdir):
         """
         Construct a sender from a view.
         Parameters:
@@ -77,18 +71,18 @@ class Sender(object):
         if ray_cnt > 1:
             vu_dict['c'] = ray_cnt
             vu_dict['pj'] = 0.7 # placeholder
-        logger.info(f"Ray count is {ray_cnt}")
+        logger.debug(f"Ray count is {ray_cnt}")
         cmd += radutil.opt2str(vu_dict)
         if vu_dict['vt'] == 'a':
             cmd += Sender.crop2circle(ray_cnt, xres)
-        fd, path = tf.mkstemp(prefix='vufile')
+        fd, path = tf.mkstemp(prefix='vufile', dir=tmpdir)
         cmd += f"> {path}"
         logger.info(cmd + "\n")
         sp.run(cmd, shell=True)
         return cls(form='v', path=path, sender=vu_dict, xres=xres, yres=yres)
 
     @classmethod
-    def as_pts(cls, *, pts_list, ray_cnt):
+    def as_pts(cls, *, pts_list, ray_cnt, tmpdir):
         """Construct a sender from a list of points.
         Parameters:
             pts_list(list): a list of list of float
@@ -97,7 +91,7 @@ class Sender(object):
         linesep = os.linesep
         pts_list = [i for i in pts_list for _ in range(ray_cnt)]
         grid_str = linesep.join([' '.join(map(str, l)) for l in pts_list]) + linesep
-        fd, path = tf.mkstemp(prefix='sndr_grid')
+        fd, path = tf.mkstemp(prefix='sndr_grid', dir=tmpdir)
         with open(path, 'w') as wtr:
             wtr.write(grid_str)
         return cls(form='p', path=path, sender=grid_str, xres=None, yres=len(pts_list))
@@ -139,12 +133,16 @@ class Receiver(object):
 
     def __add__(self, other):
         self.receiver += other.receiver
+        if self.path is None and other.path is not None:
+            self.path = other.path
+        elif self.path is None and other.path is None:
+            raise Exception("No path found for receiver")
         with open(self.path, 'a') as wtr:
             wtr.write(other.receiver)
         return self
 
     @classmethod
-    def as_sun(cls, *, basis, smx_path, window_paths):
+    def as_sun(cls, *, basis, smx_path, window_paths, tmpdir):
         """
         basis: receiver sampling basis {kf | r1 | sc25...}
         """
@@ -154,8 +152,8 @@ class Receiver(object):
         else:
             str_repr, mod_lines = gensun.gen_cull(smx_path=smx_path,
                                                   window_paths=window_paths)
-        fd, path = tf.mkstemp(prefix='sun')
-        mfd, modifier = tf.mkstemp(prefix='mod')
+        fd, path = tf.mkstemp(prefix='sun', dir=tmpdir)
+        mfd, modifier = tf.mkstemp(prefix='mod', dir=tmpdir)
         with open(path, 'w') as wtr:
             wtr.write(str_repr)
         with open(modifier, 'w') as wtr:
@@ -163,26 +161,26 @@ class Receiver(object):
         return cls(path=path, receiver=str_repr, basis=basis, modifier=modifier)
 
     @classmethod
-    def as_sky(cls, basis):
+    def as_sky(cls, *, basis, tmpdir):
         """
         basis: receiver sampling basis {kf | r1 | sc25...}
         """
         assert basis.startswith('r'), 'Sky basis need to be Treganza/Reinhart'
         sky_str = makesky.basis_glow(basis)
-        logger.info(sky_str)
-        fd, path = tf.mkstemp(prefix='sky')
+        logger.debug(sky_str)
+        fd, path = tf.mkstemp(prefix='sky', dir=tmpdir)
         with open(path, 'w') as wtr:
             wtr.write(sky_str)
         return cls(path=path, receiver=sky_str, basis=basis, modifier=None)
 
     @classmethod
-    def as_surface(cls, *, prim_list, basis, offset, left, source, out):
+    def as_surface(cls, *, prim_list, basis, offset, left, source, tmpdir, out):
         """
         basis: receiver sampling basis {kf | r1 | sc25...}
         """
         rcvr_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
                                    left=left, source=source, out=out)
-        fd, path = tf.mkstemp(prefix='rsrf')
+        fd, path = tf.mkstemp(prefix='rsrf', dir=tmpdir)
         with open(path, 'w') as wtr:
             wtr.write(rcvr_str)
         return cls(path=path, receiver=rcvr_str, basis=basis, modifier=None)
@@ -249,7 +247,7 @@ def rfluxmtx(*, sender, receiver, env, out, opt):
 def rcvr_oct(receiver, env):
     """Generate an octree of the environment and the receiver."""
     fd, _env = tf.mkstemp()
-    ocmd = f'oconv {env} {receiver.path} > {_env}'
+    ocmd = f"oconv {' '.join(env)} {receiver.path} > {_env}"
     logger.info(ocmd)
     sp.call(ocmd, shell=True)
     return _env
@@ -258,16 +256,15 @@ def rcontrib(*, sender, receiver, env, out, opt):
     """Calling rcontrib to generate the matrices."""
     _env = rcvr_oct(receiver, env)
     cmd = f'rcontrib < {sender.path} {opt} -fo+ '
-    if sender.form == 'pts':
-        cmd = f'-faf '
-    elif sender.form == 'vu':
+    if sender.form == 'p':
+        cmd += f'-I+ -faf -y {sender.yres} '
+    elif sender.form == 'v':
+        radutil.mkdir_p(out)
         out = os.path.join(out, '%04d.hdr')
         cmd += f"-ffc -x {sender.xres} -y {sender.yres} "
     cmd += f'-o {out} -M {receiver.modifier} {_env}'
     logger.info(cmd)
     sp.call(cmd, shell=True)
-    sender.remove()
-    receiver.remove()
     os.remove(_env)
 
 

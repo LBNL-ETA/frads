@@ -60,7 +60,10 @@ class Gensun(object):
         sky matrix. The reduced sun sources will significantly speed up the matrix
         generation."""
         if window_paths is not None:
-            wprims = [radutil.parse_primitive(wpath) for wpath in window_paths]
+            wprims = []
+            for wpath in window_paths:
+                with open(wpath) as rdr:
+                    wprims.append(radutil.parse_primitive(rdr.readlines()))
             wprims = [i for g in wprims for i in g]
             win_norm = [
                 p['polygon'].normal().to_list() for p in wprims
