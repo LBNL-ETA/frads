@@ -3,9 +3,13 @@
 # Taoning.W
 
 import argparse
-from frads import radgeom
+import glob
+import logging
 import math
+import multiprocessing as mp
 import os
+import subprocess as sp
+from frads import radgeom
 
 GEOM_TYPE = ['polygon', 'ring', 'tube', 'cone']
 
@@ -37,6 +41,8 @@ ABASE_LIST = {
     "Klems Quarter": [(0., 1), (9., 8), (27., 12), (46., 12), (66., 8),
                       (90., 0)]
 }
+
+logger = logging.getLogger("frads.radutil")
 
 
 def test_environ(cmd):
@@ -105,6 +111,9 @@ def parse_vu(vu_str):
     vparser.add_argument('-va', type=float)
     vparser.add_argument('-vs', type=float)
     vparser.add_argument('-vl', type=float)
+    vparser.add_argument('-x', type=int)
+    vparser.add_argument('-y', type=int)
+    vparser.add_argument('-vf', type=str)
     args, _ = vparser.parse_known_args(args_list)
     view_dict = vars(args)
     view_dict['vt'] = view_dict['vt'][-1]
@@ -406,7 +415,7 @@ def silent_remove(path):
     try:
         os.remove(path)
     except FileNotFoundError as e:
-        print(e)
+        logger.error(e)
         pass
 
 
@@ -491,7 +500,9 @@ def mkdir_p(path):
     try:
         os.makedirs(path)
     except OSError as e:
-        print(e, 'ignored')
+        logger.warning(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
+    except TypeError as e:
+        logger.warning(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
 
 
 def check_fresh(path1, path2):
@@ -617,10 +628,10 @@ def pcomb(inputs):
         color_op_list.append(cstr)
     rgb_str = ';'.join(color_op_list)
     cmd = "pcomb -e '%s'" % rgb_str
-    img_name = radutil.basename(input_list[0])
+    img_name = basename(input_list[0])
     cmd += " -o ".join([''] + components)
     cmd += " > %s.hdr" % (os.path.join(out_dir, img_name))
-    sp.call(cmd, shell=True)
+    sprun(cmd)
 
 def dctsop(inp, out, nproc=1):
     if not os.path.isdir(out_dir):
@@ -667,7 +678,7 @@ def pcombop(inputs, out_dir, nproc=1):
             inp_lists_full[i] = [inp_lists_full[i]] * max_len
     equal_len = all(len(i) == len(inp_lists_full[0]) for i in inp_lists_full)
     if not equal_len:
-        print("Warning: input directories don't the same number of files")
+        logger.warning("Input directories don't the same number of files")
     grouped = [list(i) for i in zip(*inp_lists_full)]
     [sub.insert(i, ops[int((i-1)/2)])
      for sub in grouped for i in range(1, len(sub)+1, 2)]
@@ -681,7 +692,7 @@ def dctimestep(input_list):
     out_dir = input_list[-1]
     inp_dir_count = len(inputs)
     sky = input_list[-2]
-    img_name = radutil.basename(sky)
+    img_name = basename(sky)
     out_path = os.path.join(out_dir, img_name)
 
     if inputs[1].endswith('.xml') is False\
@@ -771,3 +782,11 @@ def combine_mtx(mtxs, out_dir):
 #        gdata = gdata.flatten()
 #        bdata = bdata.flatten()
 #    return rdata, gdata, bdata
+
+def sprun(cmd):
+    logger.debug(cmd)
+    sp.run(cmd, shell=True)
+
+def spcheckout(cmd):
+    logger.debug(cmd)
+    return sp.run(cmd, check=True, shell=True, stdout=sp.PIPE).stdout.decode()

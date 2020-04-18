@@ -14,50 +14,62 @@ def setup_dir():
 def setup_cfg():
     config = configparser.RawConfigParser(allow_no_value=True)
 
-    config.add_section('SimulationControl')
-    config.set('SimulationControl', 'vmx_opt', 'kf -ab 8 -ad 65000 -lw 1e-8')
-    config.set('SimulationControl', 'fmx_opt', 'kf -ab 5 -c 500 -lw 1e-4')
-    config.set('SimulationControl', 'dmx_opt', 'r4 -ab 2 -c 5000')
-    config.set('SimulationControl', 'dsmx_opt', 'r4 -ab 2 -c 5000')
-    config.set('SimulationControl', 'view_ray_cnt', 1)
-    config.set('SimulationControl', 'pixel_jitter', .7)
-    config.set('SimulationControl', 'separate_direct', False)
-    config.set('SimulationControl', 'nprocess', 1)
+    config['SimulationControl'] = {
+        'vmx_opt': 'kf -ab 8 -ad 65000 -lw 1e-8',
+        'fmx_opt': 'kf -ab 5 -c 500 -lw 1e-4',
+        'dmx_opt': 'r4 -ab 2 -ad 1000 -lw 1e-4 -c 15000',
+        'dsmx_opt': 'r4 -ab 2 -c 5000',
+        'cdsmx_opt': 'r6 -ab 1',
+        'ray_count': 1,
+        'pixel_jitter': .7,
+        'separate_direct': False,
+        'nprocess': 1,
+    }
 
-    config.add_section('FileStructure')
-    config.set('FileStructure', 'base_dir', os.path.abspath(os.getcwd()))
-    config.set('FileStructure', 'matrices', 'Matrices')
-    config.set('FileStructure', 'results', 'Results')
-    config.set('FileStructure', 'objects', 'Objects')
-    config.set('FileStructure', 'raysenders', 'Raysenders')
-    config.set('FileStructure', 'resources', 'Resources')
+    config['FileStructure'] = {
+        'base': f"{os.path.abspath(os.getcwd())} # all directories fall under this one",
+        'matrices': 'Matrices',
+        'results': 'Results',
+        'objects': 'Objects # where are the scene object files',
+        'resources': 'Resources',
+    }
 
-    config.add_section('Site')
-    config.set('Site', 'wea')
-    config.set('Site', 'lat')
-    config.set('Site', 'lon')
-    config.set('Site', 'zipcode')
+    config['Site'] = {
+        'wea': "# wea file path, assuming to be in the resources directory",
+        'latitude': None,
+        'longitude': None,
+        'zipcode': "# US only",
+        'daylight_hours_only': False,
+        'start_hour': None,
+        'end_hour': None,
+    }
 
-    config.add_section('Dimensions')
-    config.set('Dimensions','depth')
-    config.set('Dimensions','width')
-    config.set('Dimensions','height')
-    config.set('Dimensions','window')
-    config.set('Dimensions','facade_thickness')
+    config['Dimensions'] = {
+        'depth': "# if all values filled in this section, a standard room will be created",
+        'width': None,
+        'height': None,
+        'window1': "# format: x1, z1, width, heigh",
+        'facade_thickness': "# window wall thickness",
+        'orientation': "# south or west or ...",
+    }
 
-    config.add_section('Model')
-    config.set('Model', 'material', 'material.rad')
-    config.set('Model', 'windows')
-    config.set('Model', 'scene')
-    config.set('Model', 'ncp_shade')
-    config.set('Model', 'BSDF')
+    config['Model'] = {
+        'material': 'material.rad',
+        'windows': None,
+        'scene': None,
+        'ncp_shade': None,
+        'BSDF': None,
 
-    config.add_section('Raysenders')
-    config.set('Raysenders', 'views', 'south.vf')
-    config.set('Raysenders', 'surfaces', 'floor.rad')
-    config.set('Raysenders', 'distances', .8)
-    config.set('Raysenders', 'spacings', .6)
-    config.set('Raysenders', 'opposite', True)
+    }
+
+    config['Raysenders'] = {
+        'view1': '-vf south.vf # view options, use -vf to specify view path',
+        'view2': '# view options, use -vf to specify view path',
+        'grid_surface': 'floor.rad # generate sensor grid from these surfaces',
+        'distances': '.8 # sensor grid to be offseted in the surface normal direction',
+        'spacings': '.6 # sensor grid spacing',
+        'opposite': 'True # reverse the surface normal for grid generation',
+    }
 
     with open('template.cfg', 'w') as cfg:
         config.write(cfg)

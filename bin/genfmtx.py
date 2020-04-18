@@ -126,7 +126,12 @@ if __name__ == "__main__":
     genfmtx_parser.add_argument('-si', action='store_true', help='silent mode')
     args = genfmtx_parser.parse_args()
     argmap = vars(args)
-    logger = logging.getLogger('frads.mfacade')
+    logger = logging.getLogger('frads')
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
     if argmap['db']:
         logger.setLevel(logging.DEBUG)
     elif argmap['vb']:

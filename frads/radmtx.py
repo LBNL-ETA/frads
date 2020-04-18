@@ -63,9 +63,8 @@ class Sender(object):
         """
         assert None not in (xres, yres), "Need to specify resolution"
         vcmd = f"vwrays {radutil.opt2str(vu_dict)} -x {xres} -y {yres} -d"
-        res_eval = sp.run(vcmd, shell=True, check=True, stdout=sp.PIPE).stdout.decode().split()
-        xres = res_eval[1]
-        yres = res_eval[3]
+        res_eval = radutil.spcheckout(vcmd).split()
+        xres, yres = res_eval[1], res_eval[3]
         logger.info(f"Changed resolution to {xres} {yres}")
         cmd = f"vwrays -ff -x {xres} -y {yres} "
         if ray_cnt > 1:
@@ -77,8 +76,7 @@ class Sender(object):
             cmd += Sender.crop2circle(ray_cnt, xres)
         fd, path = tf.mkstemp(prefix='vufile', dir=tmpdir)
         cmd += f"> {path}"
-        logger.info(cmd + "\n")
-        sp.run(cmd, shell=True)
+        radutil.sprun(cmd)
         return cls(form='v', path=path, sender=vu_dict, xres=xres, yres=yres)
 
     @classmethod
@@ -237,19 +235,19 @@ def rfluxmtx(*, sender, receiver, env, out, opt):
         if sender.form == 'p':
             cmd += f"-I+ -faf -y {sender.yres} " #force illuminance calc
         elif sender.form == 'v':
-            radutil.mkdir_p(out)
-            out = os.path.join(out, '%04d.hdr')
             cmd += f"-ffc -x {sender.xres} -y {sender.yres} -ld- "
-        cmd += f"-o {out} - {receiver.path} {' '.join(env)}"
-    logger.info(cmd)
-    sp.run(cmd, shell=True)
+            if out is not None:
+                radutil.mkdir_p(out)
+                out = os.path.join(out, '%04d.hdr')
+                cmd += f"-o {out} "
+        cmd += f"- {receiver.path} {' '.join(env)}"
+    radutil.sprun(cmd)
 
 def rcvr_oct(receiver, env):
     """Generate an octree of the environment and the receiver."""
     fd, _env = tf.mkstemp()
     ocmd = f"oconv {' '.join(env)} {receiver.path} > {_env}"
-    logger.info(ocmd)
-    sp.call(ocmd, shell=True)
+    radutil.sprun(ocmd)
     return _env
 
 def rcontrib(*, sender, receiver, env, out, opt):
@@ -263,8 +261,7 @@ def rcontrib(*, sender, receiver, env, out, opt):
         out = os.path.join(out, '%04d.hdr')
         cmd += f"-ffc -x {sender.xres} -y {sender.yres} "
     cmd += f'-o {out} -M {receiver.modifier} {_env}'
-    logger.info(cmd)
-    sp.call(cmd, shell=True)
+    radutil.sprun(cmd)
     os.remove(_env)
 
 
