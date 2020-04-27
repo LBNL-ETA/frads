@@ -152,6 +152,10 @@ def parse_opt(opt_str):
     opt_dict = {k: v for (k, v) in opt_dict.items() if v is not None}
     return opt_dict
 
+def polygon2prim(polygon, modifier, identifier):
+    return {'modifier':modifier, 'type':'polygon',
+            'identifier':identifier, 'int_arg':'0',
+            'str_args':'0', 'real_args':polygon.to_real()}
 
 def put_primitive(prim):
     """Convert primitives from a dictionary into a string for writing."""
@@ -790,3 +794,5 @@ def sprun(cmd):
 def spcheckout(cmd):
     logger.debug(cmd)
     return sp.run(cmd, check=True, shell=True, stdout=sp.PIPE).stdout.decode()
+
+

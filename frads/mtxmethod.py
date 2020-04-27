@@ -160,6 +160,57 @@ class MTXmethod(object):
                 [os.rename(ofiles[idx], os.path.join(opath, self.dts[idx]+'.hdr'))
                  for idx in range(len(ofiles))]
 
+    def prep_4phase(self):
+        self.pvmxs = {}
+        self.vvmxs = {}
+        self.dmxs = {}
+        self.fmxs = {}
+        prcvr_wndws = radmtx.Receiver(
+            path=None, receiver='', basis=self.vmx_basis, modifier=None)
+        if len(self.sndr_vus) > 0:
+            vrcvr_wndws = {}
+            for vu in self.sndr_vus:
+                vrcvr_wndws[vu] = radmtx.Receiver(
+                    path=None, receiver='', basis=self.vmx_basis, modifier=None)
+        port_prims = mfacade.genport(
+            wpolys=wndw_prims, npolys=ncp_prims, depth=None, scale=None)
+        mfacade.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims,
+                        out=kwargs['o'], env=kwargs['env'], sbasis=kwargs['ss'],
+                        rbasis=kwargs['rs'], opt=kwargs['opt'], refl=False,
+                        forw=False, wrap=False)
+        for wname in self.window_prims:
+            wndw_prim = self.window_prims[wname]
+            self.logger.info(f"Generating daylight matrix for {wname}")
+            self.dmxs[wname] = os.path.join(self.mtxdir, f'dmx_{wname}.mtx')
+            sndr_wndw = radmtx.Sender.as_surface(tmpdir=self.td,
+                prim_list=wndw_prim, basis=self.vmx_basis, offset=None)
+            sndr_port = radmtx.Sender.as_surface(tmpdir=self.td,
+                prim_list=port_prims, basis=self.fmx_basis, offset=None)
+            radmtx.rfluxmtx(sender=sndr_port, receiver=self.rcvr_sky,
+                       env=self.envpath, out=self.dmxs[wname], opt=self.dmx_opt)
+            if self.sensor_pts is not None:
+                self.pvmxs[wname] = os.path.join(self.mtxdir, f'pvmx_{wname}.mtx')
+                prcvr_wndws += radmtx.Receiver.as_surface(
+                    prim_list=wndw_prim, basis=self.vmx_basis, tmpdir=self.td,
+                    offset=None, left=None, source='glow', out=self.pvmxs[wname])
+            if len(self.sndr_vus) > 0:
+                for vu in self.sndr_vus:
+                    self.vvmxs[vu+wname] = os.path.join(
+                        self.mtxdir, f'vvmx_{vu}_{wname}', '%04d.hdr')
+                    radutil.mkdir_p(os.path.dirname(self.vvmxs[vu+wname]))
+                    vrcvr_wndws[vu] += radmtx.Receiver.as_surface(
+                        prim_list=wndw_prim, basis=self.vmx_basis, tmpdir=self.td,
+                        offset=None, left=None, source='glow', out=self.vvmxs[vu+wname])
+        if self.sensor_pts is not None:
+            self.logger.info("Generating view matrix for sensor point")
+            radmtx.rfluxmtx(sender=self.sndr_pts, receiver=prcvr_wndws,
+                            env=self.envpath, opt=self.vmx_opt, out=None)
+        if len(self.sndr_vus) > 0:
+            self.logger.info(f"Generating view matrix for {vu}")
+            for vu in self.sndr_vus:
+                radmtx.rfluxmtx(sender=self.sndr_vus[vu], receiver=vrcvr_wndws[vu],
+                                env=self.envpath, opt=self.vmx_opt, out=None)
+
     def blacken_env(self):
         blackened = copy.deepcopy(self.scene_prims)
         for prim in blackened:
@@ -322,6 +373,7 @@ class MTXmethod(object):
                 radutil.pcombop([res3di, '*', self.map1_paths[vu]], res3d)
                 radutil.pcombop([vrescdr, '*', self.map2_paths[vu], '+', vrescdf], vrescd)
                 opath = os.path.join(self.resdir, f"{vu}_5ph")
+                if os.path.isdir(opath): shutil.rmtree(opath)
                 radutil.pcombop([res3, '-', res3d, '+', vrescd], opath)
                 ofiles = [os.path.join(opath, f) for f in sorted(os.listdir(opath)) if
                           f.endswith('.hdr')]
@@ -404,6 +456,8 @@ class Prepare(object):
                           for obj in self.model['scene'].split()]
         self.windowpath = [os.path.join(objdir, obj)
                            for obj in self.model['windows'].split()]
+        self.maccfspath = [os.path.join(objdir, obj)
+                           for obj in self.model['macrocfs'].split()]
         self.viewdicts = {}
         views = [ent for ent in self.raysenders if ent.startswith('view')]
         if len(views) > 0:

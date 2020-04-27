@@ -64,13 +64,6 @@ class Vector(object):
     def scale(self, factor):
         return Vector(self.x * factor, self.y * factor, self.z * factor)
 
-    def distance_from(self, other):
-        """Calculate the distance between two points."""
-        dx = math.fabs(self.x - other.x)
-        dy = math.fabs(self.y - other.y)
-        dz = math.fabs(self.z - other.z)
-        return math.sqrt(dx**2 + dy**2 + dz**2)
-
     def angle_from(self, other):
         """."""
         dot_prod = self * other
@@ -278,6 +271,10 @@ class Polygon(object):
         """."""
         ro_pts = [v.rotate3D(vector, angle) for v in self.vertices]
         return Polygon(ro_pts)
+
+    def move(self, vector):
+        mo_pts = [v + vector for v in self.vertices]
+        return Polygon(mo_pts)
 
     def extreme(self):
         """."""

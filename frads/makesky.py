@@ -2,10 +2,11 @@
 
 import csv
 import datetime
-import pdb
-import tempfile as tf
+import math
 import os
 import subprocess as sp
+import tempfile as tf
+import urllib.request
 from frads import radutil
 
 LSEP = os.linesep
@@ -235,3 +236,163 @@ def sky_cont(mon, day, hrs, lat, lon, mer, dni, dhi, year=None, grefl=.2, spect=
     out_str += 'skyfunc glow groundglow 0 0 4 1 1 1 0{LSEP*2}'
     out_str += 'groundglow source ground 0 0 4 0 0 -1 180{LSEP}'
     return out_str
+
+def solar_angle(*, lat, lon, mer, month, day, hour):
+    """Simplified translation from the Radiance sun.c and gensky.c code.
+
+    This function test if the solar altitude is greater than zero
+    """
+    latitude_r = math.radians(lat)
+    longitude_r = math.radians(lon)
+    s_meridian = math.radians(mer)
+    mo_da = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+
+    julian_date = mo_da[month - 1] + day
+
+    solar_decline = 0.4093 * math.sin((2 * pi / 368) * (julian_date - 81))
+
+    solar_time = hour + (0.170 * math.sin((4 * math.pi / 373) * (julian_date - 80))
+                         - 0.129 * math.sin((2 * math.pi / 355) * (julian_date - 8))
+                         + 12 * (s_meridian - longitude_r) / math.pi)
+
+    altitude = asin(sin(latitude_r) * sin(solar_decline)
+                    - cos(latitude_r) * cos(solar_decline)
+                    * cos(solar_time * (pi / 12)))
+
+    return altitude > 0
+
+class epw2wea(object):
+    """."""
+
+    def __init__(self, *, epw, dh, sh, eh):
+        """."""
+        self.epw = epw
+        #self.wea = wea
+        self.read_epw()  # read-in epw/tmy data
+
+        if sh is not None:
+            self.sh = sh
+            self.s_hour()
+
+        if eh is not None:
+            self.eh = eh
+            self.e_hour()
+
+        if dh:
+            self.daylight()  # filter out non-daylight hours if asked
+
+        self.wea = self.header + self.string
+        self.dt_string = []
+        for line in self.string.splitlines():
+            entry = line.split()
+            mo = int(entry[0])
+            da = int(entry[1])
+            hr = int(float(entry[2]))
+            self.dt_string.append(f"{mo:02d}{da:02d}_{hr:02d}30")
+
+
+    def daylight(self):
+        """."""
+        string_line = self.string.splitlines()
+        new_string = [li for li in string_line
+                      if (float(li.split()[3]) > 0) and (float(li.split()[4]) > 0)]
+        self.string = "\n".join(new_string)
+
+    def s_hour(self):
+        """."""
+        string_line = self.string.splitlines()
+        new_string = [li for li in string_line if float(
+            li.split()[2]) >= self.sh]
+        self.string = "\n".join(new_string)
+
+    def e_hour(self):
+        """."""
+        string_line = self.string.splitlines()
+        new_string = [li for li in string_line if float(
+            li.split()[2]) <= self.eh]
+        self.string = "\n".join(new_string)
+
+    def read_epw(self):
+        """."""
+        with open(self.epw, 'r') as epw:
+            raw = epw.readlines()  # read-in epw content
+        epw_header = raw[0].split(',')
+        content = raw[8:]
+        string = ""
+        for li in content:
+            line = li.split(',')
+            month = int(line[1])
+            day = int(line[2])
+            hour = int(line[3]) - 1
+            hours = hour + 0.5
+            dir_norm = float(line[14])
+            dif_hor = float(line[15])
+            string += "%d %d %2.3f %.1f %.1f\n" \
+                % (month, day, hours, dir_norm, dif_hor)
+        self.string = string
+        city = epw_header[1]
+        country = epw_header[3]
+        self.latitude = float(epw_header[6])
+        self.longitude = -1 * float(epw_header[7])
+        self.tz = int(float(epw_header[8])) * (-15)
+        elevation = epw_header[9].rstrip()
+        self.header = "place {}_{}\n".format(city, country)
+        self.header += "latitude {}\n".format(self.latitude)
+        self.header += "longitude {}\n".format(self.longitude)
+        self.header += "time_zone {}\n".format(self.tz)
+        self.header += "site_elevation {}\n".format(elevation)
+        self.header += "weather_data_file_units 1\n"
+
+
+class getEPW(object):
+    """Download the closest EPW file from the given Lat and Lon."""
+    _file_path_ = os.path.dirname(os.path.realpath(__file__))
+    epw_url = "epw_url.csv"
+    zip2latlon = "zip_latlon.txt"
+    epw_url_path = os.path.join(_file_path_, 'data', epw_url)
+    assert os.path.isfile(epw_url_path), 'File not found: {}'.format(epw_url_path)
+    zip2latlon_path = os.path.join(_file_path_, 'data', zip2latlon)
+    assert os.path.isfile(zip2latlon_path),\
+            'File not found: {}'.format(zip2latlon_path)
+
+    def __init__(self, lat, lon):
+        self.lat = float(lat)
+        self.lon = float(lon)
+        distances = []
+        urls = []
+        with open(self.epw_url_path, 'r') as rdr:
+            csvreader = csv.DictReader(rdr, delimiter=',')
+            for row in csvreader:
+                distances.append((float(row['Latitude']) - self.lat)**2
+                                + (float(row['Longitude']) - self.lon)**2)
+                urls.append(row['URL'])
+        min_idx = distances.index(min(distances))
+        url = urls[min_idx]
+        epw_fname = os.path.basename(url)
+        try:
+            headers = ('User-Agent', 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.3')
+            opener = urllib.request.build_opener()
+            opener.addheaders = [headers]
+            with opener.open(url) as resp:
+                raw = resp.read().decode()
+        except OSError as e:
+            raise e
+        assert not raw.startswith('404'), f'Bad URL:{url}'
+        with open(epw_fname, 'w') as wtr:
+            wtr.write(raw)
+        self.fname = epw_fname
+
+    @classmethod
+    def from_zip(cls, zipcode):
+        zipcode = str(zipcode)
+        with open(cls.zip2latlon_path, 'r') as rdr:
+            csvreader = csv.DictReader(rdr, delimiter='\t')
+            for row in csvreader:
+                if row['GEOID'] == zipcode:
+                    lat = row['INTPTLAT']
+                    lon = row['INTPTLONG']
+                    break
+            else:
+                raise 'zipcode not found in US'
+        return cls(lat, lon)
+
