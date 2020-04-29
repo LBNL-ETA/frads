@@ -45,14 +45,8 @@ ABASE_LIST = {
 logger = logging.getLogger("frads.radutil")
 
 
-def test_environ(cmd):
-    """Test if a list of programs are in the environment path."""
-    return any(
-        os.access(os.path.join(path, cmd), os.X_OK)
-        for path in os.environ['PATH'].split(os.pathsep))
-
-
 def parse_decor(fpath):
+    """Get all commands and decorations."""
     with open(fpath, 'r') as rd:
         content = rd.readlines()
     decor = [l for l in content if l.startswith('#@')]
@@ -61,7 +55,13 @@ def parse_decor(fpath):
 
 
 def parse_primitive(lines):
-    """Parse Radiance primitives inside a file path into a list of dictionary."""
+    """
+    Parse Radiance primitives inside a file path into a list of dictionary.
+    Arguments:
+        lines: list of strings
+    Return:
+        list of primitives as dictionaries
+    """
     content = ' '.join([
         i.strip() for i in lines
         if i.strip() != '' and i[0] != '#' and i[0] != '!'
@@ -88,7 +88,7 @@ def parse_primitive(lines):
 
 
 def parse_polygon(primitive):
-    assert primitive['type'] == 'polygon'
+    """Parse real arguments to polygon."""
     real_args = primitive['real_args'].split()
     coords = [float(i) for i in real_args[1:]]
     arg_cnt = int(real_args[0])
@@ -153,12 +153,13 @@ def parse_opt(opt_str):
     return opt_dict
 
 def polygon2prim(polygon, modifier, identifier):
+    """Generate a primitive from a polygon."""
     return {'modifier':modifier, 'type':'polygon',
             'identifier':identifier, 'int_arg':'0',
             'str_args':'0', 'real_args':polygon.to_real()}
 
 def put_primitive(prim):
-    """Convert primitives from a dictionary into a string for writing."""
+    """Convert a primitive into a string for writing."""
     if type(prim) is str:
         ostring = prim + os.linesep
     else:
@@ -166,35 +167,14 @@ def put_primitive(prim):
         \n{str_args}\n{int_arg}\n{real_args}\n\n".format(**prim)
     return ostring
 
-
-def surface_normal(prim):
-    """Get the surface normal from a polygon primitive."""
-    if prim['type'] == 'polygon':
-        return prim['polygon'].normal()
-    elif prim['type'] == 'ring':
-        real_args = prim['real_args'].split()
-        return radgeom.Vector(*[float(i) for i in real_args[4:7]])
-
-
-def surface_area(prim):
-    """Get the surface area from a primitive."""
-    if prim['type'] == 'polygon':
-        return prim['polygon'].area()
-    elif prim['type'] == 'ring':
-        real_args = prim['real_args'].split()
-        inner_radi = float(real_args[-2])
-        outter_radi = float(real_args[-1])
-        return math.pi * (outter_radi**2 - inner_radi**2)
-
-
 def samp_dir(plist):
     """Calculate the primitives' average sampling direction weighted by area."""
     normal_areas = []
     plist = [p for p in plist if p['type'] == 'polygon' or p['type'] == 'ring']
     normal_area = radgeom.Vector()
     for p in plist:
-        normal = surface_normal(p)
-        area = surface_area(p)
+        normal = p['polygon'].normal()
+        area = p['polygon'].area()
         normal_area += normal.scale(area)
     samp_dir = normal_area.scale(1.0 / len(plist))
     samp_dir = samp_dir.unitize()
@@ -210,56 +190,6 @@ def up_vector(primitives):
         upvect = '+Z'
     return upvect
 
-
-def polygon_center(pts):
-    """Calculate the center from a list of points."""
-    pt_num = len(pts)
-    xsum = 0
-    ysum = 0
-    zsum = 0
-    for p in pts:
-        xsum += p[0]
-        ysum += p[1]
-        zsum += p[2]
-    xc = xsum / pt_num
-    yc = ysum / pt_num
-    zc = zsum / pt_num
-    center = [xc, yc, zc]
-    return center
-
-
-def getbbox(polygon_list, offset=0.0):
-    """Get boundary from a list of primitives."""
-    extreme_list = [p.extreme() for p in polygon_list]
-    lim = [i for i in zip(*extreme_list)]
-    xmin = min(lim[0]) - offset
-    xmax = max(lim[1]) + offset
-    ymin = min(lim[2]) - offset
-    ymax = max(lim[3]) + offset
-    zmin = min(lim[4]) - offset
-    zmax = max(lim[5]) + offset
-
-    fp1 = radgeom.Vector(xmin, ymin, zmin)
-    fp2 = radgeom.Vector(xmax, ymin, zmin)
-    fp3 = radgeom.Vector(xmax, ymax, zmin)
-    fpg = radgeom.Rectangle3P(fp1, fp2, fp3)
-
-    cp1 = radgeom.Vector(xmin, ymin, zmax)
-    cp2 = radgeom.Vector(xmax, ymin, zmax)
-    cp3 = radgeom.Vector(xmax, ymax, zmax)
-    cpg = radgeom.Rectangle3P(cp3, cp2, cp1)
-
-    swpg = radgeom.Rectangle3P(cp2, fp2, fp1)
-
-    ewpg = radgeom.Rectangle3P(fp3, fp2, cp2)
-
-    s2n_vec = radgeom.Vector(0, ymax - ymin, 0)
-    nwpg = radgeom.Polygon([v + s2n_vec for v in swpg.vertices]).flip()
-
-    e2w_vec = radgeom.Vector(xmax - xmin, 0, 0)
-    wwpg = radgeom.Polygon([v - e2w_vec for v in ewpg.vertices]).flip()
-
-    return [fpg, cpg, ewpg, swpg, wwpg, nwpg]
 
 
 def plastic_prim(mod, ident, refl, red, green, blue, specu, rough):
@@ -515,6 +445,36 @@ def check_fresh(path1, path2):
     return time1 > time2
 
 
+#class pt_inclusion(object):
+#    """testing whether a point is inside a polygon using winding number algorithm."""
+#
+#    def __init__(self, polygon_pts):
+#        """Initialize the polygon."""
+#        self.pt_cnt = len(polygon_pts)
+#        polygon_pts.append(polygon_pts[0])
+#        self.polygon_pts = polygon_pts
+#
+#    def isLeft(self, pt0, pt1, pt2):
+#        """Test whether a point is left to a line."""
+#        return (pt1[0] - pt0[0]) * (pt2[1] - pt0[1]) \
+#            - (pt2[0] - pt0[0]) * (pt1[1] - pt0[1])
+#
+#    def test_inside(self, pt):
+#        """Test if a point is inside the polygon."""
+#        wn = 0
+#        for i in range(self.pt_cnt):
+#            if self.polygon_pts[i][1] <= pt[1]:
+#                if self.polygon_pts[i + 1][1] > pt[1]:
+#                    if self.isLeft(self.polygon_pts[i],
+#                                   self.polygon_pts[i + 1], pt) > 0:
+#                        wn += 1
+#            else:
+#                if self.polygon_pts[i + 1][1] <= pt[1]:
+#                    if self.isLeft(self.polygon_pts[i],
+#                                   self.polygon_pts[i + 1], pt) < 0:
+#                        wn -= 1
+#        return wn
+
 class pt_inclusion(object):
     """testing whether a point is inside a polygon using winding number algorithm."""
 
@@ -526,20 +486,20 @@ class pt_inclusion(object):
 
     def isLeft(self, pt0, pt1, pt2):
         """Test whether a point is left to a line."""
-        return (pt1[0] - pt0[0]) * (pt2[1] - pt0[1]) \
-            - (pt2[0] - pt0[0]) * (pt1[1] - pt0[1])
+        return (pt1.x - pt0.x) * (pt2.y - pt0.y) \
+            - (pt2.x - pt0.x) * (pt1.y - pt0.y)
 
     def test_inside(self, pt):
         """Test if a point is inside the polygon."""
         wn = 0
         for i in range(self.pt_cnt):
-            if self.polygon_pts[i][1] <= pt[1]:
-                if self.polygon_pts[i + 1][1] > pt[1]:
+            if self.polygon_pts[i].y <= pt.y:
+                if self.polygon_pts[i + 1].y > pt.y:
                     if self.isLeft(self.polygon_pts[i],
                                    self.polygon_pts[i + 1], pt) > 0:
                         wn += 1
             else:
-                if self.polygon_pts[i + 1][1] <= pt[1]:
+                if self.polygon_pts[i + 1].y <= pt.y:
                     if self.isLeft(self.polygon_pts[i],
                                    self.polygon_pts[i + 1], pt) < 0:
                         wn -= 1
@@ -561,12 +521,13 @@ def gen_grid(polygon, height, spacing, op=False):
     normal = polygon.normal()
     abs_norm = [abs(i) for i in normal.to_list()]
     drop_idx = abs_norm.index(max(abs_norm))
-    pg_pts = [i.to_list() for i in polygon.vertices]
-    pt_cnt = len(pg_pts)
-    plane_height = sum([i[drop_idx] for i in pg_pts]) / pt_cnt
-    [i.pop(drop_idx) for i in pg_pts]  # dimension reduction
-    _ilist = [i[0] for i in pg_pts]
-    _jlist = [i[1] for i in pg_pts]
+    #pg_pts = [i.to_list() for i in polygon.vertices]
+    pg_pts = polygon.vertices
+    #plane_height = sum([i[drop_idx] for i in pg_pts]) / len(pg_pts)
+    plane_height = sum([i.z for i in pg_pts]) / len(pg_pts)
+    #[i.pop(drop_idx) for i in pg_pts]  # dimension reduction
+    _ilist = [i.x for i in pg_pts]
+    _jlist = [i.y for i in pg_pts]
     imax = max(_ilist)
     imin = min(_ilist)
     jmax = max(_jlist)
@@ -575,8 +536,10 @@ def gen_grid(polygon, height, spacing, op=False):
     ylen_spc = ((jmax - jmin) / spacing)
     xstart = ((xlen_spc - int(xlen_spc) + 1)) * spacing / 2
     ystart = ((ylen_spc - int(ylen_spc) + 1)) * spacing / 2
-    x0 = [float('%g' % x) + xstart for x in frange_inc(imin, imax, spacing)]
-    y0 = [float('%g' % x) + ystart for x in frange_inc(jmin, jmax, spacing)]
+    #x0 = [float('%g' % x) + xstart for x in frange_inc(imin, imax, spacing)]
+    #y0 = [float('%g' % x) + ystart for x in frange_inc(jmin, jmax, spacing)]
+    x0 = [x + xstart for x in frange_inc(imin, imax, spacing)]
+    y0 = [x + ystart for x in frange_inc(jmin, jmax, spacing)]
     raw_pts = [[i, j] for i in x0 for j in y0]
     if polygon.normal() == radgeom.Vector(0, 0, 1):
         pt_incls = pt_inclusion(pg_pts)

@@ -31,9 +31,10 @@ def klems_wrap(inp, out):
 
 def main(**kwargs):
     with open(kwargs['w']) as rdr:
-        wndw_prims = radutil.parse_primitive(rdr.readlines())
+        raw_wndw_prims = radutil.parse_primitive(rdr.readlines())
     with open(kwargs['ncp']) as rdr:
         ncp_prims = radutil.parse_primitive(rdr.readlines())
+    wndw_prims = [p for p in raw_wndw_prims if p['type']=='polygon']
     port_prims = fcd.genport(wpolys=wndw_prims, npolys=ncp_prims,
                              depth=None, scale=None)
     wndw_polygon = [p['polygon'] for p in wndw_prims if p['type']=='polygon']
@@ -129,13 +130,15 @@ if __name__ == "__main__":
     logger = logging.getLogger('frads')
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
     if argmap['db']:
         logger.setLevel(logging.DEBUG)
+        console_handler.setLevel(logging.DEBUG)
     elif argmap['vb']:
         logger.setLevel(logging.INFO)
+        console_handler.setLevel(logging.INFO)
     elif argmap['si']:
         logger.setLevel(logging.CRITICAL)
+        console_handler.setLevel(logging.CRITICAL)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
     main(**argmap)

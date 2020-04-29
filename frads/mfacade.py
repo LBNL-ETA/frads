@@ -11,6 +11,7 @@ from frads import radgeom as rg
 import math
 import os
 from frads import radutil
+from frads import radgeom
 import shutil
 import subprocess as sp
 import tempfile as tf
@@ -59,7 +60,7 @@ class Genfmtx(object):
             self.pctcull = 90
             self.ttlog2 = int(ttlog2)
             self.opt += ' -hd -ff'
-        td = tf.mkdtemp()
+        self.td = tf.mkdtemp()
         src_dict = {}
         fwrap_dict = {}
         for idx in range(len(self.win_polygon)):
@@ -67,17 +68,17 @@ class Genfmtx(object):
             _rf = f'rf{idx}'
             _tb = f'tb{idx}'
             _rb = f'rb{idx}'
-            src_dict[_tf] = os.path.join(td, f'{_tf}.dat')
-            fwrap_dict[_tf] = os.path.join(td, f'{_tf}p.dat')
+            src_dict[_tf] = os.path.join(self.td, f'{_tf}.dat')
+            fwrap_dict[_tf] = os.path.join(self.td, f'{_tf}p.dat')
             if forw:
-                src_dict[_tb] = os.path.join(td, f'{_tb}.dat')
-                fwrap_dict[_tb] = os.path.join(td, f'{_tb}p.dat')
+                src_dict[_tb] = os.path.join(self.td, f'{_tb}.dat')
+                fwrap_dict[_tb] = os.path.join(self.td, f'{_tb}p.dat')
             if refl:
-                src_dict[_rf] = os.path.join(td, f'{_rf}.dat')
-                fwrap_dict[_rf] = os.path.join(td, f'{_rf}p.dat')
+                src_dict[_rf] = os.path.join(self.td, f'{_rf}.dat')
+                fwrap_dict[_rf] = os.path.join(self.td, f'{_rf}p.dat')
                 if forw:
-                    src_dict[_rb] = os.path.join(td, f'{_rb}.dat')
-                    fwrap_dict[_rb] = os.path.join(td, f'{_rb}p.dat')
+                    src_dict[_rb] = os.path.join(self.td, f'{_rb}.dat')
+                    fwrap_dict[_rb] = os.path.join(self.td, f'{_rb}p.dat')
         self.compute_front(src_dict)
         if forw:
             self.compute_back(src_dict)
@@ -89,26 +90,26 @@ class Genfmtx(object):
             for key in src_dict:
                 out_name = f"{self.out_name}_{key}.mtx"
                 shutil.move(src_dict[key], os.path.join(self.outdir, out_name))
-        shutil.rmtree(td, ignore_errors=True)
+        shutil.rmtree(self.td, ignore_errors=True)
 
     def compute_front(self, src_dict):
         """compute front side calculation(backwards)."""
         logger.info('Computing for front side')
         for i in range(len(self.win_polygon)):
             logger.info(f'Front transmission for window {i}')
-            front_rcvr = rm.Receiver.as_surface(
+            front_rcvr = rm.Receiver.as_surface(tmpdir=self.td,
                 prim_list=self.port_prim, basis=self.rbasis,
                 left=None, offset=None, source='glow', out=src_dict[f'tf{i}'])
             win_polygon = self.win_polygon[i]
             sndr_prim = polygon_prim(win_polygon, 'fsender', f'window{i}')
-            sndr = rm.Sender.as_surface(prim_list=[sndr_prim], basis=self.sbasis,
-                                        offset=None)
+            sndr = rm.Sender.as_surface(
+                tmpdir=self.td, prim_list=[sndr_prim], basis=self.sbasis, offset=None)
             if self.refl:
                 logger.info(f'Front reflection for window {i}')
                 back_window = win_polygon.flip()
                 back_window_prim = polygon_prim(
                     back_window, 'breceiver', f'window{i}')
-                back_rcvr = rm.Receiver.as_surface(
+                back_rcvr = rm.Receiver.as_surface(tmpdir=self.td,
                     prim_list=[back_window_prim], basis=self.rbasis,
                     left=True, offset=None, source='glow', out=src_dict[f'rf{i}'])
                 front_rcvr += back_rcvr
@@ -122,14 +123,14 @@ class Genfmtx(object):
             np = p.copy()
             np['real_args'] = np['polygon'].flip().to_real()
             sndr_prim.append(np)
-        sndr = rm.Sender.as_surface(
+        sndr = rm.Sender.as_surface(tmpdir=self.td,
             prim_list=sndr_prim, basis=self.rbasis, offset=None)
         logger.info('Computing for back side')
         for idx in range(len(self.win_polygon)):
             logger.info(f'Back transmission for window {idx}')
             win_polygon = self.win_polygon[idx].flip()
             rcvr_prim = polygon_prim(win_polygon, 'breceiver', f'window{idx}')
-            rcvr = rm.Receiver.as_surface(
+            rcvr = rm.Receiver.as_surface(tmpdir=self.td,
                 prim_list=[rcvr_prim], basis=self.sbasis,
                 left=None, offset=None, source='glow', out=src_dict[f'tb{idx}'])
             if self.refl:
@@ -137,7 +138,7 @@ class Genfmtx(object):
                 brcvr_prim = [
                     polygon_prim(self.port_prim[i]['polygon'], 'freceiver', 'window' + str(i))
                     for i in range(len(self.port_prim))]
-                brcvr = rm.Receiver.as_surface(
+                brcvr = rm.Receiver.as_surface(tmpdir=self.td,
                     prim_list=brcvr_prim, basis=self.rbasis,
                     left=True, offset=None, source='glow',
                     out=src_dict[f'rb{idx}'])
@@ -232,7 +233,7 @@ def genport(*, wpolys, npolys, depth, scale):
     wnorm = wpoly.normal()
     wcntr = wpoly.centroid()
     if npolys is not None:
-        all_ports = get_port(wpoly, npolys)
+        all_ports = get_port(wpoly, wnorm, npolys)
     elif self.depth is None:
         raise 'Missing param: need to specify (depth and scale) or ncs file path'
     else:  # user direct input
@@ -245,10 +246,11 @@ def genport(*, wpolys, npolys, depth, scale):
     for pi in range(len(all_ports)):
         new_prim = polygon_prim(all_ports[pi], 'port',
                                      'portf%s' % str(pi + 1))
+        logger.debug(radutil.put_primitive(new_prim))
         port_prims.append(new_prim)
     return port_prims
 
-def get_port(win_polygon, ncs_prims):
+def get_port(win_polygon, win_norm, ncs_prims):
     """
     Generate ports polygons that encapsulate the window and NCP geometries.
 
@@ -258,6 +260,12 @@ def get_port(win_polygon, ncs_prims):
     outward offset. This boundary box is then rotated back the same amount
     to encapsulate the original window and NCP geomteries.
     """
+    ncs_polygon = [p['polygon'] for p in ncs_prims if p['type']=='polygon']
+    if 1 in [int(abs(i)) for i in win_norm.to_list()]:
+        ncs_polygon.append(win_polygon)
+        bbox = radgeom.getbbox(ncs_polygon, offset=0.001)
+        bbox.remove([b for b in bbox if b.normal().reverse()==win_norm][0])
+        return bbox
     xax = [1, 0, 0]
     _xax = [-1, 0, 0]
     yax = [0, 1, 0]
@@ -265,7 +273,6 @@ def get_port(win_polygon, ncs_prims):
     zaxis = rg.Vector(0, 0, 1)
     rm_pg = [xax, _yax, _xax, yax]
     area_list = []
-    ncs_polygon = [p['polygon'] for p in ncs_prims if p['type']=='polygon']
     win_normals = []
     # Find axiel aligned rotation angle
     bboxes = []
@@ -275,7 +282,7 @@ def get_port(win_polygon, ncs_prims):
         win_normals.append(win_polygon_r.normal())
         ncs_polygon_r = [p.rotate(zaxis, rad) for p in ncs_polygon]
         ncs_polygon_r.append(win_polygon_r)
-        _bbox = radutil.getbbox(ncs_polygon_r, offset=0.001)
+        _bbox = radgeom.getbbox(ncs_polygon_r, offset=0.001)
         bboxes.append(_bbox)
         area_list.append(_bbox[0].area())
     # Rotate to position

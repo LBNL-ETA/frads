@@ -369,3 +369,54 @@ class Convexhull(object):
         w = min(points, key=lambda p: (p - u).cross(vect2) * self.normal)
         p1, p2 = self.toleft(w, v, points), self.toleft(u, w, points)
         return self.extend(w, v, p1) + [w] + self.extend(u, w, p2)
+
+def polygon_center(*polygons):
+    """Calculate the center from polygons."""
+    vertices = [p.vertices for p in polygons]
+    pt_num = len(vertices)
+    xsum = 0
+    ysum = 0
+    zsum = 0
+    for p in vertices:
+        xsum += p.x
+        ysum += p.y
+        zsum += p.z
+    xc = xsum / pt_num
+    yc = ysum / pt_num
+    zc = zsum / pt_num
+    return Vector(x=xc, y=yc, z=zc)
+
+
+def getbbox(polygon_list, offset=0.0):
+    """Get boundary from a list of primitives."""
+    extreme_list = [p.extreme() for p in polygon_list]
+    lim = [i for i in zip(*extreme_list)]
+    xmin = min(lim[0]) - offset
+    xmax = max(lim[1]) + offset
+    ymin = min(lim[2]) - offset
+    ymax = max(lim[3]) + offset
+    zmin = min(lim[4]) - offset
+    zmax = max(lim[5]) + offset
+
+    fp1 = Vector(xmin, ymin, zmin)
+    fp2 = Vector(xmax, ymin, zmin)
+    fp3 = Vector(xmax, ymax, zmin)
+    fpg = Rectangle3P(fp1, fp2, fp3) #-Z
+
+    cp1 = Vector(xmin, ymin, zmax)
+    cp2 = Vector(xmax, ymin, zmax)
+    cp3 = Vector(xmax, ymax, zmax)
+    cpg = Rectangle3P(cp3, cp2, cp1) #+Z
+
+    swpg = Rectangle3P(cp2, fp2, fp1) #-Y
+
+    ewpg = Rectangle3P(fp3, fp2, cp2) #+X
+
+    s2n_vec = Vector(0, ymax - ymin, 0)
+    nwpg = Polygon([v + s2n_vec for v in swpg.vertices]).flip() #+Y
+
+    e2w_vec = Vector(xmax - xmin, 0, 0)
+    wwpg = Polygon([v - e2w_vec for v in ewpg.vertices]).flip() #-X
+
+    return [fpg, cpg, ewpg, swpg, wwpg, nwpg]
+
