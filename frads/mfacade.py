@@ -11,7 +11,6 @@ from frads import radgeom as rg
 import math
 import os
 from frads import radutil
-from frads import radgeom
 import shutil
 import subprocess as sp
 import tempfile as tf
@@ -263,7 +262,7 @@ def get_port(win_polygon, win_norm, ncs_prims):
     ncs_polygon = [p['polygon'] for p in ncs_prims if p['type']=='polygon']
     if 1 in [int(abs(i)) for i in win_norm.to_list()]:
         ncs_polygon.append(win_polygon)
-        bbox = radgeom.getbbox(ncs_polygon, offset=0.001)
+        bbox = rg.getbbox(ncs_polygon, offset=0.001)
         bbox.remove([b for b in bbox if b.normal().reverse()==win_norm][0])
         return bbox
     xax = [1, 0, 0]
@@ -282,7 +281,7 @@ def get_port(win_polygon, win_norm, ncs_prims):
         win_normals.append(win_polygon_r.normal())
         ncs_polygon_r = [p.rotate(zaxis, rad) for p in ncs_polygon]
         ncs_polygon_r.append(win_polygon_r)
-        _bbox = radgeom.getbbox(ncs_polygon_r, offset=0.001)
+        _bbox = rg.getbbox(ncs_polygon_r, offset=0.001)
         bboxes.append(_bbox)
         area_list.append(_bbox[0].area())
     # Rotate to position
