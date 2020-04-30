@@ -124,9 +124,9 @@ class Wall(object):
              for wname in self.windows]
             uniq = []
             uniq = self.facade.copy()
-            for idx in range(len(swall.facade)):
-                for re in swall.facade[:idx]+swall.facade[idx+1:]:
-                    if set(swall.facade[idx].to_list()) == set(re.to_list()):
+            for idx in range(len(self.facade)):
+                for re in self.facade[:idx]+self.facade[idx+1:]:
+                    if set(self.facade[idx].to_list()) == set(re.to_list()):
                         uniq.remove(re)
             self.facade = uniq
         else:

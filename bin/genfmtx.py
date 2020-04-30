@@ -15,7 +15,7 @@ def genfmtx_args(parser):
     parser.add_argument('-ncp')
     parser.add_argument('-opt', type=str, default='-ab 1', help='Simulation parameters')
     parser.add_argument('-o', required=True, help='Output file path | directory')
-    parser.add_argument('-rs', required=True, choices=['r1','r2','r4','r6','kf'])
+    parser.add_argument('-rs', required=True, choices=['kq','kh','r1','r2','r4','r6','kf'])
     parser.add_argument('-ss', required=True, help='Sender sampling basis, kf|r1|r2|....')
     parser.add_argument('-forw', action='store_true', help='Crop to circle?')
     parser.add_argument('-refl', action='store_true', help='Crop to circle?')
