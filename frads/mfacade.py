@@ -174,7 +174,7 @@ class Genfmtx(object):
                     k: self.fwrap_dict[k]
                     for k in self.fwrap_dict if k.endswith(str(i))
                 }
-                cmd = 'wrapBSDF -a kf -c {} '.format(' '.join(
+                cmd = 'wrapBSDF -a {} -c {} '.format(self.rbasis, ' '.join(
                     [" ".join(('-' + i[:2], j)) for i, j in sub_dict.items()]))
                 cmd += f'> {self.out_name}.xml'
                 sp.call(cmd, shell=True)

@@ -2,11 +2,13 @@
 from frads import epjson2rad as eprad
 from frads import radutil as ru
 import argparse
+import pdb
 
 
 def main(fpath):
     epjs = eprad.read_epjs(fpath)
-    eprad.epJSON2Rad(epjs)
+    radobj = eprad.epJSON2Rad(epjs)
+    pdb.set_trace()
     #with open('materials.rad', 'w') as wtr:
     #    [wtr.write(ru.put_primitive(self.mat_prims[p])) for p in self.mat_prims]
     #    [wtr.write(ru.put_primitive(self.wndw_mat_prims[p])) for p in self.wndw_mat_prims]

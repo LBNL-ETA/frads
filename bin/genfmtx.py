@@ -107,7 +107,7 @@ def main(**kwargs):
             if mtxname.startswith('_solar_'):
                 sol_dict[_direc] = os.path.join(dirname, f"sol_{_direc}")
                 klems_wrap(mtx, sol_dict[_direc])
-        cmd = 'wrapBSDF -a kf -c -s Visible '
+        cmd = f"wrapBSDF -a {kwargs['ss']} -c -s Visible "
         cmd += ' '.join([f"-{key} {vis_dict[key]}" for key in vis_dict])
         cmd += ' -s Solar '
         cmd += ' '.join([f"-{key} {sol_dict[key]}" for key in sol_dict])

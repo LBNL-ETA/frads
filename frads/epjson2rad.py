@@ -17,7 +17,7 @@ class epJSON2Rad(object):
     def __init__(self, epjs):
         self.checkout_fene(epjs)
         self.get_material_prims(epjs)
-        self.get_zones(epjs)
+        self.zones = self.get_zones(epjs)
 
     def get_thickness(self, layers):
         """Get thickness from construction."""
@@ -122,13 +122,13 @@ class epJSON2Rad(object):
         opaque_srfs = epjs['BuildingSurface:Detailed']
         ext_zones = {}
         for zn in epjs['Zone']:
-            ext_zones[zn] = {'Wall':{}, 'Floor':{}, 'Ceiling':{}, 'Window':{}}
             zone_srfs = {name:opaque_srfs[name] for name in opaque_srfs
                         if opaque_srfs[name]['zone_name'] == zn}
             if self.check_ext_window(zone_srfs):
+                ext_zones[zn] = {'Wall':{}, 'Floor':{}, 'Ceiling':{}, 'Window':{}}
                 wsrf_prims = []
                 for sn in zone_srfs:
-                    pdb.set_trace()
+                    #pdb.set_trace()
                     surface = zone_srfs[sn]
                     srf_type = surface['surface_type']
                     cnstrct = epjs['Construction'][surface['construction_name']]
