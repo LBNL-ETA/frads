@@ -50,13 +50,14 @@ def main(**kwargs):
         modifiers = set([prim['modifier'] for prim in rcvr_prims])
         receivers = []
         receiver = rm.Receiver(path=None, receiver='', basis=kwargs['rs'], modifier=None)
-        for mod in modifiers:
+        for mod, op in zip(modifiers, kwargs['o']):
             _receiver = [prim for prim in rcvr_prims
                          if prim['modifier'] == mod and prim['type'] in ('polygon', 'ring') ]
             if _receiver != []:
                 receiver += rm.Receiver.as_surface(tmpdir=td,
                     prim_list=_receiver, basis=kwargs['rs'], offset=kwargs['ro'],
-                    left=None, source='glow', out=kwargs['o'])
+                    left=None, source='glow', out=op)
+        kwargs['o'] = None
     # generate matrices
     if kwargs['r'][0] == 'sun':
         rm.rcontrib(sender=sender, receiver=receiver, env=kwargs['env'],
@@ -75,7 +76,7 @@ def genmtx_args(parser):
     parser.add_argument('-o', nargs='+', required=True, help='Output file path | directory')
     parser.add_argument('-mod', help='modifier path for sun sources')
     parser.add_argument('-env', nargs='+', default='', help='Environment file paths')
-    parser.add_argument('-rs', required=True, choices=['r1','r2','r4','r6','kf'],
+    parser.add_argument('-rs', required=True, choices=['r1','r2','r4','r6','kf','sc25'],
                         help='Receiver sampling basis, kf|r1|r2|....')
     parser.add_argument('-ss', help='Sender sampling basis, kf|r1|r2|....')
     parser.add_argument('-ro', type=float,
@@ -103,15 +104,15 @@ if __name__ == "__main__":
     logger = logging.getLogger('frads')
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    if args.db:
+        logger.setLevel(logging.DEBUG)
+        console_handler.setLevel(logging.DEBUG)
+    elif args.vb:
+        logger.setLevel(logging.INFO)
+        console_handler.setLevel(logging.INFO)
+    elif args.si:
+        logger.setLevel(logging.CRITICAL)
+        console_handler.setLevel(logging.CRITICAL)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-    if argmap['db'] == True:
-        logger.setLevel(logging.DEBUG)
-    elif argmap['vb'] == True:
-        logger.setLevel(logging.INFO)
-    elif argmap['si'] == True:
-        logger.setLevel(logging.ERROR)
-    if argmap['rc'] > 1:
-        argmap['opt'] += f" -c {argmap['rc']}"
     main(**argmap)

@@ -128,6 +128,7 @@ class Receiver(object):
         self.path = path
         self.basis = basis
         self.modifier = modifier
+        logger.debug(f"Receivers:{receiver}")
 
     def __add__(self, other):
         self.receiver += other.receiver

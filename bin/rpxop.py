@@ -10,7 +10,7 @@ import multiprocessing as mp
 import glob
 import os
 import subprocess as sp
-import radutil
+from frads import radutil
 
 
 def main(op, inputs, out_dir, nproc=None):
@@ -35,7 +35,7 @@ def main(op, inputs, out_dir, nproc=None):
 if __name__ == "__main__":
     program_scription = "Image operations with parallel processing"
     parser = argparse.ArgumentParser(prog='imgop', description=program_scription)
-    parser.add_argument('-t', type=str, required=True, choice=['dcts','pcomb'],
+    parser.add_argument('-t', type=str, required=True, choices=['dcts','pcomb'],
                         help='operation types: {pcomb|dcts}')
     parser.add_argument('-i', type=str, required=True, nargs="+", help='list of inputs')
     parser.add_argument('-o', type=str, required=True, help="output directory")

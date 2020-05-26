@@ -184,11 +184,7 @@ class Polygon(object):
         return normal_u
 
     def centroid(self):
-        ctr = [
-            sum(i) / self.vert_cnt
-            for i in zip(*[i.to_list() for i in self.vertices])
-        ]
-        return Vector(*ctr)
+        return sum(self.vertices, Vector()).scale(1/self.vert_cnt)
 
     def area(self):
         """Calculate the area of the polygon."""
@@ -372,19 +368,8 @@ class Convexhull(object):
 
 def polygon_center(*polygons):
     """Calculate the center from polygons."""
-    vertices = [p.vertices for p in polygons]
-    pt_num = len(vertices)
-    xsum = 0
-    ysum = 0
-    zsum = 0
-    for p in vertices:
-        xsum += p.x
-        ysum += p.y
-        zsum += p.z
-    xc = xsum / pt_num
-    yc = ysum / pt_num
-    zc = zsum / pt_num
-    return Vector(x=xc, y=yc, z=zc)
+    vertices = [v for p in polygons for v in p.vertices]
+    return sum(vertices, Vector()).scale(1 / len(vertices))
 
 
 def getbbox(polygon_list, offset=0.0):

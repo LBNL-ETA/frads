@@ -346,14 +346,14 @@ class epw2wea(object):
 
 class getEPW(object):
     """Download the closest EPW file from the given Lat and Lon."""
-    #_file_path_ = os.path.dirname(radutil.__file__)
-    #epw_url = "epw_url.csv"
-    #zip2latlon = "zip_latlon.txt"
-    #epw_url_path = os.path.join(_file_path_, 'data', epw_url)
-    #assert os.path.isfile(epw_url_path), 'File not found: {}'.format(epw_url_path)
-    #zip2latlon_path = os.path.join(_file_path_, 'data', zip2latlon)
-    #assert os.path.isfile(zip2latlon_path),\
-    #        'File not found: {}'.format(zip2latlon_path)
+    _file_path_ = os.path.dirname(radutil.__file__)
+    epw_url = "epw_url.csv"
+    zip2latlon = "zip_latlon.txt"
+    epw_url_path = os.path.join(_file_path_, 'data', epw_url)
+    assert os.path.isfile(epw_url_path), 'File not found: {}'.format(epw_url_path)
+    zip2latlon_path = os.path.join(_file_path_, 'data', zip2latlon)
+    assert os.path.isfile(zip2latlon_path),\
+            'File not found: {}'.format(zip2latlon_path)
 
     def __init__(self, lat, lon):
         self.lat = float(lat)

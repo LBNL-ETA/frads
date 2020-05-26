@@ -7,12 +7,10 @@ import logging
 
 logger = logging.getLogger("frads.epjson2rad")
 
+PI = 3.14159265358579
 
 class epJSON2Rad(object):
 
-    # Sensor grid dimension in meters
-    GRID_HEIGHT = 0.75
-    GRID_SPACING = 0.6
 
     def __init__(self, epjs):
         self.checkout_fene(epjs)
@@ -33,7 +31,7 @@ class epJSON2Rad(object):
         """Thicken window-wall."""
         direction = surface.normal().scale(thickness)
         facade = surface.extrude(direction)[:2]
-        [facade.extend(windows[wname].extrude(direction)[2:]) for wname in windows]
+        [facade.extend(window.extrude(direction)[2:]) for window in windows]
         uniq = facade.copy()
         for idx in range(len(facade)):
             for re in facade[:idx]+facade[idx+1:]:
@@ -44,33 +42,33 @@ class epJSON2Rad(object):
 
     def get_material(self, epjs_mat):
         mat_prims = {}
-        for mat in epjs_mat:
-            mat_prims[mat] = {'modifier':'void', 'int_arg':'0',
+        for key, val in epjs_mat.items():
+            mat_prims[key] = {'modifier':'void', 'int_arg':'0',
                               'str_args':'0', 'type':'plastic',
-                              'identifier':mat.replace(' ','_')}
+                              'identifier':key.replace(' ','_')}
             try:
-                refl = 1 - epjs_mat[mat]['visible_absorptance']
+                refl = 1 - val['visible_absorptance']
             except KeyError as ke:
-                logger.warning(f"No visible absorptance defined for {mat}, assuming 50%")
+                logger.warning(f"No visible absorptance defined for {key}, assuming 50%")
                 refl = .5
-            mat_prims[mat]['real_args'] = "5 {0:.2f} {0:.2f} {0:.2f} 0 0".format(refl)
+            mat_prims[key]['real_args'] = "5 {0:.2f} {0:.2f} {0:.2f} 0 0".format(refl)
             try:
-                mat_prims[mat]['thickness'] = epjs_mat[mat]['thickness']
+                mat_prims[key]['thickness'] = val['thickness']
             except KeyError as ke:
-                logger.info(f"{mat} has zero thickness")
-                mat_prims[mat]['thickness'] = 0
+                logger.info(f"{key} has zero thickness")
+                mat_prims[key]['thickness'] = 0
         return mat_prims
 
     def get_wndw_material(self, epjs_wndw_mat):
         wndw_mat_prims = {}
-        for mat in epjs_wndw_mat:
+        for key, val in epjs_wndw_mat.items():
             try:
-                tvis = epjs_wndw_mat[mat]['visible_transmittance']
+                tvis = val['visible_transmittance']
             except KeyError:
-                print(f"No visible transmittance defined for {mat}, assuming 60%")
+                print(f"No visible transmittance defined for {key}, assuming 60%")
                 tvis = 0.6
-            wndw_mat_prims[mat] = {'modifier':'void', 'type':'glass', 'int_arg':'0',
-                              'str_args':'0', 'identifier':mat.replace(' ','_'),
+            wndw_mat_prims[key] = {'modifier':'void', 'type':'glass', 'int_arg':'0',
+                              'str_args':'0', 'identifier':key.replace(' ','_'),
                               'real_args': "3 {0:.2f} {0:.2f} {0:.2f}".format(tvis)}
         return wndw_mat_prims
 
@@ -85,7 +83,7 @@ class epJSON2Rad(object):
         except KeyError as ke:
             logger.info(ke, ", moving on")
         try:
-            self.mat_prims.update(self.get_wndw_material(epjs['WindowMaterial:SimpleGalzingSystem']))
+            self.mat_prims.update(self.get_wndw_material(epjs['WindowMaterial:SimpleGlazingSystem']))
         except KeyError as ke:
             logger.info(ke, ", moving on")
 
@@ -94,13 +92,13 @@ class epJSON2Rad(object):
             self.fene_srfs = epjs['FenestrationSurface:Detailed']
         except KeyError as ke:
             raise Exception(ke, 'not found, no exterior window found.')
-        self.fene_hosts = set([self.fene_srfs[name]['building_surface_name']
-                               for name in self.fene_srfs])
+        self.fene_hosts = set([val['building_surface_name']
+                               for key, val in self.fene_srfs.items()])
 
     def check_ext_window(self, zone_srfs):
         has_window = False
-        for sn in zone_srfs:
-            if (sn in self.fene_hosts) and (zone_srfs[sn]['sun_exposure']!='NoSun'):
+        for key, val in zone_srfs.items():
+            if (key in self.fene_hosts) and (val['sun_exposure']!='NoSun'):
                 has_window = True
                 break
         return has_window
@@ -116,67 +114,68 @@ class epJSON2Rad(object):
     def parse_wndw_cnstrct(self, wcnstrct):
         layers = ['outside_layer']
         layers.extend(sorted([l for l in wcnstrct if l.startswith('layer_')]))
-        pass
+
+    def check_srf_normal(self, zone):
+        polygons = [v['polygon'] for k,v in zone['Floor'].items()]
+        polygons.extend([v['polygon'] for k,v in zone['Ceiling'].items()])
+        polygons.extend([v['polygon'] for k,v in zone['Wall'].items()])
+        polygons.extend([v['polygon'] for k,v in zone['Window'].items()])
+        centroid = rg.polygon_center(*polygons)
+        for k,v in zone['Floor'].items():
+            fpolygon = v['polygon']
+            angle2center = fpolygon.normal().angle_from(centroid - fpolygon.centroid())
+            if angle2center < PI/4:
+                v['polygon'] = fpolygon.flip()
+                v['real_args'] = v['polygon'].to_real()
+        for k,v in zone['Window'].items():
+            wpolygon = v['polygon']
+            angle2center = wpolygon.normal().angle_from(centroid - wpolygon.centroid())
+            if angle2center > PI/4:
+                v['polygon'] = wpolygon.flip()
+                v['real_args'] = v['polygon'].to_real()
+        return zone
+
 
     def get_zones(self, epjs):
+        """Looping through zones."""
         opaque_srfs = epjs['BuildingSurface:Detailed']
         ext_zones = {}
         for zn in epjs['Zone']:
-            zone_srfs = {name:opaque_srfs[name] for name in opaque_srfs
-                        if opaque_srfs[name]['zone_name'] == zn}
+            zone_srfs = {k:v for k,v in opaque_srfs.items() if v['zone_name'] == zn}
             if self.check_ext_window(zone_srfs):
-                ext_zones[zn] = {'Wall':{}, 'Floor':{}, 'Ceiling':{}, 'Window':{}}
+                zone = {'Wall':{}, 'Floor':{}, 'Ceiling':{}, 'Window':{}}
                 wsrf_prims = []
                 for sn in zone_srfs:
-                    #pdb.set_trace()
                     surface = zone_srfs[sn]
                     srf_type = surface['surface_type']
                     cnstrct = epjs['Construction'][surface['construction_name']]
                     inner_layer, outer_layer, cthick = self.parse_cnstrct(cnstrct)
                     srf_polygon = rg.Polygon([rg.Vector(*v.values())
                                               for v in surface['vertices']])
-                    srf_windows = {}
+                    srf_windows = []
                     if sn in self.fene_hosts:
-                        zone_fsrfs = {name:self.fene_srfs[name] for name in self.fene_srfs
-                                      if self.fene_srfs[name]['building_surface_name']==sn}
+                        zone_fsrfs = {n:val for n, val in self.fene_srfs.items()
+                                      if val['building_surface_name']==sn}
                         for fn in zone_fsrfs:
                             fsurface = zone_fsrfs[fn]
                             nfvert = fsurface['number_of_vertices']
                             fverts = [[fsurface[k] for k in fsurface if
                                        k.startswith(f'vertex_{n+1}')] for n in range(nfvert)]
                             wndw_polygon = rg.Polygon([rg.Vector(*vert) for vert in fverts])
+                            srf_windows.append(wndw_polygon)
                             wcnstrct = epjs['Construction'][fsurface['construction_name']]
                             # self.parse_wndw_cnstrct(wcnstrct)
                             wndw_mat = wcnstrct['outside_layer'].replace(' ','_')
-                            ext_zones[zn]['Window'][fn] = ru.polygon2prim(wndw_polygon, wndw_mat, fn)
+                            zone['Window'][fn] = ru.polygon2prim(wndw_polygon, wndw_mat, fn)
                             srf_polygon -= wndw_polygon
                         facade = self.thicken(srf_polygon, srf_windows, cthick)
-                        ext_zones[zn][srf_type][f'ext_{sn}'] = ru.polygon2prim(
+                        zone[srf_type][f'ext_{sn}'] = ru.polygon2prim(
                                 facade[1], outer_layer, f"ext_{sn}")
                         for idx in range(2, len(facade)):
-                            ext_zones[zn][srf_type][f'sill_{sn}.{idx}'] = ru.polygon2prim(
+                            zone[srf_type][f'sill_{sn}.{idx}'] = ru.polygon2prim(
                                 facade[idx], inner_layer, f"sill_{sn}.{idx}")
-                    ext_zones[zn][srf_type][sn] = ru.polygon2prim(srf_polygon, inner_layer, sn)
+                    zone[srf_type][sn] = ru.polygon2prim(srf_polygon, inner_layer, sn)
+                ext_zones[zn] = self.check_srf_normal(zone)
         return ext_zones
-
-
-    def check_normal(self, window, surfaces):
-        """Check the surface normal orientation
-        Arguments:
-            Window: a polygon representing the window
-            floor: a polygon representing the floor"""
-        win_norm = window.normal()
-        win_center = window.center()
-        pcentroid = radgeom.polygon_center(surfaces)
-
-
-def read_epjs(fpath):
-    with open(fpath) as rdr:
-        epjs = json.load(rdr)
-    return epjs
-
-
-
-
 
 

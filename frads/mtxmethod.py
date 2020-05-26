@@ -8,13 +8,35 @@ import os
 import copy
 import tempfile as tf
 from frads import mfacade, radgeom, room
-from frads import getepw, epw2wea, radutil, radmtx
-from configparser import ConfigParser
+from frads import radutil, radmtx, makesky
 import multiprocessing as mp
 import logging
 import pdb
 
 logger = logging.getLogger('frads.mtxmethod')
+
+cfg_template = {
+    'SimulationControl':{
+        'vmx_opt': None, 'fmx_opt': None, 'dmx_opt': None,
+        'dsmx_opt': None, 'cdsmx_opt': None, 'ray_count': 1,
+        'pixel_jitter': .7, 'separate_direct': False, 'nprocess': 1,
+    }, 'FileStructure':{
+        'base': '', 'matrices': 'Matrices', 'results': 'Results',
+        'objects': 'Objects', 'resources': 'Resources',
+    }, 'Site':{
+        'wea': None, 'latitude': None, 'longitude': None, 'zipcode': None,
+        'daylight_hours_only': False, 'start_hour': None, 'end_hour': None,
+    }, 'Dimensions':{
+        'depth': None, 'width': None, 'height': None, 'window1': None,
+        'facade_thickness': None, 'orientation': None,
+    }, 'Model':{
+        'material': None, 'windows': None, 'scene': None,
+        'ncp_shade': None, 'BSDF': None, 'sunBSDF': None,
+    }, 'Raysenders':{
+        'view1': None, 'grid_surface': None, 'distance': None,
+        'spacing': None, 'opposite': True,
+    }}
+
 
 class MTXmethod(object):
     def __init__(self, config):
@@ -424,10 +446,14 @@ class MTXmethod(object):
 
 class Prepare(object):
     """."""
-    def __init__(self, cfg_path):
+    def __init__(self, config):
         self.logger = logging.getLogger('frads.mtxmethod.Prepare')
-        self.cfg_path = cfg_path
-        self.parse_config()
+        self.site = config['Site']
+        self.filestrct = config['FileStructure']
+        self.simctrl = config['SimulationControl']
+        self.model = config['Model']
+        self.dimensions = config['Dimensions']
+        self.raysenders = config['Raysenders']
         self.get_paths()
         if None in self.dimensions.values():
             self.assemble()
@@ -435,17 +461,6 @@ class Prepare(object):
             self.logger.info("Generating a room based on defined dimensions")
             self.make_room()
         self.get_wea()
-
-    def parse_config(self):
-        """Parse a configuration file into a dictionary."""
-        config = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
-        config.read(self.cfg_path)
-        self.site = config['Site']
-        self.filestrct = config['FileStructure']
-        self.simctrl = config['SimulationControl']
-        self.model = config['Model']
-        self.dimensions = config['Dimensions']
-        self.raysenders = config['Raysenders']
 
     def get_paths(self):
         """Where are ?"""
@@ -457,7 +472,7 @@ class Prepare(object):
         self.windowpath = [os.path.join(objdir, obj)
                            for obj in self.model['windows'].split()]
         self.maccfspath = [os.path.join(objdir, obj)
-                           for obj in self.model['macrocfs'].split()]
+                           for obj in self.model['sunBSDF'].split()]
         self.viewdicts = {}
         views = [ent for ent in self.raysenders if ent.startswith('view')]
         if len(views) > 0:
@@ -518,7 +533,7 @@ class Prepare(object):
 
     def make_room(self):
         """Make a side-lit shoebox room."""
-        theroom = room.Room(float(self.dimensions['width']),
+        theroom = room.Shoebox(float(self.dimensions['width']),
                             float(self.dimensions['depth']),
                             float(self.dimensions['height']))
         wndw_names = [i for i in self.dimensions if i.startswith('window')]
@@ -529,7 +544,9 @@ class Prepare(object):
         theroom.surface_prim()
         theroom.window_prim()
         mlib = radutil.material_lib()
-        sensor_grid = radutil.gen_grid(theroom.floor, grid_height, grid_spacing)
+        sensor_grid = radutil.gen_grid(theroom.floor, self.raysenders['distance'],
+                                       self.raysenders['spacing'],
+                                       op=self.raysenders.getboolean('opposite'))
         nsensor = len(sensor_grid)
         return theroom, sensor_grid
 
@@ -545,17 +562,17 @@ class Prepare(object):
             self.dts = [f"{int(l[0]):02d}{int(l[1]):02d}_{int(float(l[2])):02d}30" for l in lines]
         else:
             if self.site['zipcode'] is not None:
-                epw = getepw.getEPW.from_zip(self.site['zipcode'])
+                epw = makesky.getEPW.from_zip(self.site['zipcode'])
                 self.site['lat'], self.site['lon'] = str(epw.lat), str(epw.lon)
-            elif None not in (self.site['lat'], self.site['lon']):
-                epw = getepw.getEPW(self.site['lat'], self.site['lon'])
+            elif None not in (self.site['latitude'], self.site['longitude']):
+                epw = makesky.getEPW(self.site['latitude'], self.site['longitude'])
             else:
                 raise NameError("Not site info defined")
             self.logger.info(f"Downloaded {epw.fname}")
             epw_path = os.path.join(
                 self.filestrct['base'], self.filestrct['resources'], epw.fname)
             os.rename(epw.fname, epw_path)
-            wea = epw2wea.epw2wea(
+            wea = makesky.epw2wea(
                 epw=epw_path, dh=self.site.getboolean('daylight_hours_only'),
                 sh=float(self.site['start_hour']), eh=float(self.site['end_hour']))
             self.wea_path = os.path.join(

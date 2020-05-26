@@ -156,6 +156,7 @@ def polygon2prim(polygon, modifier, identifier):
     """Generate a primitive from a polygon."""
     return {'modifier':modifier, 'type':'polygon',
             'identifier':identifier, 'int_arg':'0',
+            'polygon':polygon,
             'str_args':'0', 'real_args':polygon.to_real()}
 
 def put_primitive(prim):
@@ -223,6 +224,10 @@ def plastic_prim(mod, ident, refl, red, green, blue, specu, rough):
 
     return prim
 
+def tmit2tmis(tmit):
+    return round(
+        (math.sqrt(0.8402528435 + 0.0072522239 * tmit**2) - 0.9166530661) /
+        0.0036261119 / tmit, 3)
 
 def glass_prim(mod, ident, tr, tg, tb, refrac=1.52):
     """Generate a glass material.
@@ -236,16 +241,10 @@ def glass_prim(mod, ident, tr, tg, tb, refrac=1.52):
         material primtive (dict)
 
     """
-
-    def convert(tmit):
-        return round(
-            (math.sqrt(0.8402528435 + 0.0072522239 * tmit**2) - 0.9166530661) /
-            0.0036261119 / tmit, 3)
-
     prim = {'type': 'glass', 'int_arg': '0', 'str_args': '0'}
-    tmsv_red = convert(tr)
-    tmsv_green = convert(tg)
-    tmsv_blue = convert(tb)
+    tmsv_red = tmit2tmis(tr)
+    tmsv_green = tmit2tmis(tg)
+    tmsv_blue = tmit2tmis(tb)
     prim['modifier'] = mod
     prim['identifier'] = ident
     real_args = '4 %s %s %s %s' % (tmsv_red, tmsv_green, tmsv_blue, refrac)
@@ -513,53 +512,29 @@ def gen_grid(polygon, height, spacing, op=False):
             polygon: a polygon object
             height: points' distance from the surface in its normal direction
             spacing: distance between the grid points
-            visualize: set to True to visualize the resulting grid points
-    Output:
-            write the point file to pts directory
-
+    Return:
+            List of the points as list
     """
-    normal = polygon.normal()
-    abs_norm = [abs(i) for i in normal.to_list()]
-    drop_idx = abs_norm.index(max(abs_norm))
-    #pg_pts = [i.to_list() for i in polygon.vertices]
-    pg_pts = polygon.vertices
-    #plane_height = sum([i[drop_idx] for i in pg_pts]) / len(pg_pts)
-    plane_height = sum([i.z for i in pg_pts]) / len(pg_pts)
-    #[i.pop(drop_idx) for i in pg_pts]  # dimension reduction
-    _ilist = [i.x for i in pg_pts]
-    _jlist = [i.y for i in pg_pts]
-    imax = max(_ilist)
-    imin = min(_ilist)
-    jmax = max(_jlist)
-    jmin = min(_jlist)
+    vertices = polygon.vertices
+    plane_height = sum([i.z for i in vertices]) / len(vertices)
+    imin, imax, jmin, jmax, zmin, zmax = polygon.extreme()
     xlen_spc = ((imax - imin) / spacing)
     ylen_spc = ((jmax - jmin) / spacing)
     xstart = ((xlen_spc - int(xlen_spc) + 1)) * spacing / 2
     ystart = ((ylen_spc - int(ylen_spc) + 1)) * spacing / 2
-    #x0 = [float('%g' % x) + xstart for x in frange_inc(imin, imax, spacing)]
-    #y0 = [float('%g' % x) + ystart for x in frange_inc(jmin, jmax, spacing)]
     x0 = [x + xstart for x in frange_inc(imin, imax, spacing)]
     y0 = [x + ystart for x in frange_inc(jmin, jmax, spacing)]
-    raw_pts = [[i, j] for i in x0 for j in y0]
-    if polygon.normal() == radgeom.Vector(0, 0, 1):
-        pt_incls = pt_inclusion(pg_pts)
-    else:
-        pt_incls = pt_inclusion(pg_pts[::-1])
-    _grid = [p for p in raw_pts if pt_incls.test_inside(p) > 0]
+    grid_dir = polygon.normal()
     if op:
-        grid_dir = normal.reverse()
+        grid_dir = polygon.normal().reverse()
+    grid_hgt = radgeom.Vector(0, 0, plane_height) + grid_dir.scale(height)
+    raw_pts = [radgeom.Vector(i, j, grid_hgt.z) for i in x0 for j in y0]
+    if polygon.normal() == radgeom.Vector(0, 0, 1):
+        pt_incls = pt_inclusion(vertices)
     else:
-        grid_dir = normal
-    p_height = sum([height * i for i in grid_dir.to_list()]) + plane_height
-    grid = []
-    _idx = list(range(3))
-    _idx.pop(drop_idx)
-    for g in _grid:
-        tup = [0.0] * 3 + grid_dir.to_list()
-        tup[drop_idx] = p_height
-        tup[_idx[0]] = g[0]
-        tup[_idx[1]] = g[1]
-        grid.append(tup)
+        pt_incls = pt_inclusion(vertices[::-1])
+    _grid = [p for p in raw_pts if pt_incls.test_inside(p) > 0]
+    grid = [p.to_list() + grid_dir.to_list() for p in _grid]
     return grid
 
 
@@ -600,7 +575,7 @@ def pcomb(inputs):
     cmd += " > %s.hdr" % (os.path.join(out_dir, img_name))
     sprun(cmd)
 
-def dctsop(inp, out, nproc=1):
+def dctsop(inputs, out_dir, nproc=1):
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
     nproc = mp.cpu_count() if nproc is None else nproc
@@ -669,7 +644,7 @@ def dctimestep(input_list):
         str_count = len(img.split('.hdr')[0])  # figure out unix %0d string
         appendi = r"%0"+"%sd.hdr" % (str_count)
         new_inp_dir = [os.path.join(inputs[0], appendi), combined]
-        cmd = "dctimestep %s %s' > %s.hdr" \
+        cmd = "dctimestep -oc %s %s' > %s.hdr" \
             % (' '.join(new_inp_dir), sky, out_path)
 
     else:

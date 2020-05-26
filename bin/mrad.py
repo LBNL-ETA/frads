@@ -5,13 +5,17 @@ T.Wang
 """
 
 import argparse
+from configparser import ConfigParser
 import logging
 import shutil
 from frads import mtxmethod
+import pdb
 
 
 def main(cfgpath):
-    setup = mtxmethod.Prepare(cfgpath)
+    cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
+    cfg.read(cfgpath)
+    setup = mtxmethod.Prepare(cfg)
     mrad = mtxmethod.MTXmethod(setup)
     ncp_shade = setup.model['ncp_shade']
     if setup.model['bsdf'] is None:
