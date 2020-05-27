@@ -11,7 +11,6 @@ from frads import mfacade, radgeom, room
 from frads import radutil, radmtx, makesky
 import multiprocessing as mp
 import logging
-import pdb
 
 logger = logging.getLogger('frads.mtxmethod')
 
@@ -497,12 +496,11 @@ class Prepare(object):
         glow_mat = {'modifier':'void', 'type':'glow',
                     'identifier':'glowing', 'str_args':'0',
                     'int_arg':'0', 'real_args':'4 1 1 1 0'}
-        if black_mat not in mat_prims:
-            mat_prims.append(black_mat)
-        if glow_mat not in mat_prims:
-            mat_prims.append(glow_mat)
         with open(self.materialpath, 'a') as wtr:
-            [wtr.write(radutil.put_primitive(prim)) for prim in mat_prims]
+            if black_mat not in mat_prims:
+                wtr.write(radutil.put_primitive(black_mat))
+            if glow_mat not in mat_prims:
+                wtr.write(radutil.put_primitive(glow_mat))
         self.scene_prims = []
         for spath in self.scenepath:
             with open(spath) as rdr:
