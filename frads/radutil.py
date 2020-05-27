@@ -164,8 +164,8 @@ def put_primitive(prim):
     if type(prim) is str:
         ostring = prim + os.linesep
     else:
-        ostring = "{modifier} {type} {identifier}\
-        \n{str_args}\n{int_arg}\n{real_args}\n\n".format(**prim)
+        ostring = "\n{modifier} {type} {identifier}\
+        \n{str_args}\n{int_arg}\n{real_args}\n".format(**prim)
     return ostring
 
 def samp_dir(plist):
