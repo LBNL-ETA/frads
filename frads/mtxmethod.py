@@ -173,9 +173,12 @@ class MTXmethod(object):
                     self.imgmult(self.vvmxs[vu+wname], self.bsdf[wname], self.dmxs[wname],
                               self.smxpath, odir=_vrespath)
                     vresl.append(_vrespath)
-                [vresl.insert(i*2-1, '+') for i in range(1, len(vresl)+1)]
-                opath = os.path.join(self.resdir, f'{vu}_3ph')
-                radutil.pcombop(vresl, opath)
+                if len(self.window_prims)>1:
+                    [vresl.insert(i*2-1, '+') for i in range(1, len(vresl)+1)]
+                    opath = os.path.join(self.resdir, f'{vu}_3ph')
+                    radutil.pcombop(vresl, opath)
+                else:
+                    opath = vresl[0]
                 ofiles = [os.path.join(opath, f) for f in sorted(os.listdir(opath)) if
                           f.endswith('.hdr')]
                 [os.rename(ofiles[idx], os.path.join(opath, self.dts[idx]+'.hdr'))
