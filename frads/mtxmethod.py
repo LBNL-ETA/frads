@@ -321,7 +321,10 @@ class MTXmethod(object):
             for vu in self.sndr_vus:
                 self.map1_paths[vu] = os.path.join(self.mtxdir, f'map1_{vu}.hdr')
                 self.map2_paths[vu] = os.path.join(self.mtxdir, f'map2_{vu}.hdr')
-                vu_str = radutil.opt2str(self.sndr_vus[vu].sender)
+                vdict = self.sndr_vus[vu].sender
+                vdict.pop('c', None)
+                vdict.pop('pj', None)
+                vu_str = radutil.opt2str(vdict)
                 cmd = f"rpict {vu_str} -ps 1 -ab 0 -av .31831 .31831 .31831 "
                 cmd += f"{self.map1_oct} > {self.map1_paths[vu]}"
                 radutil.sprun(cmd)

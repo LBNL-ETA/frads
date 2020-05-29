@@ -47,14 +47,12 @@ class Gensun(object):
     def gen_full(self):
         """Generate full treganza based sun sources."""
         out_lines = []
-        mod_lines = []
         for i in range(1, self.runlen):
             dirs = self.rsrc.dir_calc(i)
             line = f"void light sol{i} 0 0 3 1 1 1 sol{i} "
             line += "source sun 0 0 4 {:.6g} {:.6g} {:.6g} 0.533".format(*dirs)
             out_lines.append(line)
-            mod_lines.append(f'sol{i}')
-        return LSEP.join(out_lines)+LSEP, LSEP.join(mod_lines)+LSEP
+        return LSEP.join(out_lines)+LSEP
 
     def gen_cull(self, smx_path=None, window_paths=None):
         """Generate culled sun sources based on window orientation and climate based
@@ -79,7 +77,6 @@ class Gensun(object):
         else:
             dtot = [1] * self.runlen
         out_lines = []
-        mod_lines = []
         for i in range(1, self.runlen):
             dirs = self.rsrc.dir_calc(i)
             if dtot[i - 1] > 0:
@@ -93,8 +90,7 @@ class Gensun(object):
             line = f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} "
             line += "source sun 0 0 4 {:.6g} {:.6g} {:.6g} 0.533".format(*dirs)
             out_lines.append(line)
-            mod_lines.append(f'sol{i}')
-        return LSEP.join(out_lines), LSEP.join(mod_lines)
+        return LSEP.join(out_lines)
 
 
 def epw2sunmtx(epw_path):
