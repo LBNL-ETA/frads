@@ -147,16 +147,15 @@ class Receiver(object):
         """
         gensun = makesky.Gensun(int(basis[-1]))
         if (smx_path is None) and (window_paths is None):
-            str_repr, mod_lines = gensun.gen_full()
+            str_repr = gensun.gen_full()
         else:
-            str_repr, mod_lines = gensun.gen_cull(smx_path=smx_path,
-                                                  window_paths=window_paths)
+            str_repr = gensun.gen_cull(smx_path=smx_path, window_paths=window_paths)
         fd, path = tf.mkstemp(prefix='sun', dir=tmpdir)
         mfd, modifier = tf.mkstemp(prefix='mod', dir=tmpdir)
         with open(path, 'w') as wtr:
             wtr.write(str_repr)
         with open(modifier, 'w') as wtr:
-            wtr.write(mod_lines)
+            wtr.write(gensun.mod_str)
         return cls(path=path, receiver=str_repr, basis=basis, modifier=modifier)
 
     @classmethod
