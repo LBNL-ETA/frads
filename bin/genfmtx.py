@@ -9,6 +9,7 @@ import tempfile as tf
 import shutil
 import os
 import subprocess as sp
+import pdb
 
 def genfmtx_args(parser):
     parser.add_argument('-w', required=True, help='Window files')
@@ -24,10 +25,17 @@ def genfmtx_args(parser):
     parser.add_argument('-env', nargs='+', default=[], help='Environment file paths')
     return parser
 
-def klems_wrap(inp, out):
+def klems_wrap(out, out2, inp, basis):
     """prepare wrapping for Klems basis."""
     cmd = f"rmtxop -fa -t -c .265 .67 .065 {inp} | getinfo - > {out}"
     sp.run(cmd, shell=True)
+    basis_dict = {'kq':'Klems Quarter', 'kh':'Klems Half', 'kf':'Klems Full'}
+    coeff = radutil.angle_basis_coeff(basis_dict[basis])
+    with open(out, 'r') as rdr:
+        rows = [map(float, l.split()) for l in rdr.readlines()]
+    res = [[str(val/c) for val in row] for row, c in zip(rows, coeff)]
+    with open(out2, 'w') as wtr:
+        [wtr.write('\t'.join(row)+'\n') for row in res]
 
 def main(**kwargs):
     with open(kwargs['w']) as rdr:
@@ -102,11 +110,14 @@ def main(**kwargs):
             _direc = radutil.basename(mtx).split('_')[-1][:2]
             mtxname = radutil.basename(mtx)
             if mtxname.startswith(oname):
-                vis_dict[_direc] = os.path.join(dirname, f"vis_{_direc}")
-                klems_wrap(mtx, vis_dict[_direc])
+                #vis_dict[_direc] = os.path.join(dirname, f"_vis_{_direc}")
+                vis_dict[_direc] = os.path.join(td, f"vis_{_direc}")
+                out2 = os.path.join(dirname, f"vis_{_direc}")
+                klems_wrap(vis_dict[_direc], out2, mtx, kwargs['ss'])
             if mtxname.startswith('_solar_'):
-                sol_dict[_direc] = os.path.join(dirname, f"sol_{_direc}")
-                klems_wrap(mtx, sol_dict[_direc])
+                sol_dict[_direc] = os.path.join(td, f"sol_{_direc}")
+                out2 = os.path.join(dirname, f"sol_{_direc}")
+                klems_wrap(sol_dict[_direc], out2, mtx, kwargs['ss'])
         cmd = f"wrapBSDF -a {kwargs['ss']} -c -s Visible "
         cmd += ' '.join([f"-{key} {vis_dict[key]}" for key in vis_dict])
         cmd += ' -s Solar '

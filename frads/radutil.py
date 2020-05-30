@@ -294,8 +294,8 @@ def parse_idf(content):
 
 def lambda_calc(theta_lr, theta_up, nphi):
     """."""
-    return ((math.sin(math.pi / 180 * theta_up)**2 -
-             math.sin(math.pi / 180 * theta_lr)**2) * math.pi / nphi)
+    return ((math.cos(math.pi / 180 * theta_lr)**2 -
+             math.cos(math.pi / 180 * theta_up)**2) * math.pi / nphi)
 
 
 def angle_basis_coeff(basis):
@@ -727,10 +727,10 @@ def combine_mtx(mtxs, out_dir):
 
 def sprun(cmd):
     logger.debug(cmd)
-    sp.run(cmd, shell=True)
+    sp.run(cmd, shell=True, check=True)
 
 def spcheckout(cmd):
     logger.debug(cmd)
-    return sp.run(cmd, check=True, shell=True, stdout=sp.PIPE).stdout.decode()
+    return sp.run(cmd, check=True, shell=True, capture_output=True).stdout.decode()
 
 
