@@ -395,8 +395,13 @@ class MTXmethod(object):
                 res3 = tf.mkdtemp(dir=self.td)
                 res3di = tf.mkdtemp(dir=self.td)
                 res3d = tf.mkdtemp(dir=self.td)
-                radutil.pcombop(vresl, res3)
-                radutil.pcombop(vdresl, res3di)
+                if len(self.window_prims)>1:
+                    [vresl.insert(i*2-1, '+') for i in range(1, len(vresl)+1)]
+                    radutil.pcombop(vresl, res3)
+                    radutil.pcombop(vdresl, res3di)
+                else:
+                    res3 = vresl[0]
+                    res3di = vdresl[0]
                 radutil.pcombop([res3di, '*', self.map1_paths[vu]], res3d)
                 radutil.pcombop([vrescdr, '*', self.map2_paths[vu], '+', vrescdf], vrescd)
                 opath = os.path.join(self.resdir, f"{vu}_5ph")
