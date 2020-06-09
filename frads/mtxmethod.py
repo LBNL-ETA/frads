@@ -16,8 +16,8 @@ logger = logging.getLogger('frads.mtxmethod')
 
 cfg_template = {
     'SimulationControl':{
-        'vmx_opt': None, 'fmx_opt': None, 'dmx_opt': None,
-        'dsmx_opt': None, 'cdsmx_opt': None, 'ray_count': 1,
+        'vmx_opt': 'kf -ab 1 -ad 512', 'fmx_opt': None, 'dmx_opt': 'r4 -ab 1 -ad 128 -c 2000',
+        'dsmx_opt': 'r4 -ab 3 -ad 262144 -lw 1e-9', 'cdsmx_opt': 'r6 -ab 1', 'ray_count': 1,
         'pixel_jitter': .7, 'separate_direct': False, 'nprocess': 1,
     }, 'FileStructure':{
         'base': '', 'matrices': 'Matrices', 'results': 'Results',
@@ -53,7 +53,7 @@ class MTXmethod(object):
         # get directories
         self.mtxdir = config.mtxdir
         self.resdir = os.path.join(config.filestrct['base'], config.filestrct['results'])
-        # get paths
+        get paths
         self.materialpath = config.materialpath
         self.envpath = config.scenepath
         self.envpath.insert(0, self.materialpath)
@@ -75,7 +75,6 @@ class MTXmethod(object):
                 self.sndr_vus[view] = radmtx.Sender.as_view(
                     vu_dict=config.viewdicts[view], ray_cnt=self.ray_cnt, tmpdir=self.td,
                     xres=config.viewdicts[view]['x'], yres=config.viewdicts[view]['y'])
-        self.gen_smx(self.dmx_basis)
         self.rcvr_sky = radmtx.Receiver.as_sky(basis=self.dmx_basis, tmpdir=self.td)
 
     def prep_2phase(self):
@@ -92,6 +91,7 @@ class MTXmethod(object):
                                 env=env, opt=self.dsmx_opt, out=self.vdsmxs[vu])
 
     def calc_2phase(self):
+        self.gen_smx(self.dmx_basis)
         if self.sensor_pts is not None:
             res = self.mtxmult('dctimestep', self.pdsmx, self.smxpath).splitlines()
             respath = os.path.join(self.resdir, 'pdsmx.txt')
@@ -150,6 +150,7 @@ class MTXmethod(object):
                                 env=self.envpath, opt=self.vmx_opt, out=None)
 
     def calc_3phase(self):
+        self.gen_smx(self.dmx_basis)
         if self.sensor_pts is not None:
             self.logger.info("Computing for point grid results")
             presl = []
@@ -416,18 +417,21 @@ class MTXmethod(object):
         sun_only = ' -d' if direct else ''
         _five = ' -5 .533' if onesun else ''
         oname = radutil.basename(self.wea_path)
-        self.smxpath = os.path.join(self.mtxdir, oname+'.smx')
-        self.smxdpath = os.path.join(self.mtxdir, oname+'_d.smx')
-        self.smxd6path = os.path.join(self.mtxdir, oname+'_d6.smx')
-        cmd = f"gendaymtx -ofd -m {mf[-1]}{sun_only}{_five} {self.wea_path}"
+        cmd = f"gendaymtx -of -m {mf[-1]}{sun_only}{_five}".split()
+        cmd.append(self.wea_path)
+        res = radutil.spcheckout(cmd)
         if direct:
             if onesun:
-                cmd += f" > {self.smxd6path}"
+                self.smxd6path = os.path.join(self.mtxdir, oname+'_d6.smx')
+                opath = self.smxd6path
             else:
-                cmd += f" > {self.smxdpath}"
+                self.smxdpath = os.path.join(self.mtxdir, oname+'_d.smx')
+                opath = self.smxdpath
         else:
-            cmd += f" > {self.smxpath}"
-        radutil.sprun(cmd)
+            self.smxpath = os.path.join(self.mtxdir, oname+'.smx')
+            opath = self.smxpath
+        with open(opath, 'wb') as wtr:
+            wtr.write(res)
 
     def mtxmult(self, *mtx):
         cmd = f"dctimestep {' '.join(mtx)} "
@@ -480,20 +484,22 @@ class Prepare(object):
                           for obj in self.model['scene'].split()]
         self.windowpath = [os.path.join(objdir, obj)
                            for obj in self.model['windows'].split()]
-        self.maccfspath = [os.path.join(objdir, obj)
-                           for obj in self.model['sunBSDF'].split()]
         self.viewdicts = {}
         views = [ent for ent in self.raysenders if ent.startswith('view')]
         if len(views) > 0:
             for view in views:
-                vdict = radutil.parse_vu(self.raysenders[view])
-                if 'vf' in vdict:
-                    with open(vdict['vf']) as rdr:
-                        vdict.update(radutil.parse_vu(rdr.read()))
-                self.viewdicts[view] = vdict
-        if self.model['bsdf'] is not None:
+                if self.raysenders[view] is not None:
+                    vdict = radutil.parse_vu(self.raysenders[view])
+                    if 'vf' in vdict:
+                        with open(vdict['vf']) as rdr:
+                            vdict.update(radutil.parse_vu(rdr.read()))
+                    self.viewdicts[view] = vdict
+        if self.model['BSDF'] is not None:
             self.bsdfpath = [os.path.join(self.mtxdir, bsdf)
                              for bsdf in self.model['bsdf'].split()]
+        if self.model['sunBSDF'] is not None:
+            self.maccfspath = [os.path.join(objdir, obj)
+                               for obj in self.model['sunBSDF'].split()]
         else:
             self.bsdfpath = None
 
@@ -521,7 +527,8 @@ class Prepare(object):
             wname = radutil.basename(self.windowpath[idx])
             with open(self.windowpath[idx]) as rdr:
                 self.window_prims[wname] = radutil.parse_primitive(rdr.readlines())
-            self.bsdf[wname] = self.bsdfpath[idx]
+            if self.bsdfpath is not None:
+                self.bsdf[wname] = self.bsdfpath[idx]
         if self.raysenders['grid_surface'] is None:
             self.sensor_pts = None
         else:
@@ -582,7 +589,7 @@ class Prepare(object):
             os.rename(epw.fname, epw_path)
             wea = makesky.epw2wea(
                 epw=epw_path, dh=self.site.getboolean('daylight_hours_only'),
-                sh=float(self.site['start_hour']), eh=float(self.site['end_hour']))
+                sh=self.site['start_hour'], eh=self.site['end_hour'])
             self.wea_path = os.path.join(
                 self.filestrct['base'], self.filestrct['resources'], radutil.basename(epw.fname) + '.wea')
             with open(self.wea_path, 'w') as wtr:
