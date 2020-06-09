@@ -731,6 +731,6 @@ def sprun(cmd):
 
 def spcheckout(cmd):
     logger.debug(cmd)
-    return sp.run(cmd, check=True, shell=True, stdout=sp.PIPE).stdout.decode()
+    return sp.run(cmd, check=True, stdout=sp.PIPE).stdout.decode()
 
 
