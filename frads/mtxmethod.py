@@ -53,7 +53,6 @@ class MTXmethod(object):
         # get directories
         self.mtxdir = config.mtxdir
         self.resdir = os.path.join(config.filestrct['base'], config.filestrct['results'])
-        get paths
         self.materialpath = config.materialpath
         self.envpath = config.scenepath
         self.envpath.insert(0, self.materialpath)
