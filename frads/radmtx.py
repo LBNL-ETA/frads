@@ -12,6 +12,7 @@ import subprocess as sp
 import tempfile as tf
 from frads import radutil
 import logging
+import pdb
 
 logger = logging.getLogger('frads.radmtx')
 
@@ -63,7 +64,7 @@ class Sender(object):
         """
         assert None not in (xres, yres), "Need to specify resolution"
         vcmd = f"vwrays {radutil.opt2str(vu_dict)} -x {xres} -y {yres} -d"
-        res_eval = radutil.spcheckout(vcmd).split()
+        res_eval = radutil.spcheckout(vcmd.split()).decode().split()
         xres, yres = res_eval[1], res_eval[3]
         logger.info(f"Changed resolution to {xres} {yres}")
         cmd = f"vwrays -ff -x {xres} -y {yres} "
@@ -226,22 +227,22 @@ def prepare_surface(*, prims, basis, left, offset, source, out):
 
 def rfluxmtx(*, sender, receiver, env, out, opt):
     """Calling rfluxmtx to generate the matrices."""
+    cmd = ['rfluxmtx'] + opt.split()
     if sender.form == 's':
-        cmd = f"rfluxmtx {opt} {sender.path} {receiver.path} {' '.join(env)}"
+        cmd.extend([sender.path, receiver.path])
+        cmd.extend(env)
         if out is not None:
             cmd += f" > {out}"
-    else:
-        cmd = f"rfluxmtx < {sender.path} {opt} "
-        if sender.form == 'p':
-            cmd += f"-I+ -faf -y {sender.yres} " #force illuminance calc
-        elif sender.form == 'v':
-            cmd += f"-ffc -x {sender.xres} -y {sender.yres} -ld- "
-            if out is not None:
-                radutil.mkdir_p(out)
-                out = os.path.join(out, '%04d.hdr')
-                cmd += f"-o {out} "
-        cmd += f"- {receiver.path} {' '.join(env)}"
-    radutil.sprun(cmd)
+    elif sender.form == 'p':
+        cmd.extend(['-I+', '-faf', '-y', str(sender.yres), '-', receiver.path])
+    elif sender.form == 'v':
+        cmd.extend(["-ffc", "-x", sender.xres, "-y", sender.yres, "-ld-"])
+        if out is not None:
+            radutil.mkdir_p(out)
+            out = os.path.join(out, '%04d.hdr')
+        cmd.extend(["-o", out, '-', receiver.path])
+    cmd.extend(env)
+    return radutil.spcheckout(cmd, input=sender.sender.encode())
 
 def rcvr_oct(receiver, env):
     """Generate an octree of the environment and the receiver."""
