@@ -18,7 +18,7 @@ cfg_template = {
     'SimulationControl':{
         'vmx_opt': 'kf -ab 1 -ad 512', 'fmx_opt': None, 'dmx_opt': 'r4 -ab 1 -ad 128 -c 2000',
         'dsmx_opt': 'r4 -ab 3 -ad 262144 -lw 1e-9', 'cdsmx_opt': 'r6 -ab 1', 'ray_count': 1,
-        'pixel_jitter': .7, 'separate_direct': False, 'nprocess': 1,
+        'pixel_jitter': .7, 'separate_direct': False, 'nprocess': 1, 'overwrite':True
     }, 'FileStructure':{
         'base': '', 'matrices': 'Matrices', 'results': 'Results',
         'objects': 'Objects', 'resources': 'Resources',
@@ -50,6 +50,7 @@ class MTXmethod(object):
         self.cdsmx_opt = config.simctrl['cdsmx_opt'][3:] + f' -n {self.nproc}'
         self.cdsmx_basis = config.simctrl['cdsmx_opt'][:2]
         self.ray_cnt = int(config.simctrl['ray_count'])
+        self.overwrite = config.simctrl.getboolean('overwrite')
         # get directories
         self.mtxdir = config.mtxdir
         self.resdir = os.path.join(config.filestrct['base'], config.filestrct['results'])
@@ -80,8 +81,11 @@ class MTXmethod(object):
         env = self.envpath + self.windowpath
         if self.sensor_pts is not None:
             self.pdsmx = os.path.join(self.mtxdir, 'pdsmx.mtx')
-            radmtx.rfluxmtx(sender=sndr_pts, receiver=self.rcvr_sky,
-                            env=env, out=self.pdsmx, opt=self.dsmx_opt)
+            if not os.path.isfile(self.pdsmx) or self.overwrite:
+                res = radmtx.rfluxmtx(sender=self.sndr_pts, receiver=self.rcvr_sky,
+                                env=env, out=self.pdsmx, opt=self.dsmx_opt)
+                with open(self.pdsmx, 'w') as wtr:
+                    wtr.write(res.decode())
         if len(self.sndr_vus) > 0:
             self.vdsmxs = {}
             for vu in self.sndr_vus:
@@ -123,8 +127,9 @@ class MTXmethod(object):
             self.dmxs[wname] = os.path.join(self.mtxdir, f'dmx_{wname}.mtx')
             sndr_wndw = radmtx.Sender.as_surface(tmpdir=self.td,
                 prim_list=wndw_prim, basis=self.vmx_basis, offset=None)
-            radmtx.rfluxmtx(sender=sndr_wndw, receiver=self.rcvr_sky,
-                       env=self.envpath, out=self.dmxs[wname], opt=self.dmx_opt)
+            dmx_res = radmtx.rfluxmtx(sender=sndr_wndw, receiver=self.rcvr_sky,
+                       env=self.envpath, out=None, opt=self.dmx_opt)
+            with open(self.dmxs[wname], 'wb') as wtr: wtr.write(dmx_res)
             if self.sensor_pts is not None:
                 self.pvmxs[wname] = os.path.join(self.mtxdir, f'pvmx_{wname}.mtx')
                 prcvr_wndws += radmtx.Receiver.as_surface(
@@ -140,13 +145,13 @@ class MTXmethod(object):
                         offset=None, left=None, source='glow', out=self.vvmxs[vu+wname])
         if self.sensor_pts is not None:
             self.logger.info("Generating view matrix for sensor point")
-            radmtx.rfluxmtx(sender=self.sndr_pts, receiver=prcvr_wndws,
+            res = radmtx.rfluxmtx(sender=self.sndr_pts, receiver=prcvr_wndws,
                             env=self.envpath, opt=self.vmx_opt, out=None)
         if len(self.sndr_vus) > 0:
             self.logger.info(f"Generating view matrix for {vu}")
             for vu in self.sndr_vus:
-                radmtx.rfluxmtx(sender=self.sndr_vus[vu], receiver=vrcvr_wndws[vu],
-                                env=self.envpath, opt=self.vmx_opt, out=None)
+                res = radmtx.rfluxmtx(sender=self.sndr_vus[vu], receiver=vrcvr_wndws[vu],
+                                      env=self.envpath, opt=self.vmx_opt, out=None)
 
     def calc_3phase(self):
         self.gen_smx(self.dmx_basis)

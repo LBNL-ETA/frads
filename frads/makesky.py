@@ -227,10 +227,10 @@ def sky_cont(mon, day, hrs, lat, lon, mer, dni, dhi, year=None, grefl=.2, spect=
     if year is not None:
         out_str += f'-y {year} '
     out_str += f'-W {dni} {dhi} -g {grefl} -O {spect}{LSEP*2}'
-    out_str += 'skyfunc glow skyglow 0 0 4 1 1 1 0{LSEP*2}'
-    out_str += 'skyglow source sky 0 0 4 0 0 1 180{LSEP*2}'
-    out_str += 'skyfunc glow groundglow 0 0 4 1 1 1 0{LSEP*2}'
-    out_str += 'groundglow source ground 0 0 4 0 0 -1 180{LSEP}'
+    out_str += f'skyfunc glow skyglow 0 0 4 1 1 1 0{LSEP*2}'
+    out_str += f'skyglow source sky 0 0 4 0 0 1 180{LSEP*2}'
+    out_str += f'skyfunc glow groundglow 0 0 4 1 1 1 0{LSEP*2}'
+    out_str += f'groundglow source ground 0 0 4 0 0 -1 180{LSEP}'
     return out_str
 
 def solar_angle(*, lat, lon, mer, month, day, hour):
@@ -267,12 +267,10 @@ class epw2wea(object):
         self.read_epw()  # read-in epw/tmy data
 
         if sh is not None:
-            self.sh = sh
-            self.s_hour()
+            self.s_hour(float(sh))
 
         if eh is not None:
-            self.eh = eh
-            self.e_hour()
+            self.e_hour(float(eh))
 
         if dh:
             self.daylight()  # filter out non-daylight hours if asked
@@ -294,18 +292,16 @@ class epw2wea(object):
                       if (float(li.split()[3]) > 0) and (float(li.split()[4]) > 0)]
         self.string = "\n".join(new_string)
 
-    def s_hour(self):
+    def s_hour(self, sh):
         """."""
         string_line = self.string.splitlines()
-        new_string = [li for li in string_line if float(
-            li.split()[2]) >= self.sh]
+        new_string = [li for li in string_line if float(li.split()[2]) >= sh]
         self.string = "\n".join(new_string)
 
-    def e_hour(self):
+    def e_hour(self, eh):
         """."""
         string_line = self.string.splitlines()
-        new_string = [li for li in string_line if float(
-            li.split()[2]) <= self.eh]
+        new_string = [li for li in string_line if float(li.split()[2]) <= eh]
         self.string = "\n".join(new_string)
 
     def read_epw(self):

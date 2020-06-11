@@ -230,17 +230,15 @@ def rfluxmtx(*, sender, receiver, env, out, opt):
     cmd = ['rfluxmtx'] + opt.split()
     if sender.form == 's':
         cmd.extend([sender.path, receiver.path])
-        cmd.extend(env)
-        if out is not None:
-            cmd += f" > {out}"
     elif sender.form == 'p':
-        cmd.extend(['-I+', '-faf', '-y', str(sender.yres), '-', receiver.path])
+        cmd.extend(['-I+', '-faa', '-y', str(sender.yres), '-', receiver.path])
     elif sender.form == 'v':
         cmd.extend(["-ffc", "-x", sender.xres, "-y", sender.yres, "-ld-"])
         if out is not None:
             radutil.mkdir_p(out)
             out = os.path.join(out, '%04d.hdr')
-        cmd.extend(["-o", out, '-', receiver.path])
+            cmd.extend(["-o", out])
+        cmd.extend(['-', receiver.path])
     cmd.extend(env)
     return radutil.spcheckout(cmd, input=sender.sender.encode())
 

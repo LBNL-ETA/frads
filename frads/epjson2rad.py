@@ -16,6 +16,7 @@ class epJSON2Rad(object):
         self.checkout_fene(epjs)
         self.get_material_prims(epjs)
         self.zones = self.get_zones(epjs)
+        self.site = self.get_site(epjs)
 
     def get_thickness(self, layers):
         """Get thickness from construction."""
@@ -40,7 +41,7 @@ class epJSON2Rad(object):
         return uniq
 
 
-    def get_material(self, epjs_mat):
+    def _material(self, epjs_mat):
         mat_prims = {}
         for key, val in epjs_mat.items():
             mat_prims[key] = {'modifier':'void', 'int_arg':'0',
@@ -59,33 +60,68 @@ class epJSON2Rad(object):
                 mat_prims[key]['thickness'] = 0
         return mat_prims
 
-    def get_wndw_material(self, epjs_wndw_mat):
+    def _material_nomass(self, epjs_mat):
+        mat_prims = {}
+        for key, val in epjs_mat.items():
+            mat_prims[key] = {'modifier':'void', 'int_arg':'0',
+                              'str_args':'0', 'type':'plastic',
+                              'identifier':key.replace(' ','_')}
+            try:
+                refl = 1 - val['visible_absorptance']
+            except KeyError as ke:
+                raise Exception(ke, f"No visible absorptance defined for {key}")
+            mat_prims[key]['real_args'] = "5 {0:.2f} {0:.2f} {0:.2f} 0 0".format(refl)
+            mat_prims[key]['thickness'] = 0
+        return mat_prims
+
+    def _windowmaterial_simpleglazing(self, epjs_wndw_mat):
         wndw_mat_prims = {}
         for key, val in epjs_wndw_mat.items():
             try:
                 tvis = val['visible_transmittance']
-            except KeyError:
-                print(f"No visible transmittance defined for {key}, assuming 60%")
-                tvis = 0.6
+            except KeyError as ke:
+                print(key)
+                raise ke
             wndw_mat_prims[key] = {'modifier':'void', 'type':'glass', 'int_arg':'0',
                               'str_args':'0', 'identifier':key.replace(' ','_'),
                               'real_args': "3 {0:.2f} {0:.2f} {0:.2f}".format(tvis)}
         return wndw_mat_prims
 
+    def _windowmaterial_glazing(self, epjs_wndw_mat):
+        wndw_mat_prims = {}
+        for key, val in epjs_wndw_mat.items():
+            tvis = val['visible_transmittance_at_normal_incidence']
+            tmis = ru.tmit2tmis(tvis)
+            wndw_mat_prims[key] = {'modifier':'void', 'type':'glass', 'int_arg':'0',
+                              'str_args':'0', 'identifier':key.replace(' ','_'),
+                              'real_args': "3 {0:.2f} {0:.2f} {0:.2f}".format(tmis)}
+        return wndw_mat_prims
+
+    def _windowmaterial_blind(self, blind_dict):
+        blind_prims = {}
+        for key, val in blind_dict.items():
+            _id = key.replace(' ','_')
+            back_beam_vis_refl = val['back_side_slat_beam_visible_reflectance']
+            back_diff_vis_refl = val['back_side_slat_diffuse_visible_reflectance']
+            front_beam_vis_refl = val['front_side_slat_beam_visible_reflectance']
+            front_diff_vis_refl = val['front_side_slat_diffuse_visible_reflectance']
+            slat_width = val['slat_width']
+            slat_thickness = val['slat_thickness']
+            slat_separation = val['slat_separation']
+            slat_angle = val['slat_angle']
+            blind_prims[key] = {'modifier':'void', 'type':'plastic', 'identifier':_id,
+                                'int_arg':'0','str_args':'0',
+                                'real_args':'5 {0:.2f} {0:.2f} {0:.2f} 0 0'.format(front_diff_vis_refl)}
+            genblinds_cmd = f"genblinds {_id} {_id} {slat_width} 3 {20*slat_separation} {slat_angle}"
+        return blind_prims
+
+
     def get_material_prims(self, epjs):
+        mkeys = [key for key in epjs.keys() if 'material' in key.split(':')[0].lower()]
         self.mat_prims = {}
-        try:
-            self.mat_prims.update(self.get_material(epjs['Material']))
-        except KeyError as ke:
-            logger.info(ke, ", moving on")
-        try:
-            self.mat_prims.update(self.get_material(epjs['Material:NoMass']))
-        except KeyError as ke:
-            logger.info(ke, ", moving on")
-        try:
-            self.mat_prims.update(self.get_wndw_material(epjs['WindowMaterial:SimpleGlazingSystem']))
-        except KeyError as ke:
-            logger.info(ke, ", moving on")
+        for key in mkeys:
+            tocall = getattr(self, f"_{key.replace(':', '_')}".lower())
+            self.mat_prims.update(tocall(epjs[key]))
 
     def checkout_fene(self, epjs):
         try:
@@ -143,7 +179,7 @@ class epJSON2Rad(object):
         for zn in epjs['Zone']:
             zone_srfs = {k:v for k,v in opaque_srfs.items() if v['zone_name'] == zn}
             if self.check_ext_window(zone_srfs):
-                zone = {'Wall':{}, 'Floor':{}, 'Ceiling':{}, 'Window':{}}
+                zone = {'Wall':{}, 'Floor':{}, 'Ceiling':{}, 'Window':{}, 'Roof':{}}
                 wsrf_prims = []
                 for sn in zone_srfs:
                     surface = zone_srfs[sn]
@@ -177,5 +213,12 @@ class epJSON2Rad(object):
                     zone[srf_type][sn] = ru.polygon2prim(srf_polygon, inner_layer, sn)
                 ext_zones[zn] = self.check_srf_normal(zone)
         return ext_zones
+
+    def get_site(self, epjs):
+        site = epjs['Site:Location']
+        for key, val in site.items():
+            return val
+
+
 
 
