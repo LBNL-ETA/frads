@@ -12,7 +12,6 @@ import subprocess as sp
 import tempfile as tf
 from frads import radutil
 import logging
-import pdb
 
 logger = logging.getLogger('frads.radmtx')
 
@@ -67,7 +66,7 @@ class Sender(object):
         res_eval = radutil.spcheckout(vcmd.split()).decode().split()
         xres, yres = res_eval[1], res_eval[3]
         logger.info(f"Changed resolution to {xres} {yres}")
-        cmd = f"vwrays -ff -x {xres} -y {yres}"
+        cmd = f"vwrays -ff -x {xres} -y {yres} "
         if ray_cnt > 1:
             vu_dict['c'] = ray_cnt
             vu_dict['pj'] = 0.7 # placeholder
@@ -75,9 +74,9 @@ class Sender(object):
         cmd += radutil.opt2str(vu_dict)
         if vu_dict['vt'] == 'a':
             cmd += "|" + Sender.crop2circle(ray_cnt, xres)
-        vrays = sp.run(cmd, shell=True, check=True, stdout=sp.PIPE).stdout.decode()
+        vrays = sp.run(cmd, shell=True, check=True, stdout=sp.PIPE).stdout
         fd, path = tf.mkstemp(prefix='vufile', dir=tmpdir)
-        with open(path, 'w') as wtr:
+        with open(path, 'wb') as wtr:
             wtr.write(vrays)
         return cls(form='v', path=path, sender=vrays, xres=xres, yres=yres)
 
@@ -231,8 +230,10 @@ def rfluxmtx(*, sender, receiver, env, out, opt):
     cmd = ['rfluxmtx'] + opt.split()
     if sender.form == 's':
         cmd.extend([sender.path, receiver.path])
+        stdin = None
     elif sender.form == 'p':
         cmd.extend(['-I+', '-faa', '-y', str(sender.yres), '-', receiver.path])
+        stdin = sender.sender.encode()
     elif sender.form == 'v':
         cmd.extend(["-ffc", "-x", sender.xres, "-y", sender.yres, "-ld-"])
         if out is not None:
@@ -240,8 +241,9 @@ def rfluxmtx(*, sender, receiver, env, out, opt):
             out = os.path.join(out, '%04d.hdr')
             cmd.extend(["-o", out])
         cmd.extend(['-', receiver.path])
+        stdin = sender.sender
     cmd.extend(env)
-    return radutil.spcheckout(cmd, input=sender.sender.encode())
+    return radutil.spcheckout(cmd, input=stdin)
 
 def rcvr_oct(receiver, env):
     """Generate an octree of the environment and the receiver."""
@@ -266,7 +268,6 @@ def rcontrib(*, sender, receiver, env, out, opt):
 
 
 if __name__ == '__main__':
-    import pdb
     with open('test.vf') as rdr:
         vuline = rdr.read()
     vu_dict = radutil.parse_vu(vuline)
