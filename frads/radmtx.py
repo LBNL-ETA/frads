@@ -67,18 +67,22 @@ class Sender(object):
         res_eval = radutil.spcheckout(vcmd.split()).decode().split()
         xres, yres = res_eval[1], res_eval[3]
         logger.info(f"Changed resolution to {xres} {yres}")
-        cmd = f"vwrays -ff -x {xres} -y {yres} "
+        cmd = ["vwrays", "-ff", "-x", xres, "-y", yres]
         if ray_cnt > 1:
             vu_dict['c'] = ray_cnt
             vu_dict['pj'] = 0.7 # placeholder
         logger.debug(f"Ray count is {ray_cnt}")
-        cmd += radutil.opt2str(vu_dict)
+        cmd.extend(radutil.opt2str(vu_dict).split())
+        vrays1 = radutil.spcheckout(cmd)
         if vu_dict['vt'] == 'a':
-            cmd += Sender.crop2circle(ray_cnt, xres)
+            cmd2 =  Sender.crop2circle(ray_cnt, xres).split()
+            vrays = radutil.spcheckout(cmd2, intput=vrays1)
+        else:
+            vrays = vrays1
         fd, path = tf.mkstemp(prefix='vufile', dir=tmpdir)
-        cmd += f"> {path}"
-        radutil.sprun(cmd)
-        return cls(form='v', path=path, sender=vu_dict, xres=xres, yres=yres)
+        with open(path, 'w') as wtr:
+            wtr.write(vrays)
+        return cls(form='v', path=path, sender=vrays, xres=xres, yres=yres)
 
     @classmethod
     def as_pts(cls, *, pts_list, ray_cnt, tmpdir):
@@ -102,7 +106,7 @@ class Sender(object):
             ray_cnt(int): ray count;
             xres(int): resolution of the square image;
         """
-        cmd = "| rcalc -if6 -of "
+        cmd = "rcalc -if6 -of "
         cmd += f'-e "DIM:{xres};CNT:{ray_cnt}" '
         cmd += '-e "pn=(recno-1)/CNT+.5" '
         cmd += '-e "frac(x):x-floor(x)" -e "xpos=frac(pn/DIM);ypos=pn/(DIM*DIM)"'
