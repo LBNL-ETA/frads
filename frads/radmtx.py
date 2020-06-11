@@ -67,18 +67,15 @@ class Sender(object):
         res_eval = radutil.spcheckout(vcmd.split()).decode().split()
         xres, yres = res_eval[1], res_eval[3]
         logger.info(f"Changed resolution to {xres} {yres}")
-        cmd = ["vwrays", "-ff", "-x", xres, "-y", yres]
+        cmd = f"vwrays -ff -x {xres} -y {yres}"
         if ray_cnt > 1:
             vu_dict['c'] = ray_cnt
             vu_dict['pj'] = 0.7 # placeholder
         logger.debug(f"Ray count is {ray_cnt}")
-        cmd.extend(radutil.opt2str(vu_dict).split())
-        vrays1 = radutil.spcheckout(cmd)
+        cmd += radutil.opt2str(vu_dict)
         if vu_dict['vt'] == 'a':
-            cmd2 =  Sender.crop2circle(ray_cnt, xres).split()
-            vrays = radutil.spcheckout(cmd2, intput=vrays1)
-        else:
-            vrays = vrays1
+            cmd += "|" + Sender.crop2circle(ray_cnt, xres)
+        vrays = sp.run(cmd, shell=True, check=True, stdout=sp.PIPE).stdout.decode()
         fd, path = tf.mkstemp(prefix='vufile', dir=tmpdir)
         with open(path, 'w') as wtr:
             wtr.write(vrays)
