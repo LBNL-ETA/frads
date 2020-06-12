@@ -70,6 +70,7 @@ class MTXmethod(object):
             self.sndr_pts = radmtx.Sender.as_pts(
                 pts_list=self.sensor_pts, ray_cnt=self.ray_cnt, tmpdir=self.td)
         self.sndr_vus = {}
+        self.viewdicts = config.viewdicts
         if len(config.viewdicts) > 0:
             for view in config.viewdicts:
                 self.sndr_vus[view] = radmtx.Sender.as_view(
@@ -273,10 +274,11 @@ class MTXmethod(object):
     def prep_5phase(self):
         self.prep_3phase()
         self.blacken_env()
+        self.gen_smx(self.dmx_basis)
         self.gen_smx(self.dmx_basis, direct=True)
         self.gen_smx(self.cdsmx_basis, onesun=True, direct=True)
         rcvr_sun = radmtx.Receiver.as_sun(
-            basis='r6', tmpdir=self.td, smx_path=self.smxpath,
+            basis='r6', tmpdir=self.td, smx_path=self.smxd6path,
             window_paths=self.windowpath)
         prcvr_wndws = radmtx.Receiver(
             path=None, receiver='', basis=self.vmx_basis, modifier=None)
@@ -326,7 +328,7 @@ class MTXmethod(object):
             for vu in self.sndr_vus:
                 self.map1_paths[vu] = os.path.join(self.mtxdir, f'map1_{vu}.hdr')
                 self.map2_paths[vu] = os.path.join(self.mtxdir, f'map2_{vu}.hdr')
-                vdict = self.sndr_vus[vu].sender
+                vdict = self.viewdicts[vu]
                 vdict.pop('c', None)
                 vdict.pop('pj', None)
                 vu_str = radutil.opt2str(vdict)
