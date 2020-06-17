@@ -579,14 +579,14 @@ class Prepare(object):
                 raw = rdr.read()
             sec = raw.split('{os.linesep*2}')
             header = sec[0]
-            lines = [l.split() for l in sec[1].splitines()]
+            lines = [l.split() for l in sec[1].splitlines()]
             self.dts = [f"{int(l[0]):02d}{int(l[1]):02d}_{int(float(l[2])):02d}30" for l in lines]
         else:
             if self.site['zipcode'] is not None:
                 epw = makesky.getEPW.from_zip(self.site['zipcode'])
                 self.site['lat'], self.site['lon'] = str(epw.lat), str(epw.lon)
             elif None not in (self.site['latitude'], self.site['longitude']):
-                epw = makesky.getEPW(self.site['latitude'], self.site['longitude'])
+                epw = makesky.getEPW(self.site['latitude'], -float(self.site['longitude']))
             else:
                 raise NameError("Not site info defined")
             self.logger.info(f"Downloaded {epw.fname}")
