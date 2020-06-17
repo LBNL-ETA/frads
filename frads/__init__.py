@@ -22,7 +22,7 @@ rad_version = sp.run(["rtrace", "-version"], check=True, stdout=sp.PIPE).stdout.
 if int(rad_version[0]) < 5:
     print(f"Radiance version {rad_version} detected, please upgrade")
 
-if not sys.platform.startswith('win')
+if not sys.platform.startswith('win'):
     import resource
     slimit, hlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
     if slimit < 10000 or hlimit < 10000:
