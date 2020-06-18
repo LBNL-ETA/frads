@@ -309,7 +309,6 @@ class epw2wea(object):
         """."""
         with open(self.epw, 'r', newline=os.linesep) as epw:
             raw = epw.readlines()  # read-in epw content
-        pdb.set_trace()
         epw_header = raw[0].split(',')
         content = raw[8:]
         string = ""

@@ -176,12 +176,14 @@ class MTXmethod(object):
                 self.logger.info(f"Computing for rendering results for {vu}")
                 vresl = []
                 for wname in self.window_prims:
-                    _vrespath = tf.mkdtemp(dir=self.td)
-                    self.imgmult(self.vvmxs[vu+wname], self.bsdf[wname], self.dmxs[wname],
+                    _vrespath = os.path.join(self.resdir, f'{vu}_{wname}')
+                    radutil.mkdir_p(_vrespath)
+                    cmd = self.imgmult(self.vvmxs[vu+wname], self.bsdf[wname], self.dmxs[wname],
                               self.smxpath, odir=_vrespath)
+                    radutil.sprun(cmd)
                     vresl.append(_vrespath)
                 opath = os.path.join(self.resdir, f'{vu}_3ph')
-                if len(self.window_prims)>1:
+                if len(vresl)>1:
                     [vresl.insert(i*2-1, '+') for i in range(1, len(vresl)+1)]
                     radutil.pcombop(vresl, opath)
                 else:
@@ -448,7 +450,7 @@ class MTXmethod(object):
         return cmd
 
     def imgmult(self, *mtx, odir):
-        cmd = f"dctimestep -oc -o {os.path.join(odir, '%04d.hdr')} {' '.join(mtx)}"
+        cmd = f"dctimestep -o {os.path.join(odir, '%04d.hdr')} {' '.join(mtx)}"
         return cmd
 
     def get_avgskv(self):
