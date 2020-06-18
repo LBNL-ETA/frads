@@ -8,6 +8,7 @@ import subprocess as sp
 import tempfile as tf
 import urllib.request
 from frads import radutil
+import pdb
 
 LSEP = os.linesep
 
@@ -306,8 +307,9 @@ class epw2wea(object):
 
     def read_epw(self):
         """."""
-        with open(self.epw, 'r') as epw:
+        with open(self.epw, 'r', newline=os.linesep) as epw:
             raw = epw.readlines()  # read-in epw content
+        pdb.set_trace()
         epw_header = raw[0].split(',')
         content = raw[8:]
         string = ""

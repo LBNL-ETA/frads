@@ -6,6 +6,7 @@ T.Wang
 
 import os
 import copy
+import shutil
 import tempfile as tf
 from frads import mfacade, radgeom, room
 from frads import radutil, radmtx, makesky
@@ -184,6 +185,8 @@ class MTXmethod(object):
                     [vresl.insert(i*2-1, '+') for i in range(1, len(vresl)+1)]
                     radutil.pcombop(vresl, opath)
                 else:
+                    if os.path.isdir(opath):
+                        shutil.rmtree(opath)
                     os.rename(vresl[0], opath)
                 ofiles = [os.path.join(opath, f) for f in sorted(os.listdir(opath)) if
                           f.endswith('.hdr')]
@@ -592,7 +595,10 @@ class Prepare(object):
             self.logger.info(f"Downloaded {epw.fname}")
             epw_path = os.path.join(
                 self.filestrct['base'], self.filestrct['resources'], epw.fname)
-            os.rename(epw.fname, epw_path)
+            try:
+                os.rename(epw.fname, epw_path)
+            except FileExistsError as fee:
+                logger.info(fee)
             wea = makesky.epw2wea(
                 epw=epw_path, dh=self.site.getboolean('daylight_hours_only'),
                 sh=self.site['start_hour'], eh=self.site['end_hour'])
