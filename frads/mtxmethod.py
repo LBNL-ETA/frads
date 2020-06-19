@@ -288,9 +288,10 @@ class MTXmethod(object):
             sndr_wndw = radmtx.Sender.as_surface(prim_list=wndw_prim, basis=self.vmx_basis, offset=None)
             self.dmxs[wname+'_d'] = os.path.join(self.mtxdir, f'dmx_{wname}_d.mtx')
             self.logger.info(f"Generating direct daylight matrix for {wname}")
-            radmtx.rfluxmtx(sender=sndr_wndw, receiver=self.rcvr_sky,
+            dmx_res = radmtx.rfluxmtx(sender=sndr_wndw, receiver=self.rcvr_sky,
                             env=[self.materialpath, self.blackenvpath],
-                            out=self.dmxs[wname+'_d'], opt=self.dmx_opt+' -ab 0')
+                            out=None, opt=self.dmx_opt+' -ab 0')
+            with open(self.dmxs[wname+'_d'], 'wb') as wtr: wtr.write(dmx_res)
             if self.sensor_pts is not None:
                 self.pvmxs[wname+'_d'] = os.path.join(self.mtxdir, f'pvmx_{wname}_d.mtx')
                 prcvr_wndws += radmtx.Receiver.as_surface(
@@ -413,6 +414,8 @@ class MTXmethod(object):
             [os.rename(ofiles[idx], os.path.join(opath, self.dts[idx]+'.hdr'))
              for idx in range(len(ofiles))]
             self.logger.info(f"Done computing for {vu}")
+        shutil.rmtree(self.td)
+
 
     def gen_smx(self, mf, onesun=False, direct=False):
         sun_only = ' -d' if direct else ''
@@ -440,7 +443,7 @@ class MTXmethod(object):
         return cmd
 
     def imgmult(self, *mtx, odir):
-        cmd = f"dctimestep -o {os.path.join(odir, '%04d.hdr')} {' '.join(mtx)}"
+        cmd = ['dctimestep', '-o', os.path.join(odir, '%04d.hdr')] + list(mtx)
         return cmd
 
     def get_avgskv(self):

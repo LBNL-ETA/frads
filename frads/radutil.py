@@ -570,11 +570,14 @@ def pcomb(inputs):
             cstr = '%so=%s' % (c, ''.join(color_op))
         color_op_list.append(cstr)
     rgb_str = ';'.join(color_op_list)
-    cmd = "pcomb -e '%s'" % rgb_str
+    cmd = ['pcomb', '-e', '%s' % rgb_str]
     img_name = basename(input_list[0])
-    cmd += " -o ".join([''] + components)
-    cmd += " > %s.hdr" % (os.path.join(out_dir, img_name))
-    sprun(cmd)
+    for c in components:
+        cmd.append('-o')
+        cmd.append(c)
+    res = spcheckout(cmd)
+    with open(os.path.join(out_dir, img_name), 'wb') as wtr:
+        wtr.write(res)
 
 def dctsop(inputs, out_dir, nproc=1):
     if not os.path.isdir(out_dir):
