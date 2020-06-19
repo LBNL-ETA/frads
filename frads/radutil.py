@@ -739,7 +739,7 @@ def mtxmult(mtxs):
 
 def sprun(cmd):
     logger.debug(cmd)
-    sp.run(cmd, shell=True, check=True)
+    sp.run(cmd, check=True)
 
 def spcheckout(cmd, input=None):
     logger.debug(cmd)

@@ -7,14 +7,12 @@ TWang
 import argparse
 import logging
 import shutil
-import tempfile as tf
 from frads import radmtx as rm
 from frads import radutil
 
 
 def main(**kwargs):
     """Generate a matrix."""
-    td = tf.mkdtemp()
     assert len(kwargs['r']) == len(kwargs['o'])
     # figure out environment
     env = ' '.join(kwargs['env'])
@@ -65,7 +63,6 @@ def main(**kwargs):
     else:
         rm.rfluxmtx(sender=sender, receiver=receiver, env=kwargs['env'],
                    out=kwargs['o'], opt=kwargs['opt'])
-    shutil.rmtree(td)
 
 
 def genmtx_args(parser):

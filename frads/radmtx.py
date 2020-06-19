@@ -8,17 +8,19 @@ import argparse
 from frads import makesky
 from frads import radgeom
 import os
+import copy
 import subprocess as sp
 import tempfile as tf
 from frads import radutil
 import logging
+import pdb
 
 logger = logging.getLogger('frads.radmtx')
 
 class Sender(object):
     """Sender object for matrix generation."""
 
-    def __init__(self, *, form, path, sender, xres, yres):
+    def __init__(self, *, form, sender, xres, yres):
         """Instantiate the instance.
 
         Parameters:
@@ -30,13 +32,12 @@ class Sender(object):
         """
         self.form = form
         self.sender = sender
-        self.path = path
         self.xres = xres
         self.yres = yres
         logger.debug(f"Sender: {sender}")
 
     @classmethod
-    def as_surface(cls, *, prim_list, basis, offset, tmpdir):
+    def as_surface(cls, *, prim_list, basis, offset):
         """
         Construct a sender from a surface.
         Parameters:
@@ -46,13 +47,10 @@ class Sender(object):
         """
         prim_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
                                    left=False, source=None, out=None)
-        fd, path = tf.mkstemp(prefix='sndr_srf', dir=tmpdir)
-        with open(path, 'w') as wtr:
-            wtr.write(prim_str)
-        return cls(form='s', path=path, sender=prim_str, xres=None, yres=None)
+        return cls(form='s', sender=prim_str, xres=None, yres=None)
 
     @classmethod
-    def as_view(cls, *, vu_dict, ray_cnt, xres, yres, tmpdir):
+    def as_view(cls, *, vu_dict, ray_cnt, xres, yres):
         """
         Construct a sender from a view.
         Parameters:
@@ -75,25 +73,18 @@ class Sender(object):
         if vu_dict['vt'] == 'a':
             cmd += "|" + Sender.crop2circle(ray_cnt, xres)
         vrays = sp.run(cmd, shell=True, check=True, stdout=sp.PIPE).stdout
-        fd, path = tf.mkstemp(prefix='vufile', dir=tmpdir)
-        with open(path, 'wb') as wtr:
-            wtr.write(vrays)
-        return cls(form='v', path=path, sender=vrays, xres=xres, yres=yres)
+        return cls(form='v', sender=vrays, xres=xres, yres=yres)
 
     @classmethod
-    def as_pts(cls, *, pts_list, ray_cnt, tmpdir):
+    def as_pts(cls, *, pts_list, ray_cnt):
         """Construct a sender from a list of points.
         Parameters:
             pts_list(list): a list of list of float
             ray_cnt(int): sender ray count
         """
-        linesep = os.linesep
         pts_list = [i for i in pts_list for _ in range(ray_cnt)]
-        grid_str = linesep.join([' '.join(map(str, l)) for l in pts_list]) + linesep
-        fd, path = tf.mkstemp(prefix='sndr_grid', dir=tmpdir)
-        with open(path, 'w') as wtr:
-            wtr.write(grid_str)
-        return cls(form='p', path=path, sender=grid_str, xres=None, yres=len(pts_list))
+        grid_str = os.linesep.join([' '.join(map(str, l)) for l in pts_list]) + os.linesep
+        return cls(form='p', sender=grid_str, xres=None, yres=len(pts_list))
 
     @staticmethod
     def crop2circle(ray_cnt, xres):
@@ -112,37 +103,26 @@ class Sender(object):
             cmd = cmd.replace('"', "'")
         return cmd
 
-    def remove(self):
-        """Remove the sender file."""
-        os.remove(self.path)
-
 
 class Receiver(object):
     """Receiver object for matrix generation."""
 
-    def __init__(self, *, path, receiver, basis, modifier):
+    def __init__(self, receiver, basis, modifier=None):
         """Instantiate the receiver object.
         Parameters:
             receiver (str): filepath {sky | sun | file_path}
         """
         self.receiver = receiver
-        self.path = path
         self.basis = basis
         self.modifier = modifier
         logger.debug(f"Receivers:{receiver}")
 
     def __add__(self, other):
         self.receiver += other.receiver
-        if self.path is None and other.path is not None:
-            self.path = other.path
-        elif self.path is None and other.path is None:
-            raise Exception("No path found for receiver")
-        with open(self.path, 'a') as wtr:
-            wtr.write(other.receiver)
         return self
 
     @classmethod
-    def as_sun(cls, *, basis, smx_path, window_paths, tmpdir):
+    def as_sun(cls, *, basis, smx_path, window_paths):
         """
         basis: receiver sampling basis {kf | r1 | sc25...}
         """
@@ -151,48 +131,32 @@ class Receiver(object):
             str_repr = gensun.gen_full()
         else:
             str_repr = gensun.gen_cull(smx_path=smx_path, window_paths=window_paths)
-        fd, path = tf.mkstemp(prefix='sun', dir=tmpdir)
-        mfd, modifier = tf.mkstemp(prefix='mod', dir=tmpdir)
-        with open(path, 'w') as wtr:
-            wtr.write(str_repr)
-        with open(modifier, 'w') as wtr:
-            wtr.write(gensun.mod_str)
-        return cls(path=path, receiver=str_repr, basis=basis, modifier=modifier)
+        return cls(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
 
     @classmethod
-    def as_sky(cls, *, basis, tmpdir):
+    def as_sky(cls, basis):
         """
         basis: receiver sampling basis {kf | r1 | sc25...}
         """
         assert basis.startswith('r'), 'Sky basis need to be Treganza/Reinhart'
         sky_str = makesky.basis_glow(basis)
         logger.debug(sky_str)
-        fd, path = tf.mkstemp(prefix='sky', dir=tmpdir)
-        with open(path, 'w') as wtr:
-            wtr.write(sky_str)
-        return cls(path=path, receiver=sky_str, basis=basis, modifier=None)
+        return cls(receiver=sky_str, basis=basis)
 
     @classmethod
-    def as_surface(cls, *, prim_list, basis, offset, left, source, tmpdir, out):
+    def as_surface(cls, prim_list, basis, offset, left, source, out):
         """
         basis: receiver sampling basis {kf | r1 | sc25...}
         """
         rcvr_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
                                    left=left, source=source, out=out)
-        fd, path = tf.mkstemp(prefix='rsrf', dir=tmpdir)
-        with open(path, 'w') as wtr:
-            wtr.write(rcvr_str)
-        return cls(path=path, receiver=rcvr_str, basis=basis, modifier=None)
-
-    def remove(self):
-        if self.modifier is not None:
-            os.remove(self.modifier)
-        os.remove(self.path)
+        return cls(receiver=rcvr_str, basis=basis)
 
 
 def prepare_surface(*, prims, basis, left, offset, source, out):
     """Prepare the sender or receiver surface, adding appropriate tags."""
     assert basis is not None, 'Sampling basis cannot be None'
+    primscopy = copy.deepcopy(prims)
     upvector = radutil.up_vector(prims)
     basis = "-" + basis if left else basis
     modifier_set = set([p['modifier'] for p in prims])
@@ -205,66 +169,79 @@ def prepare_surface(*, prims, basis, left, offset, source, out):
     if source is not None:
         source_line = f"void {source} {src_mod}\n0\n0\n4 1 1 1 0\n\n"
         header += source_line
-    modifiers = [p['modifier'] for p in prims]
-    identifiers = [p['identifier'] for p in prims]
-    for p in prims:
+    modifiers = [p['modifier'] for p in primscopy]
+    identifiers = [p['identifier'] for p in primscopy]
+    for p in primscopy:
         if p['identifier'] in modifiers:
             p['identifier'] = 'discarded'
-    for p in prims:
+    for p in primscopy:
         p['modifier'] = src_mod
     content = ''
     if offset is not None:
-        for p in prims:
+        for p in primscopy:
             pg = p['polygon']
             offset_vec = pg.normal().scale(offset)
             moved_pts = [pt + offset_vec for pt in pg.vertices]
             p['real_args'] = radgeom.Polygon(moved_pts).to_real()
             content += radutil.put_primitive(p)
     else:
-        for p in prims:
+        for p in primscopy:
             content += radutil.put_primitive(p)
     return header + content
 
 def rfluxmtx(*, sender, receiver, env, out, opt):
     """Calling rfluxmtx to generate the matrices."""
-    cmd = ['rfluxmtx'] + opt.split()
-    if sender.form == 's':
-        cmd.extend([sender.path, receiver.path])
-        stdin = None
-    elif sender.form == 'p':
-        cmd.extend(['-I+', '-faa', '-y', str(sender.yres), '-', receiver.path])
-        stdin = sender.sender.encode()
-    elif sender.form == 'v':
-        cmd.extend(["-ffc", "-x", sender.xres, "-y", sender.yres, "-ld-"])
-        if out is not None:
+    with tf.TemporaryDirectory() as td:
+        receiver_path = os.path.join(td, 'receiver')
+        with open(receiver_path,'w') as wtr:
+            wtr.write(receiver.receiver)
+        cmd = ['rfluxmtx'] + opt.split()
+        if sender.form == 's':
+            sender_path = os.path.join(td, 'sender')
+            with open(sender_path, 'w') as wtr:
+                wtr.write(sender.sender)
+            cmd.extend([sender_path, receiver_path])
+            stdin = None
+        elif sender.form == 'p':
+            cmd.extend(['-I+', '-faa', '-y', str(sender.yres), '-', receiver_path])
+            stdin = sender.sender.encode()
+        elif sender.form == 'v':
+            cmd.extend(["-ffc", "-x", sender.xres, "-y", sender.yres, "-ld-"])
+            if out is not None:
+                radutil.mkdir_p(out)
+                out = os.path.join(out, '%04d.hdr')
+                cmd.extend(["-o", out])
+            cmd.extend(['-', receiver_path])
+            stdin = sender.sender
+        cmd.extend(env)
+        return radutil.spcheckout(cmd, input=stdin)
+
+def rcvr_oct(receiver, env, oct_path):
+    """Generate an octree of the environment and the receiver."""
+    with tf.TemporaryDirectory() as td:
+        receiver_path = os.path.join(td, 'rcvr_path')
+        with open(receiver_path, 'w') as wtr: wtr.write(receiver.receiver)
+        ocmd = ['oconv', '-f'] + env + [receiver_path]
+        octree = radutil.spcheckout(ocmd)
+        with open(oct_path, 'wb') as wtr: wtr.write(octree)
+
+def rcontrib(*, sender, modifier, octree, out, opt):
+    """Calling rcontrib to generate the matrices."""
+    with tf.TemporaryDirectory() as td:
+        modifier_path = os.path.join(td, 'modifier')
+        with open(modifier_path, 'w') as wtr:
+            wtr.write(modifier)
+        cmd = ['rcontrib'] + opt.split()
+        if sender.form == 'p':
+            cmd += ['-I+', '-faf', '-y', sender.yres]
+            stdin = sender.sender.encode()
+        elif sender.form == 'v':
             radutil.mkdir_p(out)
             out = os.path.join(out, '%04d.hdr')
-            cmd.extend(["-o", out])
-        cmd.extend(['-', receiver.path])
-        stdin = sender.sender
-    cmd.extend(env)
-    return radutil.spcheckout(cmd, input=stdin)
-
-def rcvr_oct(receiver, env):
-    """Generate an octree of the environment and the receiver."""
-    fd, _env = tf.mkstemp()
-    ocmd = f"oconv {' '.join(env)} {receiver.path} > {_env}"
-    radutil.sprun(ocmd)
-    return _env
-
-def rcontrib(*, sender, receiver, env, out, opt):
-    """Calling rcontrib to generate the matrices."""
-    _env = rcvr_oct(receiver, env)
-    cmd = f'rcontrib < {sender.path} {opt} -fo+ '
-    if sender.form == 'p':
-        cmd += f'-I+ -faf -y {sender.yres} '
-    elif sender.form == 'v':
-        radutil.mkdir_p(out)
-        out = os.path.join(out, '%04d.hdr')
-        cmd += f"-ffc -x {sender.xres} -y {sender.yres} "
-    cmd += f'-o {out} -M {receiver.modifier} {_env}'
-    radutil.sprun(cmd)
-    os.remove(_env)
+            cmd += ['-ffc', '-x', sender.xres, '-y', sender.yres]
+            stdin = sender.sender
+        cmd += ['-o', out, '-M', modifier_path, octree]
+        radutil.spcheckout(cmd, input=stdin)
 
 
 if __name__ == '__main__':

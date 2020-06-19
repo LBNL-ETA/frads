@@ -9,8 +9,6 @@ from configparser import ConfigParser
 import logging
 import shutil
 from frads import mtxmethod
-import pdb
-
 
 def main(cfgpath):
     cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
@@ -41,7 +39,6 @@ def main(cfgpath):
                 logger.info('Using three-phase simulation')
                 mrad.prep_3phase()
                 mrad.calc_3phase()
-    shutil.rmtree(mrad.td, ignore_errors=True)
 
 
 if __name__ == '__main__':
