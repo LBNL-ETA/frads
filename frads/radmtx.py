@@ -231,7 +231,7 @@ def rcontrib(*, sender, modifier, octree, out, opt):
         modifier_path = os.path.join(td, 'modifier')
         with open(modifier_path, 'w') as wtr:
             wtr.write(modifier)
-        cmd = ['rcontrib'] + opt.split()
+        cmd = ['rcontrib'] + opt.split().append('-fo+')
         if sender.form == 'p':
             cmd += ['-I+', '-faf', '-y', sender.yres]
             stdin = sender.sender.encode()

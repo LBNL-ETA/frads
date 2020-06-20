@@ -63,10 +63,8 @@ def parse_primitive(lines):
     Return:
         list of primitives as dictionaries
     """
-    content = ' '.join([
-        i.strip() for i in lines
-        if i.strip() != '' and i[0] != '#' and i[0] != '!'
-    ]).split()
+    content = ' '.join([i.strip() for i in lines
+                        if i.strip() != '' and i[0] != '#' and i[0] != '!']).split()
     primitives = []
     idx = 0
     while idx < len(content):
