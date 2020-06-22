@@ -227,11 +227,13 @@ def rcvr_oct(receiver, env, oct_path):
 
 def rcontrib(*, sender, modifier, octree, out, opt):
     """Calling rcontrib to generate the matrices."""
+    lopt = opt.split()
+    lopt.append('-fo+')
     with tf.TemporaryDirectory() as td:
         modifier_path = os.path.join(td, 'modifier')
         with open(modifier_path, 'w') as wtr:
             wtr.write(modifier)
-        cmd = ['rcontrib'] + opt.split().append('-fo+')
+        cmd = ['rcontrib'] + lopt
         if sender.form == 'p':
             cmd += ['-I+', '-faf', '-y', sender.yres]
             stdin = sender.sender.encode()
