@@ -1,6 +1,9 @@
 # Radiance matrix-based simulation control
 
-This library tries to facilitate Radiance matrix-based simulation workflow setup.
+A library that facilitates Radiance matrix-based simulation workflow setup.
+A series of commandline tool that enables:
+- Automated Radiance matrix-based methods simulation
+- EnergyPlus Radiance co-simulation
 
 ## Installation
 

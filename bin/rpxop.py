@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Image operations with parallel processing.
+Multiprocessing image operations.
 
-Taoning Wang
+T.Wang
 """
 
 import argparse
