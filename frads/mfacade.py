@@ -96,19 +96,19 @@ class Genfmtx(object):
         logger.info('Computing for front side')
         for i in range(len(self.win_polygon)):
             logger.info(f'Front transmission for window {i}')
-            front_rcvr = rm.Receiver.as_surface(tmpdir=self.td,
+            front_rcvr = rm.Receiver.as_surface(
                 prim_list=self.port_prim, basis=self.rbasis,
                 left=None, offset=None, source='glow', out=src_dict[f'tf{i}'])
             win_polygon = self.win_polygon[i]
             sndr_prim = polygon_prim(win_polygon, 'fsender', f'window{i}')
             sndr = rm.Sender.as_surface(
-                tmpdir=self.td, prim_list=[sndr_prim], basis=self.sbasis, offset=None)
+                prim_list=[sndr_prim], basis=self.sbasis, offset=None)
             if self.refl:
                 logger.info(f'Front reflection for window {i}')
                 back_window = win_polygon.flip()
                 back_window_prim = polygon_prim(
                     back_window, 'breceiver', f'window{i}')
-                back_rcvr = rm.Receiver.as_surface(tmpdir=self.td,
+                back_rcvr = rm.Receiver.as_surface(
                     prim_list=[back_window_prim], basis=self.rbasis,
                     left=True, offset=None, source='glow', out=src_dict[f'rf{i}'])
                 front_rcvr += back_rcvr
@@ -122,14 +122,14 @@ class Genfmtx(object):
             np = p.copy()
             np['real_args'] = np['polygon'].flip().to_real()
             sndr_prim.append(np)
-        sndr = rm.Sender.as_surface(tmpdir=self.td,
+        sndr = rm.Sender.as_surface(
             prim_list=sndr_prim, basis=self.rbasis, offset=None)
         logger.info('Computing for back side')
         for idx in range(len(self.win_polygon)):
             logger.info(f'Back transmission for window {idx}')
             win_polygon = self.win_polygon[idx].flip()
             rcvr_prim = polygon_prim(win_polygon, 'breceiver', f'window{idx}')
-            rcvr = rm.Receiver.as_surface(tmpdir=self.td,
+            rcvr = rm.Receiver.as_surface(
                 prim_list=[rcvr_prim], basis=self.sbasis,
                 left=None, offset=None, source='glow', out=src_dict[f'tb{idx}'])
             if self.refl:
@@ -137,7 +137,7 @@ class Genfmtx(object):
                 brcvr_prim = [
                     polygon_prim(self.port_prim[i]['polygon'], 'freceiver', 'window' + str(i))
                     for i in range(len(self.port_prim))]
-                brcvr = rm.Receiver.as_surface(tmpdir=self.td,
+                brcvr = rm.Receiver.as_surface(
                     prim_list=brcvr_prim, basis=self.rbasis,
                     left=True, offset=None, source='glow',
                     out=src_dict[f'rb{idx}'])
