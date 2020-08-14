@@ -10,7 +10,7 @@ It also support EnergyPlus(>=9.3) integration with its new EMS module which allo
 
 ## Todo list
 - [x] 2,3,4,5-phase methods implemented, (image based 5-phase not working on windows, 4-phase to be tested)
-- [x] epJSON to Radiance workflow implemented (not fully tested)
+- [x] epJSON to Radiance workflow implemented (not fully tested), window puncher + wall thickner
 - [x] EnergyPlus Radiance runtime interaction preliminarily implemented
 - [ ] Implement daylight metrics calculation with EnergyPlus integration
 - [ ] Implement thermal and visual comfort calculation with EnergyPlus integration
