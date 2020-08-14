@@ -40,7 +40,9 @@ to commence the simulation.
 
 
 ## EnergyPlus integration
-With the advent of EnergyPlus 9.3, EnergyPlus core engine is semi-exposed through its Energy Management System through C / Python its application programming interface. <br><br>
+With the advent of EnergyPlus 9.3, EnergyPlus core engine is semi-exposed through its Energy Management System through C/Python application programming interface.
+
+
 frads leverage this new feature to integrate Radiance simulation engine with EnergyPlus by manipulating EnergyPlus EMS 'Actuators' at run-time. For a standard workflow, an user uses an EnergyPlus model (epJSON) as the input, specifies the one or more standard operation (e.g. sDA calculation using Radiance matrix-based methods.)
 ### Usage
 An user can use the commandline tool, eprad, to carry out a Radiance/EnergyPlus simulation
