@@ -31,23 +31,6 @@ pip install /PATH/TO/YOUR/frads
 ```
 
 
-
-## mrad program
-mrad is the executive program that is similar to *rad* program you can find in Radiance for matrix-based simulation.
-
-Because the configuration file will be slightly more complicated than a *.rif* file that *rad* uses, a default *run.cfg* file can be generated using a **default file structure** from where the command is executed:
-```
-mrad.py init
-```
-A *run.cfg* file will be generated as a result. The configuration file can then be opened and modified accordingly. The configuration file is essentially a Python *dictionary* that can be parsed with Python configparser standard library.
-
-Once done, use
-```
-mrad.py run run.cfg
-```
-to commence the simulation.
-
-
 ## EnergyPlus integration
 With the advent of EnergyPlus 9.3, EnergyPlus core engine is semi-exposed through its Energy Management System through C/Python application programming interface.
 
