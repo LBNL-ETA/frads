@@ -37,7 +37,7 @@ class Sender(object):
         logger.debug(f"Sender: {sender}")
 
     @classmethod
-    def as_surface(cls, *, prim_list, basis, offset):
+    def as_surface(cls, *, prim_list, basis, offset, left):
         """
         Construct a sender from a surface.
         Parameters:
@@ -46,7 +46,7 @@ class Sender(object):
             offset(float): move the sender surface in its normal direction;
         """
         prim_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
-                                   left=False, source=None, out=None)
+                                   left=left, source=None, out=None)
         return cls(form='s', sender=prim_str, xres=None, yres=None)
 
     @classmethod
@@ -158,7 +158,8 @@ def prepare_surface(*, prims, basis, left, offset, source, out):
     assert basis is not None, 'Sampling basis cannot be None'
     primscopy = copy.deepcopy(prims)
     upvector = radutil.up_vector(prims)
-    basis = "-" + basis if left else basis
+    #basis = "-" + basis if left else basis
+    upvector = "-" + upvector if left else upvector
     modifier_set = set([p['modifier'] for p in prims])
     if len(modifier_set) != 1:
         logger.warn("Primitives don't share modifier")

@@ -27,9 +27,7 @@ cfg_template = {
     }, 'Site':{
         'wea': None, 'latitude': None, 'longitude': None, 'zipcode': None,
         'daylight_hours_only': False, 'start_hour': None, 'end_hour': None,
-    }, 'Dimensions':{
-        'depth': None, 'width': None, 'height': None, 'window1': None,
-        'facade_thickness': None, 'orientation': None,
+        'orientation': 0,
     }, 'Model':{
         'material': None, 'windows': None, 'scene': None,
         'ncp_shade': None, 'BSDF': None, 'sunBSDF': None,

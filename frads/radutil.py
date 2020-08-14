@@ -185,9 +185,9 @@ def up_vector(primitives):
     samp = [round(i, 1) for i in samp_dir(primitives).to_list()]
     abs_dir = [abs(i) for i in samp]
     if abs_dir == [0.0, 0.0, 1.0]:
-        upvect = '+Y'
+        upvect = 'Y'
     else:
-        upvect = '+Z'
+        upvect = 'Z'
     return upvect
 
 

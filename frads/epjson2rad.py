@@ -42,6 +42,7 @@ class epJSON2Rad(object):
 
 
     def _material(self, epjs_mat):
+        """Parse EP Material"""
         mat_prims = {}
         for key, val in epjs_mat.items():
             mat_prims[key] = {'modifier':'void', 'int_arg':'0',
@@ -61,6 +62,7 @@ class epJSON2Rad(object):
         return mat_prims
 
     def _material_nomass(self, epjs_mat):
+        """Parse EP Material:NoMass"""
         mat_prims = {}
         for key, val in epjs_mat.items():
             mat_prims[key] = {'modifier':'void', 'int_arg':'0',
@@ -75,6 +77,7 @@ class epJSON2Rad(object):
         return mat_prims
 
     def _windowmaterial_simpleglazing(self, epjs_wndw_mat):
+        """Parse EP WindowMaterial:Simpleglazing"""
         wndw_mat_prims = {}
         for key, val in epjs_wndw_mat.items():
             try:
@@ -88,6 +91,7 @@ class epJSON2Rad(object):
         return wndw_mat_prims
 
     def _windowmaterial_glazing(self, epjs_wndw_mat):
+        """Parse EP WindowMaterial:Glazing"""
         wndw_mat_prims = {}
         for key, val in epjs_wndw_mat.items():
             tvis = val['visible_transmittance_at_normal_incidence']
@@ -98,6 +102,7 @@ class epJSON2Rad(object):
         return wndw_mat_prims
 
     def _windowmaterial_blind(self, blind_dict):
+        """Parse EP WindowMaterial:Blind"""
         blind_prims = {}
         for key, val in blind_dict.items():
             _id = key.replace(' ','_')
@@ -194,7 +199,7 @@ class epJSON2Rad(object):
                                       if val['building_surface_name']==sn}
                         for fn in zone_fsrfs:
                             fsurface = zone_fsrfs[fn]
-                            nfvert = fsurface['number_of_vertices']
+                            nfvert = int(fsurface['number_of_vertices'])
                             fverts = [[fsurface[k] for k in fsurface if
                                        k.startswith(f'vertex_{n+1}')] for n in range(nfvert)]
                             wndw_polygon = rg.Polygon([rg.Vector(*vert) for vert in fverts])

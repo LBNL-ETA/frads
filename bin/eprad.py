@@ -147,12 +147,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     api = EnergyPlusAPI()
     if args.ipath.endswith('.idf'):
-        pre, ext = os.path.splitext(args.ipath)
-        api.runtime.run_energyplus(['--convert-only', args.ipath])
-        api.runtime.clear_callbacks()
-        ipath = pre + '.epJSON'
-    else:
-        ipath = args.ipath
+        raise RuntimeError('.idf not supported')
     logger = logging.getLogger('frads')
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler = logging.StreamHandler()
@@ -160,9 +155,9 @@ if __name__ == "__main__":
     console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-    main(ipath, run=True, nproc=args.n, overwrite=args.f)
+    main(args.ipath, run=True, nproc=args.n, overwrite=args.f)
     api.runtime.callback_end_zone_timestep_after_zone_reporting(time_step_handler)
     #api.exchange.request_variable("SITE DIRECT SOLAR RADIATION RATE PER AREA", "ENVIRONMENT")
     #api.exchange.request_variable("SITE DIFFUSE SOLAR RADIATION RATE PER AREA", "ENVIRONMENT")
-    eplus_cmd = ['-w', args.w, ipath]
+    eplus_cmd = ['-w', args.w, args.ipath]
     api.runtime.run_energyplus(eplus_cmd)

@@ -6,13 +6,15 @@ T.Wang
 
 import argparse
 from configparser import ConfigParser
-import logging
+import logging import os
 import shutil
 from frads import mtxmethod
+from frads import radutil
 
 def main(cfgpath):
     cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
-    cfg.read(cfgpath)
+    with open(cfgpath) as rdr:
+        cfg.read_string(rdr.read())
     setup = mtxmethod.Prepare(cfg)
     mrad = mtxmethod.MTXmethod(setup)
     ncp_shade = setup.model['ncp_shade']
@@ -43,7 +45,8 @@ def main(cfgpath):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('cfgpath')
+    parser.add_argument('op')
+    parser.add_argument('cfg', nargs='?', default='run.cfg')
     parser.add_argument('-vb', action='store_true', help='verbose mode')
     parser.add_argument('-db', action='store_true', help='debug mode')
     parser.add_argument('-si', action='store_true', help='silent mode')
@@ -51,15 +54,30 @@ if __name__ == '__main__':
     logger = logging.getLogger('frads')
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler = logging.StreamHandler()
+    _level = logging.WARNING
     if args.db:
-        logger.setLevel(logging.DEBUG)
-        console_handler.setLevel(logging.DEBUG)
+        _level = logging.DEBUG
     elif args.vb:
-        logger.setLevel(logging.INFO)
-        console_handler.setLevel(logging.INFO)
+        _level = logging.INFO
     elif args.si:
-        logger.setLevel(logging.CRITICAL)
-        console_handler.setLevel(logging.CRITICAL)
+        _level = logging.CRITICAL
+    logger.setLevel(_level)
+    console_handler.setLevel(_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-    main(args.cfgpath)
+    if args.op == 'init':
+        templ = mtxmethod.cfg_template
+        fs = templ['FileStructure']
+        fs['base'] = os.getcwd()
+        radutil.mkdir_p(fs['matrices'])
+        radutil.mkdir_p(fs['results'])
+        radutil.mkdir_p(fs['objects'])
+        radutil.mkdir_p(fs['resources'])
+        cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
+        cfg.read_dict(templ)
+        with open("run.cfg", 'w') as rdr:
+            cfg.write(rdr)
+    elif args.op == 'run':
+        main(args.cfg)
+    else:
+        raise Exception("init or run")

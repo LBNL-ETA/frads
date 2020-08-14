@@ -67,20 +67,20 @@ class Genfmtx(object):
             _rf = f'rf{idx}'
             _tb = f'tb{idx}'
             _rb = f'rb{idx}'
-            src_dict[_tf] = os.path.join(self.td, f'{_tf}.dat')
-            fwrap_dict[_tf] = os.path.join(self.td, f'{_tf}p.dat')
+            src_dict[_tb] = os.path.join(self.td, f'{_tb}.dat')
+            fwrap_dict[_tb] = os.path.join(self.td, f'{_tb}p.dat')
             if forw:
-                src_dict[_tb] = os.path.join(self.td, f'{_tb}.dat')
-                fwrap_dict[_tb] = os.path.join(self.td, f'{_tb}p.dat')
+                src_dict[_tf] = os.path.join(self.td, f'{_tf}.dat')
+                fwrap_dict[_tf] = os.path.join(self.td, f'{_tf}p.dat')
             if refl:
-                src_dict[_rf] = os.path.join(self.td, f'{_rf}.dat')
-                fwrap_dict[_rf] = os.path.join(self.td, f'{_rf}p.dat')
+                src_dict[_rb] = os.path.join(self.td, f'{_rb}.dat')
+                fwrap_dict[_rb] = os.path.join(self.td, f'{_rb}p.dat')
                 if forw:
-                    src_dict[_rb] = os.path.join(self.td, f'{_rb}.dat')
-                    fwrap_dict[_rb] = os.path.join(self.td, f'{_rb}p.dat')
-        self.compute_front(src_dict)
+                    src_dict[_rf] = os.path.join(self.td, f'{_rf}.dat')
+                    fwrap_dict[_rf] = os.path.join(self.td, f'{_rf}p.dat')
+        self.compute_back(src_dict)
         if forw:
-            self.compute_back(src_dict)
+            self.compute_front(src_dict)
         self.src_dict = src_dict
         self.fwrap_dict = fwrap_dict
         if wrap:
@@ -91,31 +91,31 @@ class Genfmtx(object):
                 shutil.move(src_dict[key], os.path.join(self.outdir, out_name))
         shutil.rmtree(self.td, ignore_errors=True)
 
-    def compute_front(self, src_dict):
+    def compute_back(self, src_dict):
         """compute front side calculation(backwards)."""
         logger.info('Computing for front side')
         for i in range(len(self.win_polygon)):
             logger.info(f'Front transmission for window {i}')
             front_rcvr = rm.Receiver.as_surface(
                 prim_list=self.port_prim, basis=self.rbasis,
-                left=None, offset=None, source='glow', out=src_dict[f'tf{i}'])
+                left=True, offset=None, source='glow', out=src_dict[f'tb{i}'])
             win_polygon = self.win_polygon[i]
             sndr_prim = polygon_prim(win_polygon, 'fsender', f'window{i}')
             sndr = rm.Sender.as_surface(
-                prim_list=[sndr_prim], basis=self.sbasis, offset=None)
+                prim_list=[sndr_prim], basis=self.sbasis, left=True, offset=None)
             if self.refl:
                 logger.info(f'Front reflection for window {i}')
                 back_window = win_polygon.flip()
                 back_window_prim = polygon_prim(
                     back_window, 'breceiver', f'window{i}')
                 back_rcvr = rm.Receiver.as_surface(
-                    prim_list=[back_window_prim], basis=self.rbasis,
-                    left=True, offset=None, source='glow', out=src_dict[f'rf{i}'])
+                    prim_list=[back_window_prim], basis="-"+self.rbasis,
+                    left=False, offset=None, source='glow', out=src_dict[f'rb{i}'])
                 front_rcvr += back_rcvr
             rm.rfluxmtx(sender=sndr, receiver=front_rcvr, env=self.env,
                         out=None, opt=self.opt)
 
-    def compute_back(self, src_dict):
+    def compute_front(self, src_dict):
         """compute back side calculation."""
         sndr_prim = []
         for p in self.port_prim:
@@ -123,15 +123,15 @@ class Genfmtx(object):
             np['real_args'] = np['polygon'].flip().to_real()
             sndr_prim.append(np)
         sndr = rm.Sender.as_surface(
-            prim_list=sndr_prim, basis=self.rbasis, offset=None)
+            prim_list=sndr_prim, basis="-"+self.rbasis, offset=None, left=False)
         logger.info('Computing for back side')
         for idx in range(len(self.win_polygon)):
             logger.info(f'Back transmission for window {idx}')
             win_polygon = self.win_polygon[idx].flip()
             rcvr_prim = polygon_prim(win_polygon, 'breceiver', f'window{idx}')
             rcvr = rm.Receiver.as_surface(
-                prim_list=[rcvr_prim], basis=self.sbasis,
-                left=None, offset=None, source='glow', out=src_dict[f'tb{idx}'])
+                prim_list=[rcvr_prim], basis="-"+self.sbasis,
+                left=False, offset=None, source='glow', out=src_dict[f'tf{idx}'])
             if self.refl:
                 logger.info(f'Back reflection for window {idx}')
                 brcvr_prim = [
@@ -139,8 +139,8 @@ class Genfmtx(object):
                     for i in range(len(self.port_prim))]
                 brcvr = rm.Receiver.as_surface(
                     prim_list=brcvr_prim, basis=self.rbasis,
-                    left=True, offset=None, source='glow',
-                    out=src_dict[f'rb{idx}'])
+                    left=False, offset=None, source='glow',
+                    out=src_dict[f'rf{idx}'])
                 rcvr += brcvr
             rm.rfluxmtx(sender=sndr, receiver=rcvr, env=self.env, out=None,
                        opt=self.opt)
@@ -262,9 +262,10 @@ def get_port(win_polygon, win_norm, ncs_prims):
     ncs_polygon = [p['polygon'] for p in ncs_prims if p['type']=='polygon']
     if 1 in [int(abs(i)) for i in win_norm.to_list()]:
         ncs_polygon.append(win_polygon)
-        bbox = rg.getbbox(ncs_polygon, offset=0.001)
+        bbox = rg.getbbox(ncs_polygon, offset=0.00)
         bbox.remove([b for b in bbox if b.normal().reverse()==win_norm][0])
-        return bbox
+        return [b.move(win_norm.scale(-.1)) for b in bbox]
+        #return bbox
     xax = [1, 0, 0]
     _xax = [-1, 0, 0]
     yax = [0, 1, 0]
