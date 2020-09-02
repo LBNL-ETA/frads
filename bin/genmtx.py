@@ -23,22 +23,18 @@ def main(**kwargs):
         sndrlines = rdr.readlines()
     if kwargs['st'] == 's':
         prim_list = radutil.parse_primitive(sndrlines)
-        sender = rm.Sender.as_surface(tmpdir=td,
-            prim_list=prim_list, basis=kwargs['ss'], offset=kwargs['so'])
+        sender = rm.Sender.as_surface(prim_list=prim_list, basis=kwargs['ss'], offset=kwargs['so'])
     elif kwargs['st'] == 'v':
         vudict = radutil.parse_vu(sndrlines[-1]) # use the last view from a view file
-        sender = rm.Sender.as_view(tmpdir=td,
-            vu_dict=vudict, ray_cnt=kwargs['rc'], xres=kwargs['xres'],
-            yres=kwargs['yres'], c2c=kwargs['c2c'])
+        sender = rm.Sender.as_view(vu_dict=vudict, ray_cnt=kwargs['rc'], xres=kwargs['xres'], yres=kwargs['yres'])
     elif kwargs['st'] == 'p':
         pts_list = [l.split() for l in sndrlines]
-        sender = rm.Sender.as_pts(pts_list=pts_list, ray_cnt=kwargs['rc'], tmpdir=td)
+        sender = rm.Sender.as_pts(pts_list=pts_list, ray_cnt=kwargs['rc'])
     # figure out receiver
     if kwargs['r'][0] == 'sky':
         receiver = rm.Receiver.as_sky(kwargs['rs'])
     elif kwargs['r'][0] == 'sun':
-        receiver = rm.Receiver.as_sun(tmpdir=td,
-            basis=kwargs['rs'], smx_path=kwargs['smx'], window_paths=kwargs['wpths'])
+        receiver = rm.Receiver.as_sun(basis=kwargs['rs'], smx_path=kwargs['smx'], window_paths=kwargs['wpths'])
     else: # assuming multiple receivers
         rcvr_prims = []
         for path in kwargs['r']:
@@ -46,19 +42,19 @@ def main(**kwargs):
                 rlines = rdr.readlines()
             rcvr_prims.extend(radutil.parse_primitive(rlines))
         modifiers = set([prim['modifier'] for prim in rcvr_prims])
-        receivers = []
-        receiver = rm.Receiver(path=None, receiver='', basis=kwargs['rs'], modifier=None)
+        receiver = rm.Receiver(receiver='', basis=kwargs['rs'], modifier=None)
         for mod, op in zip(modifiers, kwargs['o']):
             _receiver = [prim for prim in rcvr_prims
                          if prim['modifier'] == mod and prim['type'] in ('polygon', 'ring') ]
             if _receiver != []:
-                receiver += rm.Receiver.as_surface(tmpdir=td,
-                    prim_list=_receiver, basis=kwargs['rs'], offset=kwargs['ro'],
+                receiver += rm.Receiver.as_surface(prim_list=_receiver, basis=kwargs['rs'], offset=kwargs['ro'],
                     left=None, source='glow', out=op)
         kwargs['o'] = None
     # generate matrices
     if kwargs['r'][0] == 'sun':
-        rm.rcontrib(sender=sender, receiver=receiver, env=kwargs['env'],
+        sun_oct = 'sun.oct'
+        rm.rcvr_oct(receiver, kwargs['env'], sun_oct)
+        rm.rcontrib(sender=sender, modifier=receiver.modifier, octree=sun_oct,
                    out=kwargs['o'], opt=kwargs['opt'])
     else:
         rm.rfluxmtx(sender=sender, receiver=receiver, env=kwargs['env'],
@@ -84,7 +80,6 @@ def genmtx_args(parser):
     parser.add_argument('-rc', type=int, default=1, help='Ray count')
     parser.add_argument('-xres', type=int, help='X resolution')
     parser.add_argument('-yres', type=int, help='Y resolution')
-    parser.add_argument('-c2c', action='store_true', help='Crop to circle?')
     parser.add_argument('-smx', help='Sky matrix file path')
     parser.add_argument('-wpths', nargs='+', help='Windows polygon paths')
     parser.add_argument('-vb', action='store_true', help='verbose mode')

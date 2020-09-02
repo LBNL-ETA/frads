@@ -138,7 +138,7 @@ def gendaymtx(data_entry, lat, lon, timezone, ele, mf=4, direct=False,
     spect = ' -O1' if solar else ' -O0'
     _five = ' -5 .533' if onesun else ''
     bi = '' if binary == False or os.name == 'nt' else ' -o' + binary
-    linesep = r'& echo' if os.name == 'nt' else rLSEP
+    linesep = r'& echo' if os.name == 'nt' else LSEP
     wea_head = f"place test{linesep}latitude {lat}{linesep}longitude {lon}{linesep}"
     wea_head += f"time_zone {timezone}{linesep}site_elevation {ele}{linesep}"
     wea_head += f"weather_data_file_units 1{linesep}"
@@ -148,7 +148,7 @@ def gendaymtx(data_entry, lat, lon, timezone, ele, mf=4, direct=False,
         with open(_path, 'w') as wtr:
             wtr.write(wea_head.replace('\\n', '\n'))
             wtr.write('\n'.join(data_entry))
-        Cmd = skv_cmd + " " + _path
+        cmd = skv_cmd + " " + _path
         return cmd, _path
     else:
         wea_data = linesep.join(data_entry)
@@ -246,15 +246,15 @@ def solar_angle(*, lat, lon, mer, month, day, hour):
 
     julian_date = mo_da[month - 1] + day
 
-    solar_decline = 0.4093 * math.sin((2 * pi / 368) * (julian_date - 81))
+    solar_decline = 0.4093 * math.sin((2 * math.pi / 368) * (julian_date - 81))
 
     solar_time = hour + (0.170 * math.sin((4 * math.pi / 373) * (julian_date - 80))
                          - 0.129 * math.sin((2 * math.pi / 355) * (julian_date - 8))
                          + 12 * (s_meridian - longitude_r) / math.pi)
 
-    altitude = asin(sin(latitude_r) * sin(solar_decline)
-                    - cos(latitude_r) * cos(solar_decline)
-                    * cos(solar_time * (pi / 12)))
+    altitude = math.asin(math.sin(latitude_r) * math.sin(solar_decline)
+                    - math.cos(latitude_r) * math.cos(solar_decline)
+                    * math.cos(solar_time * (math.pi / 12)))
 
     return altitude > 0
 

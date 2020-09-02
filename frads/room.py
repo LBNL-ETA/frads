@@ -1,10 +1,11 @@
 "T.Wang"
+
 from frads import radgeom
 from frads import radutil
-import pdb
 
 
 class Room(object):
+    """Room model."""
 
     def __init__(self, *, wall, floor, ceiling, window):
         self.wall = wall
@@ -137,6 +138,24 @@ class Wall(object):
                 [v + direction for v in self.windows[wndw].vertices])
         self.windows = offset_wndw
 
+def make_room(dimension):
+    """Make a side-lit shoebox room."""
+    theroom = room.Shoebox(float(dimensions['width']),
+                        float(dimensions['depth']),
+                        float(dimensions['height']))
+    wndw_names = [i for i in dimensions if i.startswith('window')]
+    for wd in wndw_names:
+        wdim = map(float, dimensions[wd].split())
+        theroom.swall.add_window(wd, theroom.swall.make_window(*wdim))
+    theroom.swall.facadize(float(dimensions['facade_thickness']))
+    theroom.surface_prim()
+    theroom.window_prim()
+    mlib = radutil.material_lib()
+    #sensor_grid = radutil.gen_grid(theroom.floor, raysenders['distance'],
+                                   #raysenders['spacing'],
+                                   #op=raysenders.getboolean('opposite'))
+    #nsensor = len(sensor_grid)
+    return theroom#, sensor_grid
 
 if __name__ == "__main__":
     rm1 = Room(3.05, 4.57, 2.74)

@@ -6,10 +6,31 @@ T.Wang
 
 import argparse
 from configparser import ConfigParser
-import logging import os
+import logging
+import os
 import shutil
 from frads import mtxmethod
 from frads import radutil
+
+def initialize():
+    templ = mtxmethod.cfg_template
+    fs = templ['FileStructure']
+    fs['base'] = os.getcwd()
+    if fs['objects'] in os.listdir(fs['base']):
+        files = os.listdir(os.path.join(fs['base'], fs['objects']))
+        objfiles = [f for f in files if f.endswith('.rad')]
+        matfiles = [f for f in files if f.endswith('.mat')]
+        templ['Model']['scene'] = ' '.join(objfiles)
+        templ['Model']['material'] = ' '.join(matfiles)
+    else:
+        radutil.mkdir_p(fs['objects'])
+    radutil.mkdir_p(fs['matrices'])
+    radutil.mkdir_p(fs['results'])
+    radutil.mkdir_p(fs['resources'])
+    cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
+    cfg.read_dict(templ)
+    with open("run.cfg", 'w') as rdr:
+        cfg.write(rdr)
 
 def main(cfgpath):
     cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
@@ -66,17 +87,7 @@ if __name__ == '__main__':
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     if args.op == 'init':
-        templ = mtxmethod.cfg_template
-        fs = templ['FileStructure']
-        fs['base'] = os.getcwd()
-        radutil.mkdir_p(fs['matrices'])
-        radutil.mkdir_p(fs['results'])
-        radutil.mkdir_p(fs['objects'])
-        radutil.mkdir_p(fs['resources'])
-        cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
-        cfg.read_dict(templ)
-        with open("run.cfg", 'w') as rdr:
-            cfg.write(rdr)
+        initialize()
     elif args.op == 'run':
         main(args.cfg)
     else:

@@ -5,11 +5,11 @@ import argparse
 import glob
 import logging
 import math
-import multiprocessing as mp
-import numpy as np
 import os
 import re
 import subprocess as sp
+import multiprocessing as mp
+import numpy as np
 from frads import radgeom
 
 GEOM_TYPE = ['polygon', 'ring', 'tube', 'cone']
@@ -48,8 +48,8 @@ logger = logging.getLogger("frads.radutil")
 
 def parse_decor(fpath):
     """Get all commands and decorations."""
-    with open(fpath, 'r') as rd:
-        content = rd.readlines()
+    with open(fpath, 'r') as rdr:
+        content = rdr.readlines()
     decor = [l for l in content if l.startswith('#@')]
     cmd = [l for l in content if l.startswith('!')]
     return decor, cmd
@@ -121,6 +121,7 @@ def parse_vu(vu_str):
 
 
 def parse_opt(opt_str):
+    """Parsing option string into a dictionary."""
     args_list = opt_str.strip().split()
     oparser = argparse.ArgumentParser()
     oparser.add_argument('-I', action='store_const', const='', default=None)
@@ -160,28 +161,28 @@ def polygon2prim(polygon, modifier, identifier):
 
 def put_primitive(prim):
     """Convert a primitive into a string for writing."""
-    if type(prim) is str:
+    if isinstance(prim, str):
         ostring = prim + os.linesep
     else:
         ostring = "\n{modifier} {type} {identifier}\
         \n{str_args}\n{int_arg}\n{real_args}\n".format(**prim)
     return ostring
 
-def samp_dir(plist):
+def samp_dir(primlist):
     """Calculate the primitives' average sampling direction weighted by area."""
-    normal_areas = []
-    plist = [p for p in plist if p['type'] == 'polygon' or p['type'] == 'ring']
+    primlist = [p for p in primlist if p['type'] == 'polygon' or p['type'] == 'ring']
     normal_area = radgeom.Vector()
-    for p in plist:
-        normal = p['polygon'].normal()
-        area = p['polygon'].area()
+    for prim in primlist:
+        normal = prim['polygon'].normal()
+        area = prim['polygon'].area()
         normal_area += normal.scale(area)
-    samp_dir = normal_area.scale(1.0 / len(plist))
-    samp_dir = samp_dir.unitize()
-    return samp_dir
+    sdir = normal_area.scale(1.0 / len(primlist))
+    sdir = sdir.unitize()
+    return sdir
 
 
 def up_vector(primitives):
+    """Define the up vector given primitives."""
     samp = [round(i, 1) for i in samp_dir(primitives).to_list()]
     abs_dir = [abs(i) for i in samp]
     if abs_dir == [0.0, 0.0, 1.0]:
@@ -189,7 +190,6 @@ def up_vector(primitives):
     else:
         upvect = 'Z'
     return upvect
-
 
 
 def plastic_prim(mod, ident, refl, red, green, blue, specu, rough):

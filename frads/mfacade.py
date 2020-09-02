@@ -233,7 +233,7 @@ def genport(*, wpolys, npolys, depth, scale):
     wcntr = wpoly.centroid()
     if npolys is not None:
         all_ports = get_port(wpoly, wnorm, npolys)
-    elif self.depth is None:
+    elif depth is None:
         raise 'Missing param: need to specify (depth and scale) or ncs file path'
     else:  # user direct input
         extrude_vector = wpoly.normal().reverse().scale(depth)
@@ -294,20 +294,20 @@ def get_port(win_polygon, win_norm, ncs_prims):
     rotate_back = [pg.rotate(zaxis, rrad * -1) for pg in bbox]
     return rotate_back
 
-def merge_window(primitive_list):
+def merge_windows(primitive_list):
     """Merge rectangles if coplanar."""
     polygons = [p['polygon'] for p in primitive_list]
     normals = [p.normal() for p in polygons]
     norm_set = set([n.to_list() for n in normals])
     if len(norm_set) > 1:
         warn_msg = "windows oriented differently"
-    points = [i for p in polygon for i in p.vertices]
+    points = [i for p in polygons for i in p.vertices]
     chull = rg.Convexhull(points, normals[0])
     hull_polygon = chull.hull
-    real_args = hull_polygon.toreal()
+    real_args = hull_polygon.to_real()
     modifier = primitive_list[0]['modifier']
     identifier = primitive_list[0]['identifier']
-    new_prim = self.polygon_prim(hull_polygon, modifier, identifier)
+    new_prim = polygon_prim(hull_polygon, modifier, identifier)
     return new_prim
 
 def polygon_prim(polygon, mod, ident):

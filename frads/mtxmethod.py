@@ -8,11 +8,10 @@ import os
 import copy
 import shutil
 import tempfile as tf
-from frads import mfacade, radgeom, room
-from frads import radutil, radmtx, makesky
 import multiprocessing as mp
 import logging
-import pdb
+from frads import mfacade
+from frads import radutil, radmtx, makesky
 
 logger = logging.getLogger('frads.mtxmethod')
 
@@ -37,7 +36,8 @@ cfg_template = {
     }}
 
 
-class MTXmethod(object):
+class MTXmethod:
+    """Radiance matrix-based simulation methods."""
     def __init__(self, config):
         self.logger = logging.getLogger("frads.mtxmethod.MTXmethod")
         self.nproc = int(config.simctrl['nprocess'])
@@ -79,6 +79,7 @@ class MTXmethod(object):
         self.rcvr_sky = radmtx.Receiver.as_sky(basis=self.dmx_basis)
 
     def prep_2phase(self):
+        """Prepare matrices two phase methods."""
         env = self.envpath + self.windowpath
         if self.sensor_pts is not None:
             self.pdsmx = os.path.join(self.mtxdir, 'pdsmx.mtx')
@@ -104,7 +105,7 @@ class MTXmethod(object):
                     wtr.write(res[idx] + os.linesep)
         if len(self.sndr_vus) > 0:
             opath = os.path.join(self.resdir, 'view2ph')
-            radutil.sprun(self.imgmult(self.vdsmx, self.smxpath, odir=opath))
+            radutil.sprun(self.imgmult(self.vdsmxs, self.smxpath, odir=opath))
             ofiles = [os.path.join(opath, f) for f in sorted(os.listdir(opath)) if
                       f.endswith('.hdr')]
             [os.rename(ofiles[idx], os.path.join(opath, self.dts[idx]+'.hdr'))
@@ -123,7 +124,7 @@ class MTXmethod(object):
             wndw_prim = self.window_prims[wname]
             self.logger.info(f"Generating daylight matrix for {wname}")
             self.dmxs[wname] = os.path.join(self.mtxdir, f'dmx_{wname}.mtx')
-            sndr_wndw = radmtx.Sender.as_surface(prim_list=wndw_prim, basis=self.vmx_basis, offset=None)
+            sndr_wndw = radmtx.Sender.as_surface(prim_list=wndw_prim, basis=self.vmx_basis, left=None, offset=None)
             dmx_res = radmtx.rfluxmtx(sender=sndr_wndw, receiver=self.rcvr_sky,
                        env=self.envpath, out=None, opt=self.dmx_opt)
             with open(self.dmxs[wname], 'wb') as wtr: wtr.write(dmx_res)
@@ -283,7 +284,8 @@ class MTXmethod(object):
         cdsenv = [self.materialpath, self.blackenvpath] + self.windowpath
         for wname in self.window_prims:
             wndw_prim = self.window_prims[wname]
-            sndr_wndw = radmtx.Sender.as_surface(prim_list=wndw_prim, basis=self.vmx_basis, offset=None)
+            sndr_wndw = radmtx.Sender.as_surface(
+                prim_list=wndw_prim, basis=self.vmx_basis, left=None, offset=None)
             self.dmxs[wname+'_d'] = os.path.join(self.mtxdir, f'dmx_{wname}_d.mtx')
             self.logger.info(f"Generating direct daylight matrix for {wname}")
             dmx_res = radmtx.rfluxmtx(sender=sndr_wndw, receiver=self.rcvr_sky,
@@ -310,7 +312,6 @@ class MTXmethod(object):
                             out=None, opt=self.vmx_opt+' -ab 1')
             self.logger.info(f"Generating direct sun matrix for sensor_grid")
             self.pcdsmx = os.path.join(self.mtxdir, 'pcdsmx.mtx')
-            self.octr
             radmtx.rcontrib(sender=self.sndr_pts, modifier=rcvr_sun.modifier,
                             octree=sun_oct, out=self.pcdsmx, opt=self.cdsmx_opt)
         self.vcdfmx = {}
@@ -445,7 +446,7 @@ class MTXmethod(object):
         return cmd
 
     def get_avgskv(self):
-        radutil.sprun(f"gendaymtx -m {self.mf_sky} -A {self.wea} > {avgskyv}", shell=True)
+        radutil.sprun(f"gendaymtx -m {self.mf_sky} -A {self.wea} > {avgskyv}")
 
 ############### Matrix multiplication using numpy ########################################
 
@@ -459,25 +460,18 @@ class MTXmethod(object):
 
 ##########################################################################################
 
-class Prepare(object):
-    """."""
+class Prepare:
+    """Pre-processing for matrix-based simulation."""
     def __init__(self, config):
         self.logger = logging.getLogger('frads.mtxmethod.Prepare')
         self.site = config['Site']
         self.filestrct = config['FileStructure']
         self.simctrl = config['SimulationControl']
         self.model = config['Model']
-        self.dimensions = config['Dimensions']
         self.raysenders = config['Raysenders']
         self.get_paths()
-        if None in self.dimensions.values():
-            self.assemble()
-        else:
-            self.logger.info("Generating a room based on defined dimensions")
-            self.make_room()
+        self.assemble()
         self.get_wea()
-
-    # Validate each file path before carry on
 
     def get_paths(self):
         """Where are ?"""
@@ -509,6 +503,7 @@ class Prepare(object):
             self.bsdfpath = None
 
     def assemble(self):
+        """Assemble all the pieces together."""
         with open(self.materialpath) as rdr:
             mat_prims = radutil.parse_primitive(rdr.readlines())
         black_mat = {'modifier':'void', 'type':'plastic',
@@ -549,27 +544,8 @@ class Prepare(object):
         except AttributeError:
             self.vu_dict = None
 
-
-    def make_room(self):
-        """Make a side-lit shoebox room."""
-        theroom = room.Shoebox(float(self.dimensions['width']),
-                            float(self.dimensions['depth']),
-                            float(self.dimensions['height']))
-        wndw_names = [i for i in self.dimensions if i.startswith('window')]
-        for wd in wndw_names:
-            wdim = map(float, self.dimensions[wd].split())
-            theroom.swall.add_window(wd, theroom.swall.make_window(*wdim))
-        theroom.swall.facadize(float(self.dimensions['facade_thickness']))
-        theroom.surface_prim()
-        theroom.window_prim()
-        mlib = radutil.material_lib()
-        sensor_grid = radutil.gen_grid(theroom.floor, self.raysenders['distance'],
-                                       self.raysenders['spacing'],
-                                       op=self.raysenders.getboolean('opposite'))
-        nsensor = len(sensor_grid)
-        return theroom, sensor_grid
-
     def get_wea(self):
+        """Get weather data (.wea file) from site location."""
         if (self.site['wea'] is not None) and (self.site['wea'] != ''):
             self.wea_path = os.path.join(
                 self.filestrct['base'], self.filestrct['resources'], self.site['wea'])
@@ -587,7 +563,7 @@ class Prepare(object):
                 epw = makesky.getEPW(self.site['latitude'], -float(self.site['longitude']))
             else:
                 raise NameError("Not site info defined")
-            self.logger.info(f"Downloaded {epw.fname}")
+            self.logger.info("Downloaded : %s", epw.fname)
             epw_path = os.path.join(
                 self.filestrct['base'], self.filestrct['resources'], epw.fname)
             try:

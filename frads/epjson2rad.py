@@ -51,6 +51,7 @@ class epJSON2Rad(object):
             try:
                 refl = 1 - val['visible_absorptance']
             except KeyError as ke:
+                logger.warning(ke)
                 logger.warning(f"No visible absorptance defined for {key}, assuming 50%")
                 refl = .5
             mat_prims[key]['real_args'] = "5 {0:.2f} {0:.2f} {0:.2f} 0 0".format(refl)
