@@ -1,18 +1,22 @@
-import json
+"""
+Convert an EnergyPlus model as a parsed dictionary
+to Radiance primitives.
+"""
+import logging
 from frads import radutil as ru
 from frads import radgeom as rg
-import os
-import pdb
-import logging
 
 logger = logging.getLogger("frads.epjson2rad")
 
 PI = 3.14159265358579
 
-class epJSON2Rad(object):
-
+class epJSON2Rad:
+    """
+    Convert EnergyPlus JSON objects into Radiance primitives.
+    """
 
     def __init__(self, epjs):
+        """Parse EPJSON object passed in as a dictionary."""
         self.checkout_fene(epjs)
         self.get_material_prims(epjs)
         self.zones = self.get_zones(epjs)
@@ -21,9 +25,9 @@ class epJSON2Rad(object):
     def get_thickness(self, layers):
         """Get thickness from construction."""
         thickness = 0
-        for l in layers:
+        for layer in layers:
             try:
-                thickness += self.mat_prims[l]['thickness']
+                thickness += self.mat_prims[layer]['thickness']
             except KeyError:
                 thickness += 0
         return thickness
@@ -34,10 +38,10 @@ class epJSON2Rad(object):
         facade = surface.extrude(direction)[:2]
         [facade.extend(window.extrude(direction)[2:]) for window in windows]
         uniq = facade.copy()
-        for idx in range(len(facade)):
-            for re in facade[:idx]+facade[idx+1:]:
-                if set(facade[idx].to_list()) == set(re.to_list()):
-                    uniq.remove(re)
+        for idx, val in enumerate(facade):
+            for rep in facade[:idx]+facade[idx+1:]:
+                if set(val.to_list()) == set(rep.to_list()):
+                    uniq.remove(rep)
         return uniq
 
 
@@ -123,6 +127,7 @@ class epJSON2Rad(object):
 
 
     def get_material_prims(self, epjs):
+        """Call the corresponding parser for each material type."""
         mkeys = [key for key in epjs.keys() if 'material' in key.split(':')[0].lower()]
         self.mat_prims = {}
         for key in mkeys:
@@ -130,6 +135,10 @@ class epJSON2Rad(object):
             self.mat_prims.update(tocall(epjs[key]))
 
     def checkout_fene(self, epjs):
+        """
+        Check if the model has any window.
+        Record the host of the each window.
+        """
         try:
             self.fene_srfs = epjs['FenestrationSurface:Detailed']
         except KeyError as ke:
@@ -138,6 +147,7 @@ class epJSON2Rad(object):
                                for key, val in self.fene_srfs.items()])
 
     def check_ext_window(self, zone_srfs):
+        """Check if the window is connected to exterior."""
         has_window = False
         for key, val in zone_srfs.items():
             if (key in self.fene_hosts) and (val['sun_exposure']!='NoSun'):
@@ -146,6 +156,7 @@ class epJSON2Rad(object):
         return has_window
 
     def parse_cnstrct(self, cnstrct):
+        """Parse the construction data."""
         layers = ['outside_layer']
         layers.extend(sorted([l for l in cnstrct if l.startswith('layer_')]))
         inner_layer = cnstrct[layers[-1]].replace(' ','_')
@@ -154,10 +165,12 @@ class epJSON2Rad(object):
         return inner_layer, outer_layer, cthick
 
     def parse_wndw_cnstrct(self, wcnstrct):
+        """Parse window construction."""
         layers = ['outside_layer']
         layers.extend(sorted([l for l in wcnstrct if l.startswith('layer_')]))
 
     def check_srf_normal(self, zone):
+        """Check the surface normal in each zone."""
         polygons = [v['polygon'] for k,v in zone['Floor'].items()]
         polygons.extend([v['polygon'] for k,v in zone['Ceiling'].items()])
         polygons.extend([v['polygon'] for k,v in zone['Wall'].items()])
@@ -224,7 +237,3 @@ class epJSON2Rad(object):
         site = epjs['Site:Location']
         for key, val in site.items():
             return val
-
-
-
-

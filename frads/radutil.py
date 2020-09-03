@@ -9,8 +9,9 @@ import os
 import re
 import subprocess as sp
 import multiprocessing as mp
-import numpy as np
+#import numpy as np
 from frads import radgeom
+
 
 GEOM_TYPE = ['polygon', 'ring', 'tube', 'cone']
 
@@ -504,7 +505,7 @@ class pt_inclusion(object):
         return wn
 
 
-def gen_grid(polygon, height, spacing, op=False):
+def gen_grid(polygon, height, spacing) -> list:
     """Generate a grid of points for orthogonal planar surfaces.
 
     Parameters:
@@ -523,9 +524,7 @@ def gen_grid(polygon, height, spacing, op=False):
     ystart = ((ylen_spc - int(ylen_spc) + 1)) * spacing / 2
     x0 = [x + xstart for x in frange_inc(imin, imax, spacing)]
     y0 = [x + ystart for x in frange_inc(jmin, jmax, spacing)]
-    grid_dir = polygon.normal()
-    if op:
-        grid_dir = polygon.normal().reverse()
+    grid_dir = polygon.normal().reverse()
     grid_hgt = radgeom.Vector(0, 0, plane_height) + grid_dir.scale(height)
     raw_pts = [radgeom.Vector(i, j, grid_hgt.z) for i in x0 for j in y0]
     if polygon.normal() == radgeom.Vector(0, 0, 1):
@@ -699,44 +698,44 @@ def header_parser(header):
     ncomp = int(re.search('NCOMP=(.*)\n', header).group(1))
     return nrow, ncol, ncomp
 
-def mtx2nparray(datastr):
-    raw = datastr.split('\n\n')
-    header = raw[0]
-    nrow, ncol, ncomp = header_parser(header)
-    data = raw[1].splitlines()
-    rdata = np.array([i.split()[::ncomp] for i in data], dtype=float)
-    gdata = np.array([i.split()[1::ncomp] for i in data], dtype=float)
-    bdata = np.array([i.split()[2::ncomp] for i in data], dtype=float)
-    assert len(bdata) == nrow
-    assert len(bdata[0]) == ncol
-    return rdata, gdata, bdata
+#def mtx2nparray(datastr):
+#    raw = datastr.split('\n\n')
+#    header = raw[0]
+#    nrow, ncol, ncomp = header_parser(header)
+#    data = raw[1].splitlines()
+#    rdata = np.array([i.split()[::ncomp] for i in data], dtype=float)
+#    gdata = np.array([i.split()[1::ncomp] for i in data], dtype=float)
+#    bdata = np.array([i.split()[2::ncomp] for i in data], dtype=float)
+#    assert len(bdata) == nrow
+#    assert len(bdata[0]) == ncol
+#    return rdata, gdata, bdata
+#
+#
+#def smx2nparray(datastr):
+#    raw = datastr.split('\n\n')
+#    header = raw[0]
+#    nrow, ncol, ncomp = header_parser(header)
+#    data = [i.splitlines() for i in raw[1:] if i != '']
+#    rdata = np.array([[i.split()[::ncomp][0] for i in row] for row in data],
+#                     dtype=float)
+#    gdata = np.array([[i.split()[1::ncomp][0] for i in row] for row in data],
+#                     dtype=float)
+#    bdata = np.array([[i.split()[2::ncomp][0] for i in row] for row in data],
+#                     dtype=float)
+#    assert np.size(bdata,1) == nrow
+#    assert np.size(bdata,0) == ncol
+#    if ncol ==1 :
+#        rdata = rdata.flatten()
+#        gdata = gdata.flatten()
+#        bdata = bdata.flatten()
+#    return rdata, gdata, bdata
 
-
-def smx2nparray(datastr):
-    raw = datastr.split('\n\n')
-    header = raw[0]
-    nrow, ncol, ncomp = header_parser(header)
-    data = [i.splitlines() for i in raw[1:] if i != '']
-    rdata = np.array([[i.split()[::ncomp][0] for i in row] for row in data],
-                     dtype=float)
-    gdata = np.array([[i.split()[1::ncomp][0] for i in row] for row in data],
-                     dtype=float)
-    bdata = np.array([[i.split()[2::ncomp][0] for i in row] for row in data],
-                     dtype=float)
-    assert np.size(bdata,1) == nrow
-    assert np.size(bdata,0) == ncol
-    if ncol ==1 :
-        rdata = rdata.flatten()
-        gdata = gdata.flatten()
-        bdata = bdata.flatten()
-    return rdata, gdata, bdata
-
-def mtxmult(mtxs):
-    """Matrix multiplication with Numpy."""
-    resr = np.linalg.multi_dot([mat[0] for mat in mtxs]) * .265
-    resg = np.linalg.multi_dot([mat[1] for mat in mtxs]) * .67
-    resb = np.linalg.multi_dot([mat[2] for mat in mtxs]) * .065
-    return resr + resg + resb
+#def mtxmult(mtxs):
+#    """Matrix multiplication with Numpy."""
+#    resr = np.linalg.multi_dot([mat[0] for mat in mtxs]) * .265
+#    resg = np.linalg.multi_dot([mat[1] for mat in mtxs]) * .67
+#    resb = np.linalg.multi_dot([mat[2] for mat in mtxs]) * .065
+#    return resr + resg + resb
 
 def sprun(cmd):
     logger.debug(cmd)

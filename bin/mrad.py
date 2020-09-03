@@ -8,11 +8,13 @@ import argparse
 from configparser import ConfigParser
 import logging
 import os
-import shutil
 from frads import mtxmethod
 from frads import radutil
 
+import pdb
+
 def initialize():
+    """."""
     templ = mtxmethod.cfg_template
     fs = templ['FileStructure']
     fs['base'] = os.getcwd()
@@ -32,36 +34,61 @@ def initialize():
     with open("run.cfg", 'w') as rdr:
         cfg.write(rdr)
 
+def cfg2dict(cfg):
+    """."""
+    cfg_dict = {}
+    sections = cfg.sections()
+    for sec in sections:
+        cfg_dict.update(dict(cfg[sec]))
+    for k,v in cfg_dict.items():
+        if v is not None:
+            if v.lower() == 'true':
+                cfg_dict[k] = True
+            elif v.lower() == 'false':
+                cfg_dict[k] = False
+            elif v == '':
+                cfg_dict[k] = None
+    return cfg_dict
+
+
 def main(cfgpath):
+    """."""
     cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
     with open(cfgpath) as rdr:
         cfg.read_string(rdr.read())
-    setup = mtxmethod.Prepare(cfg)
-    mrad = mtxmethod.MTXmethod(setup)
-    ncp_shade = setup.model['ncp_shade']
-    if setup.model['bsdf'] is None:
+    cfg_dict = cfg2dict(cfg)
+    msetup = mtxmethod.MTXMethod(cfg_dict)
+    ncp_shade = msetup.config.ncp_shade
+    smx = msetup.gen_smx(msetup.config.smx_basis)
+    if msetup.config.bsdf is None:
         logger.info("Using two-phase method")
-        mrad.prep_2phase()
-        mrad.calc_2phase()
+        pdsmx = msetup.prep_2phase_pt()
+        vdsmx = msetup.prep_2phase_vu()
+        msetup.calc_2phase_pt(pdsmx, smx)
+        msetup.calc_2phase_vu(vdsmx, smx)
     else:
-        if setup.simctrl.getboolean('separate_direct'):
+        if msetup.config.separate_direct:
             if ncp_shade is not None and len(ncp_shade.split()) > 1:
                 logger.info('Using six-phase simulation')
-                mrad.prep_6phase()
-                mrad.calc_6phase()
+                msetup.prep_6phase_pt()
+                msetup.prep_6phase_vu()
             else:
+                smx_d = msetup.gen_smx(self.dmx_basis, direct=True)
                 logger.info('Using five-phase simulation')
-                mrad.prep_5phase()
-                mrad.calc_5phase()
+                msetup.prep_5phase_pt()
+                msetup.prep_5phase_vu()
+                msetup.calc_5phase_pt(vmx, vmxd, dmx, dmxd, csmx, smx, smxd, smx_sun)
+                msetup.calc_5phase_vu()
         else:
             if ncp_shade is not None and len(ncp_shade.split()) > 1:
                 logger.info('Using four-phase simulation')
-                mrad.prep_4phase()
-                mrad.calc_4phase()
+                msetup.prep_4phase_pt()
+                msetup.calc_4phase_vu()
             else:
                 logger.info('Using three-phase simulation')
-                mrad.prep_3phase()
-                mrad.calc_3phase()
+                dmxs = msetup.prep_3phase_dmx()
+                pvmxs = msetup.prep_3phase_pt()
+                vvmxs = msetup.prep_3phase_vu()
 
 
 if __name__ == '__main__':

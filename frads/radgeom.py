@@ -7,7 +7,7 @@ T.Wang
 import math
 
 
-class Vector(object):
+class Vector:
     """3D vector class."""
 
     def __init__(self, x=0, y=0, z=0):
@@ -404,4 +404,3 @@ def getbbox(polygon_list, offset=0.0):
     wwpg = Polygon([v - e2w_vec for v in ewpg.vertices]).flip() #-X
 
     return [fpg, cpg, ewpg, swpg, wwpg, nwpg]
-

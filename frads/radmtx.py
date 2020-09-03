@@ -13,6 +13,7 @@ from frads import makesky
 from frads import radgeom
 from frads import radutil
 
+import pdb
 logger = logging.getLogger('frads.radmtx')
 
 
@@ -36,7 +37,7 @@ class Sender:
         logger.debug("Sender: %s", sender)
 
     @classmethod
-    def as_surface(cls, *, prim_list, basis, offset, left):
+    def as_surface(cls, *, prim_list, basis, offset=None, left=None):
         """
         Construct a sender from a surface.
         Parameters:
@@ -75,12 +76,13 @@ class Sender:
         return cls(form='v', sender=vrays, xres=xres, yres=yres)
 
     @classmethod
-    def as_pts(cls, *, pts_list, ray_cnt):
+    def as_pts(cls, *, pts_list, ray_cnt=1):
         """Construct a sender from a list of points.
         Parameters:
             pts_list(list): a list of list of float
             ray_cnt(int): sender ray count
         """
+        assert pts_list is not None, "pts_list is None"
         pts_list = [i for i in pts_list for _ in range(ray_cnt)]
         grid_str = os.linesep.join(
             [' '.join(map(str, li)) for li in pts_list]) + os.linesep
@@ -162,7 +164,7 @@ def prepare_surface(*, prims, basis, left, offset, source, out):
     upvector = radutil.up_vector(prims)
     # basis = "-" + basis if left else basis
     upvector = "-" + upvector if left else upvector
-    modifier_set = {[p['modifier'] for p in prims]}
+    modifier_set = {p['modifier'] for p in prims}
     if len(modifier_set) != 1:
         logger.warning("Primitives don't share modifier")
     src_mod = f"rflx{prims[0]['modifier']}"
@@ -193,8 +195,10 @@ def prepare_surface(*, prims, basis, left, offset, source, out):
     return header + content
 
 
-def rfluxmtx(*, sender, receiver, env, out, opt):
+def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
     """Calling rfluxmtx to generate the matrices."""
+    assert None not in (sender, receiver), "Sender/Receiver object is None"
+    opt = '' if opt is None else opt
     with tf.TemporaryDirectory() as tempd:
         receiver_path = os.path.join(tempd, 'receiver')
         with open(receiver_path, 'w') as wtr:
