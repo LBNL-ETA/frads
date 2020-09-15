@@ -30,8 +30,8 @@ def main(kwargs):
             [wtr.write(ru.put_primitive(val)) for key, val in radobj.mat_prims.items()]
         scene_paths = []
         window_paths = []
-        for st in zone:
-            if st == 'Window':
+        for stype in zone:
+            if stype == 'Window':
                 for key, val in zone['Window'].items():
                     _path = os.path.join(objdir, f"Window_{key}.rad")
                     window_paths.append(f"Window_{key}.rad")
@@ -41,7 +41,7 @@ def main(kwargs):
                 _path = os.path.join(objdir, f"{st}.rad")
                 scene_paths.append(f"{st}.rad")
                 with open(_path, 'w') as wtr:
-                    [wtr.write(ru.put_primitive(val)) for key,val in zone[st].items()]
+                    [wtr.write(ru.put_primitive(val)) for key,val in zone[stype].items()]
         cfg = mm.cfg_template
         cfg['Model']['material'] = 'materials.rad'
         cfg['Model']['windows'] = ' '.join(window_paths)
@@ -50,14 +50,12 @@ def main(kwargs):
         cfg['Raysenders']['distance'] = GRID_HEIGHT
         cfg['Raysenders']['spacing'] = GRID_SPACING
         if kwargs['run']:
-            setup = mm.Prepare(cfg)
-            mtxmtd = mm.MTXMethod(setup)
+            mtxmtd = mm.MTXMethod(cfg)
         else:
             config = configparser.ConfigParser(allow_no_value=True)
             config.read_dict(cfg)
             with open(os.path.join(zn, 'run.cfg'), 'w') as wtr:
                 config.write(wtr)
-
 
 
 if __name__ == "__main__":

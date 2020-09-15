@@ -1,6 +1,6 @@
-"""Utility functions."""
+"r""Utility functions."""
 
-# Taoning.W
+from __future__ import annotations
 import argparse
 import glob
 import logging
@@ -56,13 +56,15 @@ def parse_decor(fpath):
     return decor, cmd
 
 
-def parse_primitive(lines):
-    """
-    Parse Radiance primitives inside a file path into a list of dictionary.
-    Arguments:
+def parse_primitive(lines: list) -> list:
+    """Parse Radiance primitives inside a file path into a list of dictionary.
+
+    Args:
         lines: list of strings
-    Return:
+
+    Returns:
         list of primitives as dictionaries
+
     """
     content = ' '.join([i.strip() for i in lines
                         if i.strip() != '' and i[0] != '#' and i[0] != '!']).split()
@@ -87,8 +89,16 @@ def parse_primitive(lines):
     return primitives
 
 
-def parse_polygon(primitive):
-    """Parse real arguments to polygon."""
+def parse_polygon(primitive: dict) -> dict:
+    """Parse real arguments to polygon.
+
+    Args:
+        primitive: a dictionary object containing a primitive
+
+    Returns:
+        returns modified primitive
+
+    """
     real_args = primitive['real_args'].split()
     coords = [float(i) for i in real_args[1:]]
     arg_cnt = int(real_args[0])
@@ -97,7 +107,7 @@ def parse_polygon(primitive):
     return primitive
 
 
-def parse_vu(vu_str):
+def parse_vu(vu_str: str) -> dict:
     """Parse view string into a dictionary."""
     args_list = vu_str.strip().split()
     vparser = argparse.ArgumentParser()
@@ -121,7 +131,7 @@ def parse_vu(vu_str):
     return view_dict
 
 
-def parse_opt(opt_str):
+def parse_opt(opt_str: str) -> dict:
     """Parsing option string into a dictionary."""
     args_list = opt_str.strip().split()
     oparser = argparse.ArgumentParser()
@@ -169,7 +179,7 @@ def put_primitive(prim):
         \n{str_args}\n{int_arg}\n{real_args}\n".format(**prim)
     return ostring
 
-def samp_dir(primlist):
+def samp_dir(primlist: list) -> radgeom.Vector:
     """Calculate the primitives' average sampling direction weighted by area."""
     primlist = [p for p in primlist if p['type'] == 'polygon' or p['type'] == 'ring']
     normal_area = radgeom.Vector()
@@ -178,19 +188,28 @@ def samp_dir(primlist):
         area = prim['polygon'].area()
         normal_area += normal.scale(area)
     sdir = normal_area.scale(1.0 / len(primlist))
-    sdir = sdir.unitize()
+    sdir = sdir.normalize()
     return sdir
 
 
-def up_vector(primitives):
-    """Define the up vector given primitives."""
-    samp = [round(i, 1) for i in samp_dir(primitives).to_list()]
-    abs_dir = [abs(i) for i in samp]
-    if abs_dir == [0.0, 0.0, 1.0]:
-        upvect = 'Y'
+def up_vector(primitives: list) -> str:
+    """Define the up vector given primitives.
+
+    Args:
+        primitives: list of dictionary (primitives)
+
+    Returns:
+        returns a str as x,y,z
+
+    """
+    xaxis = radgeom.Vector(1, 0, 0)
+    yaxis = radgeom.Vector(0, 1, 0)
+    norm_dir = samp_dir(primitives)
+    if norm_dir == yaxis:
+        upvect = norm_dir.cross(xaxis)
     else:
-        upvect = 'Z'
-    return upvect
+        upvect = norm_dir.cross(yaxis)
+    return str(upvect).strip().replace('\t',',')
 
 
 def plastic_prim(mod, ident, refl, red, green, blue, specu, rough):
@@ -505,15 +524,15 @@ class pt_inclusion(object):
         return wn
 
 
-def gen_grid(polygon, height, spacing) -> list:
+def gen_grid(polygon: radgeom.Polygon, height: float, spacing: float) -> list:
     """Generate a grid of points for orthogonal planar surfaces.
 
-    Parameters:
-            polygon: a polygon object
-            height: points' distance from the surface in its normal direction
-            spacing: distance between the grid points
-    Return:
-            List of the points as list
+    Args:
+        polygon: a polygon object
+        height: points' distance from the surface in its normal direction
+        spacing: distance between the grid points
+    Returns:
+        List of the points as list
     """
     vertices = polygon.vertices
     plane_height = sum([i.z for i in vertices]) / len(vertices)

@@ -1,23 +1,29 @@
 """
-Handle geometries.
-
-T.Wang
+Utilities for handling geometries.
 """
 
+from __future__ import annotations
 import math
 
 
 class Vector:
-    """3D vector class."""
+    """3D vector class.
+
+    Attributes:
+        x: x coordinate
+        y: y coordinate
+        z: z coordinate
+        length: length of the vector
+    """
 
     def __init__(self, x=0, y=0, z=0):
         """Initialize vector."""
         errmsg = "float or integer required to define a vector"
         assert all([type(i) in [float, int] for i in [x, y, z]]), errmsg
-        self.x = x
-        self.y = y
-        self.z = z
-        self.length = math.sqrt(x**2 + y**2 + z**2)
+        self.x: float = x
+        self.y: float = y
+        self.z: float = z
+        self.length: float = math.sqrt(x**2 + y**2 + z**2)
 
     def __str__(self):
         """Class string representation."""
@@ -37,8 +43,16 @@ class Vector:
     def __eq__(self, other):
         return self.to_list() == other.to_list()
 
-    def cross(self, other):
-        """Return the cross product of the two vectors."""
+    def cross(self, other: Vector) -> Vector:
+        """Return the cross product of the two vectors.
+
+        Args:
+            other: the vector to take a cross product
+
+        Returns:
+            The resulting vector
+
+        """
         x_ = self.y * other.z - self.z * other.y
         y_ = self.z * other.x - self.x * other.z
         z_ = self.x * other.y - self.y * other.x
@@ -51,7 +65,7 @@ class Vector:
         dz = math.fabs(self.z - other.z)
         return math.sqrt(dx**2 + dy**2 + dz**2)
 
-    def unitize(self):
+    def normalize(self):
         """Return the unit vector."""
         magnitude = math.sqrt(self.x**2 + self.y**2 + self.z**2)
         return Vector(self.x / magnitude, self.y / magnitude,
@@ -62,6 +76,7 @@ class Vector:
         return Vector(self.x * -1, self.y * -1, self.z * -1)
 
     def scale(self, factor):
+        """Scale the vector by a scalar."""
         return Vector(self.x * factor, self.y * factor, self.z * factor)
 
     def angle_from(self, other):
@@ -70,14 +85,14 @@ class Vector:
         angle = math.acos(dot_prod / (self.length * other.length))
         return angle
 
-    def rotate3D(self, vector, theta):
+    def rotate3D(self, vector: Vector, theta: float) -> Vector:
         """Rotate the point around the vector theta radians.
 
-        Parameters:
-            vector (Vector): rotation axis;
-            theta (float): rotation radians;
-        Return:
-            the rotated point (Point)
+        Args:
+            vector: rotation axis
+            theta: rotation radians
+        Returns:
+            the rotated point
 
         """
         cosa = math.cos(theta)
@@ -106,38 +121,35 @@ class Vector:
         return Vector(rx, ry, rz)
 
     def to_sphr(self):
+        """Convert cartesian to spherical coordinates."""
         r = self.distance_from(Vector())
         theta = math.atan(self.y / self.x)
         phi = math.atan(math.sqrt(self.x**2 + self.y**2) / self.z)
-        return VecSph(theta, phi, r)
+        return theta, phi, r
 
     def coplanar(self, other1, other2):
         """Test if the vector is coplanar with the other two vectors."""
         triple_prod = self * other1.cross(other2)
-        cp = True if triple_prod == 0 else False
-        return cp
+        return triple_prod==0
 
     def to_list(self):
+        """Return a list containing the coordinates."""
         return [self.x, self.y, self.z]
 
     def to_tuple(self):
+        """Return a tuple containing the coordinates, and round to third decimal place."""
         return (round(self.x,3), round(self.y, 3), round(self.z, 3))
 
-
-class VecSph(Vector):
-    """Define a vector in spherical coordinate."""
-
-    def __init__(self, theta=0, phi=0, r=0):
-        self.theta = theta
-        self.phi = phi
-        self.r = r
-        self.x = math.sin(theta) * math.cos(phi) * r
-        self.y = math.sin(theta) * math.sin(phi) * r
-        self.z = math.cos(phi) * r
-        self.length = r
+    @classmethod
+    def spherical(cls, theta, phi, r):
+        """Construct a vector using spherical coordinates."""
+        xcoord = math.sin(theta) * math.cos(phi) * r
+        ycoord = math.sin(theta) * math.sin(phi) * r
+        zcoord = math.cos(phi) * r
+        return cls(xcoord, ycoord, zcoord)
 
 
-class Polygon(object):
+class Polygon:
     """3D polygon class."""
 
     def __init__(self, vertices):
@@ -146,12 +158,13 @@ class Polygon(object):
         assert self.vert_cnt > 2, "Need more than 2 vertices to make a polygon."
         self.vertices = vertices
 
-    def __sub__(self, other):
+    def __sub__(self, other: Polygon) -> Polygon:
         """Polygon subtraction.
 
-        Parameter:
-            other (Polygon): subtract this polygon;
-        Return:
+        Args:
+            other: subtract this polygon
+
+        Returns:
             Clipped polygon (Polygon)
 
         """
@@ -173,6 +186,7 @@ class Polygon(object):
         return Polygon(results)
 
     def flip(self):
+        """Reverse the vertices order, thus reversing the normal."""
         return Polygon([self.vertices[0]] + self.vertices[:0:-1])
 
     def normal(self):
@@ -180,10 +194,11 @@ class Polygon(object):
         vect21 = self.vertices[1] - self.vertices[0]
         vect32 = self.vertices[2] - self.vertices[1]
         normal = vect21.cross(vect32)
-        normal_u = normal.unitize()
+        normal_u = normal.normalize()
         return normal_u
 
     def centroid(self):
+        """Return the geometric center point."""
         return sum(self.vertices, Vector()).scale(1/self.vert_cnt)
 
     def area(self):
@@ -218,12 +233,13 @@ class Polygon(object):
             new_vertices.append(Vector(sx, sy, sz))
         return Polygon(new_vertices)
 
-    def extrude(self, vector):
+    def extrude(self, vector: Vector) -> list:
         """Extrude the polygon.
 
-        Parameter:
+        Args:
             vector (Vector): extrude along the vector;
-        Return:
+
+        Returns:
             Polygon (list): a list of polygons;
 
         """
@@ -240,6 +256,7 @@ class Polygon(object):
         return polygons
 
     def __add__(self, other):
+        """Merge two polygons."""
         sp, index = self.shared_pts(other)
         print(sp)
         if sp == 2:
@@ -255,6 +272,7 @@ class Polygon(object):
                 self.vertices, other.vertices)
 
     def shared_pts(self, other):
+        """Return the total number of share points between two polygons."""
         cnt = 0
         index = []
         for pid in range(len(self.vertices)):
@@ -269,6 +287,7 @@ class Polygon(object):
         return Polygon(ro_pts)
 
     def move(self, vector):
+        """Return the moved polygon along a vector."""
         mo_pts = [v + vector for v in self.vertices]
         return Polygon(mo_pts)
 
@@ -280,6 +299,7 @@ class Polygon(object):
         return min(xs), max(xs), min(ys), max(ys), min(zs), max(zs)
 
     def to_list(self):
+        """Return a list of tuples."""
         return [p.to_tuple() for p in self.vertices]
 
     def to_real(self):
@@ -288,41 +308,19 @@ class Polygon(object):
         vert_str = '\n'.join([str(i) for i in self.vertices])
         return real_str + vert_str
 
-
-class Rectangle3P(Polygon):
-    """Rectangle from three points."""
-
-    def __init__(self, pt1, pt2, pt3):
-        """Define a rectangle with three consective vertices."""
-        self.pt1 = pt1
-        self.pt2 = pt2
-        self.pt3 = pt3
-        self.vect21 = pt2 - pt1
-        self.vect32 = pt3 - pt2
+    @classmethod
+    def rectangle3pts(cls, pt1, pt2, pt3):
+        """."""
+        vect21 = pt2 - pt1
+        vect32 = pt3 - pt2
         err_msg = "Three points are not at a right angle"
-        assert self.vect21.angle_from(self.vect32) == math.pi / 2, err_msg
+        assert vect21.angle_from(vect32) == math.pi / 2, err_msg
         vect12 = pt1 - pt2
-        self.pt4 = pt3 + vect12
-        self.vertices = [self.pt1, self.pt2, self.pt3, self.pt4]
-        self.vert_cnt = 4
-
-    def area(self):
-        length = self.vect21.length
-        width = self.vect32.length
-        return length * width
+        pt4 = pt3 + vect12
+        return cls([pt1, pt2, pt3, pt4])
 
 
-class Triangle(Polygon):
-    """Triangle"""
-
-    def __init__(self, pt1, pt2, pt3):
-        self.pt1 = pt1
-        self.pt2 = pt2
-        self.pt3 = pt3
-        self.vertices = [pt1, pt2, pt3]
-
-
-class Convexhull(object):
+class Convexhull:
     """Convex hull on coplanar points."""
 
     def __init__(self, points, normal):
@@ -334,7 +332,6 @@ class Convexhull(object):
         """
         self.normal = normal
         vectors = [p.as_vector() for p in points]
-        projected = [v * normal for v in vectors]
         u = min(points, key=lambda p: p.x)
         v = max(points, key=lambda p: p.x)
         if u.__str__() == v.__str__():
@@ -373,9 +370,12 @@ def polygon_center(*polygons):
 
 
 def getbbox(polygon_list, offset=0.0):
-    """Get boundary from a list of primitives."""
+    """
+    Return a list of polygon that is the
+    orthogonal bounding box of a list of polygon.
+    """
     extreme_list = [p.extreme() for p in polygon_list]
-    lim = [i for i in zip(*extreme_list)]
+    lim = list(zip(*extreme_list))
     xmin = min(lim[0]) - offset
     xmax = max(lim[1]) + offset
     ymin = min(lim[2]) - offset
@@ -386,16 +386,16 @@ def getbbox(polygon_list, offset=0.0):
     fp1 = Vector(xmin, ymin, zmin)
     fp2 = Vector(xmax, ymin, zmin)
     fp3 = Vector(xmax, ymax, zmin)
-    fpg = Rectangle3P(fp1, fp2, fp3) #-Z
+    fpg = Polygon.rectangle3pts(fp1, fp2, fp3) #-Z
 
     cp1 = Vector(xmin, ymin, zmax)
     cp2 = Vector(xmax, ymin, zmax)
     cp3 = Vector(xmax, ymax, zmax)
-    cpg = Rectangle3P(cp3, cp2, cp1) #+Z
+    cpg = Polygon.rectangle3pts(cp3, cp2, cp1) #+Z
 
-    swpg = Rectangle3P(cp2, fp2, fp1) #-Y
+    swpg = Polygon.rectangle3pts(cp2, fp2, fp1) #-Y
 
-    ewpg = Rectangle3P(fp3, fp2, cp2) #+X
+    ewpg = Polygon.rectangle3pts(fp3, fp2, cp2) #+X
 
     s2n_vec = Vector(0, ymax - ymin, 0)
     nwpg = Polygon([v + s2n_vec for v in swpg.vertices]).flip() #+Y

@@ -1,9 +1,19 @@
-"""
-Support matrices generation.
+""" Support matrices generation.
 
-T.Wang
+radmtx module contains two class objects: sender and receiver, representing
+the ray sender and receiver in the rfluxmtx operation. sender object is can
+be instantiated as a surface, a list of points, or a view, and these are
+typical forms of a sender. Similarly, a receiver object can be instantiated as
+a surface, sky, or suns.
+
+  Typical usage example:
+      For the generation of daylight matrix:
+      sender1 = Sender.as_surface(prim_list=[window_primitives], basis='kf')
+      receiver1=  Receiver.as_sky(basis='r4')
+      rfluxmtx(sender=sender1, receiver=receiver1, env=model)
 """
 
+from __future__ import annotations
 import os
 import copy
 import subprocess as sp
@@ -18,9 +28,16 @@ logger = logging.getLogger('frads.radmtx')
 
 
 class Sender:
-    """Sender object for matrix generation."""
+    """Sender object for matrix generation.
 
-    def __init__(self, *, form, sender, xres, yres):
+    Attributes:
+        form: types of sender, {surface|view|points}
+        sender: the sender object
+        xres: sender x dimension
+        yres: sender y dimension
+    """
+
+    def __init__(self, *, form: str, sender: str, xres: int, yres: int) -> None:
         """Instantiate the instance.
 
         Parameters:
@@ -36,8 +53,9 @@ class Sender:
         self.yres = yres
         logger.debug("Sender: %s", sender)
 
+
     @classmethod
-    def as_surface(cls, *, prim_list, basis, offset=None, left=None):
+    def as_surface(cls, *, prim_list: list, basis: str, offset=None, left=None):
         """
         Construct a sender from a surface.
         Parameters:
@@ -50,7 +68,7 @@ class Sender:
         return cls(form='s', sender=prim_str, xres=None, yres=None)
 
     @classmethod
-    def as_view(cls, *, vu_dict, ray_cnt, xres, yres):
+    def as_view(cls, *, vu_dict: dict, ray_cnt: int, xres: int, yres: int):
         """
         Construct a sender from a view.
         Parameters:
@@ -59,7 +77,8 @@ class Sender:
             xres, yres(int): image resolution
             c2c(bool): Set to True to trim the fisheye corner rays.
         """
-        assert None not in (xres, yres), "Need to specify resolution"
+        if None in (xres, yres):
+            raise ValueError("Need to specify resolution")
         vcmd = f"vwrays {radutil.opt2str(vu_dict)} -x {xres} -y {yres} -d"
         res_eval = radutil.spcheckout(vcmd.split()).decode().split()
         xres, yres = res_eval[1], res_eval[3]
@@ -76,20 +95,21 @@ class Sender:
         return cls(form='v', sender=vrays, xres=xres, yres=yres)
 
     @classmethod
-    def as_pts(cls, *, pts_list, ray_cnt=1):
+    def as_pts(cls, *, pts_list: list, ray_cnt=1) -> Sender:
         """Construct a sender from a list of points.
         Parameters:
             pts_list(list): a list of list of float
             ray_cnt(int): sender ray count
         """
-        assert pts_list is not None, "pts_list is None"
+        if pts_list is None:
+            raise ValueError("pts_list is None")
         pts_list = [i for i in pts_list for _ in range(ray_cnt)]
         grid_str = os.linesep.join(
             [' '.join(map(str, li)) for li in pts_list]) + os.linesep
         return cls(form='p', sender=grid_str, xres=None, yres=len(pts_list))
 
     @staticmethod
-    def crop2circle(ray_cnt, xres):
+    def crop2circle(ray_cnt: int, xres: int) -> str:
         """Flush the corner rays from a fisheye view
         Parameters:
             ray_cnt(int): ray count;
@@ -110,7 +130,7 @@ class Sender:
 class Receiver:
     """Receiver object for matrix generation."""
 
-    def __init__(self, receiver, basis, modifier=None):
+    def __init__(self, receiver: str, basis: str, modifier=None) -> None:
         """Instantiate the receiver object.
         Parameters:
             receiver (str): filepath {sky | sun | file_path}
@@ -120,12 +140,12 @@ class Receiver:
         self.modifier = modifier
         logger.debug("Receivers: %s", receiver)
 
-    def __add__(self, other):
+    def __add__(self, other: Receiver) -> Receiver:
         self.receiver += other.receiver
         return self
 
     @classmethod
-    def as_sun(cls, *, basis, smx_path, window_paths):
+    def as_sun(cls, *, basis, smx_path, window_paths) -> Receiver:
         """
         basis: receiver sampling basis {kf | r1 | sc25...}
         """
@@ -137,7 +157,7 @@ class Receiver:
         return cls(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
 
     @classmethod
-    def as_sky(cls, basis):
+    def as_sky(cls, basis) -> Receiver:
         """
         basis: receiver sampling basis {kf | r1 | sc25...}
         """
@@ -147,8 +167,8 @@ class Receiver:
         return cls(receiver=sky_str, basis=basis)
 
     @classmethod
-    def as_surface(cls, prim_list, basis, out,
-                   offset=None, left=False, source='glow'):
+    def as_surface(cls, prim_list: list, basis: str, out: str,
+                   offset=None, left=False, source='glow') -> Receiver:
         """
         basis: receiver sampling basis {kf | r1 | sc25...}
         """
@@ -157,7 +177,7 @@ class Receiver:
         return cls(receiver=rcvr_str, basis=basis)
 
 
-def prepare_surface(*, prims, basis, left, offset, source, out):
+def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
     """Prepare the sender or receiver surface, adding appropriate tags."""
     assert basis is not None, 'Sampling basis cannot be None'
     primscopy = copy.deepcopy(prims)
@@ -196,7 +216,20 @@ def prepare_surface(*, prims, basis, left, offset, source, out):
 
 
 def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
-    """Calling rfluxmtx to generate the matrices."""
+    """Calling rfluxmtx to generate the matrices.
+
+    Args:
+        sender: Sender object
+        receiver: Receiver object
+        env: model environment, basically anything that's not the
+            sender or receiver
+        opt: option string
+        out: output path
+
+    Returns:
+        return the stdout of the command
+
+    """
     assert None not in (sender, receiver), "Sender/Receiver object is None"
     opt = '' if opt is None else opt
     with tf.TemporaryDirectory() as tempd:
@@ -237,8 +270,20 @@ def rcvr_oct(receiver, env, oct_path):
             wtr.write(octree)
 
 
-def rcontrib(*, sender, modifier, octree, out, opt):
-    """Calling rcontrib to generate the matrices."""
+def rcontrib(*, sender, modifier: str, octree, out, opt) -> None:
+    """Calling rcontrib to generate the matrices.
+
+    Args:
+        sender: Sender object
+        modifier: modifier str listing the receivers in octree
+        octree: the octree that includes the environment and the receiver
+        opt: option string
+        out: output path
+
+    Returns:
+        None
+
+    """
     lopt = opt.split()
     lopt.append('-fo+')
     with tf.TemporaryDirectory() as tempd:

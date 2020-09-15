@@ -1,0 +1,75 @@
+## materials.rad
+void plastic black
+0
+0
+5 0 0 0 0 0
+
+void plastic paint80
+0
+0
+5 .8 .8 .8 0 0
+
+void plastic Chairs
+0
+0
+5 .2 .2 .2 0 0
+
+void plastic CubeFabric
+0
+0
+5 .45 .45 .45 0 0
+
+void plastic CubeFrame
+0
+0
+5 .15 .15 .15 0 0
+
+void plastic Desks
+0
+0
+5 .4 .4 .4 0 0
+
+void plastic DeskLeg
+0
+0
+5 .1 .1 .1 0 0
+
+void plastic Extwalls
+0
+0
+5 .3 .3 .3 0 0
+
+void plastic carpet30
+0
+0
+5 .3 .3 .3 0 0
+
+void glass GlDay
+0
+0
+3 .654 .654 .654
+
+void glass GlView
+0
+0
+3 .654 .654 .654
+
+void plastic Walls
+0
+0
+5 .65 .65 .65 0 0
+
+void plastic windowframe
+0
+0
+5 .3 .3 .3 0 0
+
+void plastic concrete
+0
+0
+5 .4 .4 .4 0 0
+
+void glow glowing        
+0
+0
+4 1 1 1 0

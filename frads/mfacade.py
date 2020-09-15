@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Generate F matrix.
+"""
+Generate F matrix.
 Window zone 0-9
 
-T.Wang
 """
 
 import argparse

@@ -2,21 +2,21 @@
 
 import os
 import sys
-srcloc = {'win32':'C:\\', 'darwin':'/Applications', 'linux':'/usr/local'}
-dname = [os.path.join(srcloc[sys.platform], d)
-         for d in os.listdir(srcloc[sys.platform]) if d.startswith('EnergyPlus')]
-ephome = input('Where is EnergyPlus installed?') if len(dname) == 0 else dname[0]
-if ephome not in sys.path: sys.path.append(ephome)
-from pyenergyplus.api import EnergyPlusAPI
 import json
 import subprocess as sp
-import pdb
+import configparser
+import logging
 from frads import mtxmethod as mm
 from frads import radutil as ru
 from frads import epjson2rad
 from frads import makesky
-import configparser
-import logging
+srcloc = {'win32':'C:\\', 'darwin':'/Applications', 'linux':'/usr/local'}
+dname = [os.path.join(srcloc[sys.platform], d)
+         for d in os.listdir(srcloc[sys.platform]) if d.startswith('EnergyPlus')]
+ephome = input('Where is EnergyPlus installed?') if len(dname) == 0 else dname[0]
+if ephome not in sys.path:
+    sys.path.append(ephome)
+from pyenergyplus.api import EnergyPlusAPI
 
 one_time = True
 

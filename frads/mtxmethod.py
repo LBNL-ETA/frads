@@ -1,7 +1,5 @@
-
 """
-T.Wang
-
+Typical Radiance matrix-based simulation workflows
 """
 
 import os
@@ -45,17 +43,14 @@ pjoin = os.path.join
 def mtxmult(*mtx):
     """Multiply matrices using rmtxop, convert to photopic, remove header."""
     cmd1 = ['dctimestep', '-od'] + list(mtx)
-    cmd2 = ['rmtxop', '-fd', '-c', '47.4', '119.9', '11.6', '-']
-    cmd3 = ['rmtxop', '-fa', '-t', '-']
-    cmd4 = ['getinfo', '-']
+    cmd2 = ['rmtxop', '-fd', '-c', '47.4', '119.9', '11.6', '-', '-t']
+    cmd3 = ['getinfo', '-']
     out1 = sp.Popen(cmd1, stdout=sp.PIPE)
     out2 = sp.Popen(cmd2, stdin=out1.stdout, stdout=sp.PIPE)
     out1.stdout.close()
     out3 = sp.Popen(cmd3, stdin=out2.stdout, stdout=sp.PIPE)
     out2.stdout.close()
-    out4 = sp.Popen(cmd4, stdin=out3.stdout, stdout=sp.PIPE)
-    out3.stdout.close()
-    out = out4.communicate()[0]
+    out = out3.communicate()[0]
     return out
 
 def imgmult(*mtx, odir):
@@ -70,7 +65,9 @@ def imgmult(*mtx, odir):
 
 
 class MTXMethod:
-    """Pre-processing for matrix-based simulation."""
+    """Typical Radiance matrix-based simulation workflows
+    Attributes:
+        -processing for matrix-based simulation."""
     def __init__(self, config):
         self.logger = logging.getLogger('frads.mtxmethod.Prepare')
         self.config = namedtuple('config', config.keys())(**config)

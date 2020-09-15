@@ -23,7 +23,7 @@ class Shoebox(Room):
         self.origin = origin
         flr_pt2 = origin + radgeom.Vector(width, 0, 0)
         flr_pt3 = flr_pt2 + radgeom.Vector(0, depth, 0)
-        self.floor = radgeom.Rectangle3P(origin, flr_pt2, flr_pt3)
+        self.floor = radgeom.Polygon.rectangle3pts(origin, flr_pt2, flr_pt3)
         extrusion = self.floor.extrude(radgeom.Vector(0, 0, height))
         self.clng = extrusion[1]
         self.swall = Wall(extrusion[2], 'swall')
@@ -94,8 +94,8 @@ class Wall(object):
         self.centroid = polygon.centroid()
         self.polygon = polygon
         self.vertices = polygon.vertices
-        self.vect1 = (self.vertices[1] - self.vertices[0]).unitize()
-        self.vect2 = (self.vertices[2] - self.vertices[1]).unitize()
+        self.vect1 = (self.vertices[1] - self.vertices[0]).normalize()
+        self.vect2 = (self.vertices[2] - self.vertices[1]).normalize()
         self.name = name
         self.windows = {}
 
@@ -110,7 +110,7 @@ class Wall(object):
                     + self.vect2.scale(dist_left)
             win_pt2 = win_pt1 + self.vect1.scale(height)
             win_pt3 = win_pt1 + self.vect2.scale(width)
-            win_polygon = radgeom.Rectangle3P(win_pt3, win_pt1, win_pt2)
+            win_polygon = radgeom.Polygon.rectangle3pts(win_pt3, win_pt1, win_pt2)
         return win_polygon
 
     def add_window(self, name, window_polygon):

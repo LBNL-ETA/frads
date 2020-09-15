@@ -1,4 +1,6 @@
-"""."""
+"""
+Routines for generating sky models
+"""
 
 import csv
 import datetime
