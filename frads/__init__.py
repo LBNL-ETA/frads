@@ -17,10 +17,14 @@ for prog in rad_progs:
     if ppath is None:
         print(f"{prog} not found; check Radiance installation")
 
-# Check Radiance version, need to be at least 5.X
-rad_version = sp.run(["rtrace", "-version"], check=True, stdout=sp.PIPE).stdout.decode().split()[1]
-if int(rad_version[0]) < 5:
-    print(f"Radiance version {rad_version} detected, please upgrade")
+try:
+    # Check Radiance version, need to be at least 5.X
+    rad_version = sp.run(["rtrace", "-version"], check=True, stdout=sp.PIPE).stdout.decode().split()[1]
+    if int(rad_version[0]) < 5:
+        print(f"Radiance version {rad_version} detected, please upgrade")
+except FileNotFoundError as err:
+    print(err)
+
 
 if not sys.platform.startswith('win'):
     import resource
