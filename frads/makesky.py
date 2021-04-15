@@ -9,10 +9,12 @@ import os
 import subprocess as sp
 import tempfile as tf
 import urllib.request
+import ssl
 from frads import radutil
 import pdb
 
 LSEP = os.linesep
+
 
 def basis_glow(sky_basis):
     grnd_str = grndglow()
@@ -76,7 +78,8 @@ class Gensun(object):
         if smx_path is not None:
             cmd = f"rmtxop -ff -c .3 .6 .1 -t {smx_path} "
             cmd += "| getinfo - | total -if5186 -t,"
-            dtot = [float(i) for i in sp.check_output(cmd, shell=True).split(b',')]
+            dtot = [float(i)
+                    for i in sp.check_output(cmd, shell=True).split(b',')]
         else:
             dtot = [1] * self.runlen
         out_lines = []
@@ -102,7 +105,8 @@ def epw2sunmtx(epw_path):
     with tf.NamedTemporaryFile() as wea:
         cmd = f"epw2wea {epw_path} {wea.name}"
         sp.call(cmd, shell=True)
-        cmd = f"gendaymtx -od -m 6 -d -5 .533 {wea.name} > {smx_path}"  # large file
+        # large file
+        cmd = f"gendaymtx -od -m 6 -d -5 .533 {wea.name} > {smx_path}"
         sp.call(cmd, shell=True)
     return smx_path
 
@@ -206,6 +210,7 @@ def parse_csv(csv_path, ftype='csv', dt_col="date_time", dt_format="%Y%m%d %H:%M
         reader = csv.DictReader(csvfile, dialect=ftypes[ftype])
         for row in reader:
             _dt = datetime.datetime.strptime(row[dt_col], dt_format)
+            _year = str(_dt.year)
             _month = str(_dt.month)
             _day = str(_dt.day)
             _hour = _dt.hour
@@ -220,7 +225,8 @@ def parse_csv(csv_path, ftype='csv', dt_col="date_time", dt_format="%Y%m%d %H:%M
                 continue
             if int(_dni) == 0 and int(_dhi) == 0:
                 continue
-            data_entry.append([_month, _day, _hour, _minute, _hours, _dni, _dhi])
+            data_entry.append(
+                [_year, _month, _day, _hour, _minute, _hours, _dni, _dhi])
     return data_entry
 
 
@@ -235,6 +241,7 @@ def sky_cont(mon, day, hrs, lat, lon, mer, dni, dhi, year=None, grefl=.2, spect=
     out_str += f'skyfunc glow groundglow 0 0 4 1 1 1 0{LSEP*2}'
     out_str += f'groundglow source ground 0 0 4 0 0 -1 180{LSEP}'
     return out_str
+
 
 def solar_angle(*, lat, lon, mer, month, day, hour):
     """Simplified translation from the Radiance sun.c and gensky.c code.
@@ -251,14 +258,16 @@ def solar_angle(*, lat, lon, mer, month, day, hour):
     solar_decline = 0.4093 * math.sin((2 * math.pi / 368) * (julian_date - 81))
 
     solar_time = hour + (0.170 * math.sin((4 * math.pi / 373) * (julian_date - 80))
-                         - 0.129 * math.sin((2 * math.pi / 355) * (julian_date - 8))
+                         - 0.129 * math.sin((2 * math.pi / 355)
+                                            * (julian_date - 8))
                          + 12 * (s_meridian - longitude_r) / math.pi)
 
     altitude = math.asin(math.sin(latitude_r) * math.sin(solar_decline)
-                    - math.cos(latitude_r) * math.cos(solar_decline)
-                    * math.cos(solar_time * (math.pi / 12)))
+                         - math.cos(latitude_r) * math.cos(solar_decline)
+                         * math.cos(solar_time * (math.pi / 12)))
 
     return altitude > 0
+
 
 class epw2wea(object):
     """."""
@@ -278,7 +287,7 @@ class epw2wea(object):
         if dh:
             self.daylight()  # filter out non-daylight hours if asked
 
-        self.wea = self.header + self.string
+        self.wea = self.header + '\n' + self.string
         self.dt_string = []
         for line in self.string.splitlines():
             entry = line.split()
@@ -286,7 +295,6 @@ class epw2wea(object):
             da = int(entry[1])
             hr = int(float(entry[2]))
             self.dt_string.append(f"{mo:02d}{da:02d}_{hr:02d}30")
-
 
     def daylight(self):
         """."""
@@ -347,7 +355,7 @@ class getEPW(object):
     epw_url_path = os.path.join(_file_path_, 'data', epw_url)
     #assert os.path.isfile(epw_url_path), 'File not found: {}'.format(epw_url_path)
     zip2latlon_path = os.path.join(_file_path_, 'data', zip2latlon)
-    #assert os.path.isfile(zip2latlon_path),\
+    # assert os.path.isfile(zip2latlon_path),\
     #        'File not found: {}'.format(zip2latlon_path)
 
     def __init__(self, lat, lon):
@@ -359,16 +367,18 @@ class getEPW(object):
             csvreader = csv.DictReader(rdr, delimiter=',')
             for row in csvreader:
                 distances.append((float(row['Latitude']) - self.lat)**2
-                                + (float(row['Longitude']) - self.lon)**2)
+                                 + (float(row['Longitude']) - self.lon)**2)
                 urls.append(row['URL'])
         min_idx = distances.index(min(distances))
         url = urls[min_idx]
         epw_fname = os.path.basename(url)
         try:
-            headers = ('User-Agent', 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.3')
-            opener = urllib.request.build_opener()
-            opener.addheaders = [headers]
-            with opener.open(url) as resp:
+            user_agents = 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.3'
+            request = urllib.request.Request(
+                url, headers={'User-Agent': user_agents}
+            )
+            tempcontext = ssl.SSLContext()
+            with urllib.request.urlopen(request, context=tempcontext) as resp:
                 raw = resp.read().decode()
         except OSError as e:
             raise e
@@ -390,4 +400,3 @@ class getEPW(object):
             else:
                 raise 'zipcode not found in US'
         return cls(lat, lon)
-

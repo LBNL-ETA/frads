@@ -38,8 +38,8 @@ def main(kwargs):
                     with open(_path, 'w') as wtr:
                         wtr.write(ru.put_primitive(val))
             else:
-                _path = os.path.join(objdir, f"{st}.rad")
-                scene_paths.append(f"{st}.rad")
+                _path = os.path.join(objdir, f"{stype}.rad")
+                scene_paths.append(f"{stype}.rad")
                 with open(_path, 'w') as wtr:
                     [wtr.write(ru.put_primitive(val)) for key,val in zone[stype].items()]
         cfg = mm.cfg_template

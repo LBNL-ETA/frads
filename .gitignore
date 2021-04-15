@@ -1,3 +1,4 @@
+tags
 *.rad
 *.cfg
 __pycache__
@@ -5,9 +6,10 @@ __pycache__
 frads.egg-info
 build
 dist
-.DS_Store
+*.DS_Store
 tags
 *.log
 *.vf
 *.mtx
 *.epw
+*.smx

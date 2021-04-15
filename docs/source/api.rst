@@ -35,8 +35,9 @@ radmtx
 
 makesky
 ---------
-.. automodule:: frads.makesky
-   :members:
+.. module:: frads.makesky
+.. autofunction:: gendaymtx
+.. autofunction:: Gensun
 
 mtxmethod
 ---------

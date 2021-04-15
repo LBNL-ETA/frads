@@ -1,6 +1,9 @@
 """
 Convert an EnergyPlus model as a parsed dictionary
 to Radiance primitives.
+Todo:
+    * Parse window data file for Construction:WindowDataFile
+
 """
 import logging
 from frads import radutil as ru
@@ -71,15 +74,34 @@ class epJSON2Rad:
         mat_prims = {}
         for key, val in epjs_mat.items():
             mat_prims[key] = {'modifier':'void', 'int_arg':'0',
-                              'str_args':'0', 'type':'plastic',
-                              'identifier':key.replace(' ','_')}
-            try:
+                              'str_args':'0'}
+            if 'visible_absorptance' in val:
                 refl = 1 - val['visible_absorptance']
-            except KeyError as ke:
-                raise Exception(ke, f"No visible absorptance defined for {key}")
-            mat_prims[key]['real_args'] = "5 {0:.2f} {0:.2f} {0:.2f} 0 0".format(refl)
-            mat_prims[key]['thickness'] = 0
+                mat_prims[key]['type'] = 'plastic'
+                mat_prims[key]['identifier'] = key.replace(' ','_')
+                mat_prims[key]['real_args'] = "5 {0:.2f} {0:.2f} {0:.2f} 0 0".format(refl)
+                mat_prims[key]['thickness'] = 0
+            else:
+                mat_prims[key]['identifier'] = ''
+                mat_prims[key]['modifier'] = ''
+                mat_prims[key]['type'] = ''
+                mat_prims[key]['int_arg'] = ''
+                mat_prims[key]['str_args'] = ''
+                mat_prims[key]['real_args'] = ''
         return mat_prims
+
+    def _windowmaterial_simpleglazingsystem(self, epjs_wndw_mat):
+        """Parse EP WindowMaterial:Simpleglazing"""
+        wndw_mat_prims = {}
+        for key, val in epjs_wndw_mat.items():
+            try:
+                tvis = val['visible_transmittance']
+            except KeyError as ke:
+                raise Exception(ke, "for", key)
+            wndw_mat_prims[key] = {'modifier':'void', 'type':'glass', 'int_arg':'0',
+                              'str_args':'0', 'identifier':key.replace(' ','_'),
+                              'real_args': "3 {0:.2f} {0:.2f} {0:.2f}".format(tvis)}
+        return wndw_mat_prims
 
     def _windowmaterial_simpleglazing(self, epjs_wndw_mat):
         """Parse EP WindowMaterial:Simpleglazing"""
@@ -159,10 +181,15 @@ class epJSON2Rad:
         """Parse the construction data."""
         layers = ['outside_layer']
         layers.extend(sorted([l for l in cnstrct if l.startswith('layer_')]))
-        inner_layer = cnstrct[layers[-1]].replace(' ','_')
+        inner_layer = cnstrct[layers[-1]]
         outer_layer = cnstrct[layers[0]].replace(' ','_')
         cthick = sum([self.mat_prims[cnstrct[l]]['thickness'] for l in layers])
         return inner_layer, outer_layer, cthick
+
+    def _construction_windowdatafile(self, construction):
+        file_path = construction['file_name']
+        # self.parse_wndw_data(file_path)
+        # return layers, cthick
 
     def parse_wndw_cnstrct(self, wcnstrct):
         """Parse window construction."""
@@ -190,10 +217,18 @@ class epJSON2Rad:
                 v['real_args'] = v['polygon'].to_real()
         return zone
 
+    def get_construction(self, epjs):
+        construction_key = [key for key in epjs if key.split(':')[0] == 'Construction']
+        construction_dict = {}
+        for key in construction_key:
+            construction_dict.update(epjs[key])
+        return construction_dict
+
 
     def get_zones(self, epjs):
         """Looping through zones."""
         opaque_srfs = epjs['BuildingSurface:Detailed']
+        construction = self.get_construction(epjs)
         ext_zones = {}
         for zn in epjs['Zone']:
             zone_srfs = {k:v for k,v in opaque_srfs.items() if v['zone_name'] == zn}
@@ -203,8 +238,12 @@ class epJSON2Rad:
                 for sn in zone_srfs:
                     surface = zone_srfs[sn]
                     srf_type = surface['surface_type']
-                    cnstrct = epjs['Construction'][surface['construction_name']]
+                    cnstrct = construction[surface['construction_name']]
                     inner_layer, outer_layer, cthick = self.parse_cnstrct(cnstrct)
+                    if self.mat_prims[inner_layer]['identifier'] == '':
+                        inner_layer = 'void'
+                    else:
+                        inner_layer = inner_layer.replace(' ','_')
                     srf_polygon = rg.Polygon([rg.Vector(*v.values())
                                               for v in surface['vertices']])
                     srf_windows = []
@@ -218,7 +257,7 @@ class epJSON2Rad:
                                        k.startswith(f'vertex_{n+1}')] for n in range(nfvert)]
                             wndw_polygon = rg.Polygon([rg.Vector(*vert) for vert in fverts])
                             srf_windows.append(wndw_polygon)
-                            wcnstrct = epjs['Construction'][fsurface['construction_name']]
+                            wcnstrct = construction[fsurface['construction_name']]
                             # self.parse_wndw_cnstrct(wcnstrct)
                             wndw_mat = wcnstrct['outside_layer'].replace(' ','_')
                             zone['Window'][fn] = ru.polygon2prim(wndw_polygon, wndw_mat, fn)
@@ -235,5 +274,5 @@ class epJSON2Rad:
 
     def get_site(self, epjs):
         site = epjs['Site:Location']
-        for key, val in site.items():
+        for _, val in site.items():
             return val

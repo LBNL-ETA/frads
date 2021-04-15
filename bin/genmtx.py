@@ -33,6 +33,7 @@ def main(**kwargs):
     # figure out receiver
     if kwargs['r'][0] == 'sky':
         receiver = rm.Receiver.as_sky(kwargs['rs'])
+        kwargs['o'] = kwargs['o'][0]
     elif kwargs['r'][0] == 'sun':
         receiver = rm.Receiver.as_sun(basis=kwargs['rs'], smx_path=kwargs['smx'], window_paths=kwargs['wpths'])
     else: # assuming multiple receivers
@@ -57,8 +58,9 @@ def main(**kwargs):
         rm.rcontrib(sender=sender, modifier=receiver.modifier, octree=sun_oct,
                    out=kwargs['o'], opt=kwargs['opt'])
     else:
-        rm.rfluxmtx(sender=sender, receiver=receiver, env=kwargs['env'],
-                   out=kwargs['o'], opt=kwargs['opt'])
+        res = rm.rfluxmtx(sender=sender, receiver=receiver, env=kwargs['env'], opt=kwargs['opt'])
+        with open(kwargs['o'], 'w') as wtr:
+            wtr.write(res.decode())
 
 
 def genmtx_args(parser):

@@ -1,7 +1,5 @@
-#!/usr/bin/env python3
 """
-T.Wang
-
+Executive program for Radiance matrix-based simulation.
 """
 
 import argparse
@@ -11,31 +9,31 @@ import os
 from frads import mtxmethod
 from frads import radutil
 
-import pdb
 
 def initialize():
-    """."""
+    """Going through files in the standard file structure and generate a cfg file."""
     templ = mtxmethod.cfg_template
-    fs = templ['FileStructure']
-    fs['base'] = os.getcwd()
-    if fs['objects'] in os.listdir(fs['base']):
-        files = os.listdir(os.path.join(fs['base'], fs['objects']))
+    templ['base'] = os.getcwd()
+    if templ['objects'] in os.listdir(templ['base']):
+        files = os.listdir(os.path.join(templ['base'], templ['objects']))
         objfiles = [f for f in files if f.endswith('.rad')]
         matfiles = [f for f in files if f.endswith('.mat')]
-        templ['Model']['scene'] = ' '.join(objfiles)
-        templ['Model']['material'] = ' '.join(matfiles)
+        templ['scene'] = ' '.join(objfiles)
+        templ['material'] = ' '.join(matfiles)
     else:
-        radutil.mkdir_p(fs['objects'])
-    radutil.mkdir_p(fs['matrices'])
-    radutil.mkdir_p(fs['results'])
-    radutil.mkdir_p(fs['resources'])
+        radutil.mkdir_p(templ['objects'])
+    radutil.mkdir_p(templ['matrices'])
+    radutil.mkdir_p(templ['results'])
+    radutil.mkdir_p(templ['resources'])
     cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
+    templ = {"mrad configration":templ}
     cfg.read_dict(templ)
     with open("run.cfg", 'w') as rdr:
         cfg.write(rdr)
 
+
 def cfg2dict(cfg):
-    """."""
+    """Convert a configparser object to dictionary."""
     cfg_dict = {}
     sections = cfg.sections()
     for sec in sections:
@@ -52,7 +50,7 @@ def cfg2dict(cfg):
 
 
 def main(cfgpath):
-    """."""
+    """Parse the configuration file and envoke to mtxmethod to do the actual work."""
     cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
     with open(cfgpath) as rdr:
         cfg.read_string(rdr.read())
@@ -60,35 +58,28 @@ def main(cfgpath):
     msetup = mtxmethod.MTXMethod(cfg_dict)
     ncp_shade = msetup.config.ncp_shade
     smx = msetup.gen_smx(msetup.config.smx_basis)
-    if msetup.config.bsdf is None:
-        logger.info("Using two-phase method")
-        pdsmx = msetup.prep_2phase_pt()
-        vdsmx = msetup.prep_2phase_vu()
-        msetup.calc_2phase_pt(pdsmx, smx)
-        msetup.calc_2phase_vu(vdsmx, smx)
+    if msetup.config.method is not None:
+        _method = globals()[msetup.config.method]
+        _method(msetup, smx, direct=msetup.config.separate_direct)
     else:
-        if msetup.config.separate_direct:
-            if ncp_shade is not None and len(ncp_shade.split()) > 1:
-                logger.info('Using six-phase simulation')
-                msetup.prep_6phase_pt()
-                msetup.prep_6phase_vu()
-            else:
-                smx_d = msetup.gen_smx(self.dmx_basis, direct=True)
-                logger.info('Using five-phase simulation')
-                msetup.prep_5phase_pt()
-                msetup.prep_5phase_vu()
-                msetup.calc_5phase_pt(vmx, vmxd, dmx, dmxd, csmx, smx, smxd, smx_sun)
-                msetup.calc_5phase_vu()
+        if None in (msetup.config.bsdf, msetup.config.windows):
+            logger.info("Using two-phase method")
+            mtxmethod.two_phase(msetup, smx)
         else:
             if ncp_shade is not None and len(ncp_shade.split()) > 1:
-                logger.info('Using four-phase simulation')
-                msetup.prep_4phase_pt()
-                msetup.calc_4phase_vu()
+                if msetup.config.separate_direct:
+                    logger.info('Using six-phase simulation')
+                    mtxmethod.four_phase(msetup, smx, direct=True)
+                else:
+                    logger.info('Using four-phase simulation')
+                    mtxmethod.four_phase(msetup, smx)
             else:
-                logger.info('Using three-phase simulation')
-                dmxs = msetup.prep_3phase_dmx()
-                pvmxs = msetup.prep_3phase_pt()
-                vvmxs = msetup.prep_3phase_vu()
+                if msetup.config.separate_direct:
+                    logger.info('Using five-phase simulation')
+                    mtxmethod.three_phase(msetup, smx, direct=True)
+                else:
+                    logger.info('Using three-phase simulation')
+                    mtxmethod.three_phase(msetup, smx)
 
 
 if __name__ == '__main__':

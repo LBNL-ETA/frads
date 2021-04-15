@@ -1,7 +1,11 @@
 import setuptools
 import os
+import sys
 
-bin_path = [os.path.join('bin', p) for p in os.listdir('bin') if p.endswith('.py')]
+
+bin_path = [os.path.join('bin', p)
+            for p in os.listdir('bin') if not p.startswith('.')]
+
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
@@ -16,7 +20,7 @@ setuptools.setup(
     url="https://github.com/LBNL-ETA/frads",
     packages=['frads'],
     package_dir={'frads': 'frads'},
-    package_data={'frads':['data/*.*']},
+    package_data={'frads': ['data/*.*']},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: BSD License",

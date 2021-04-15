@@ -5,15 +5,6 @@ from frads import radutil
 
 
 class Room(object):
-    """Room model."""
-
-    def __init__(self, *, wall, floor, ceiling, window):
-        self.wall = wall
-        self.floor = floor
-        self.ceiling = ceiling
-        self.window = window
-
-class Shoebox(Room):
     """Make a shoebox."""
 
     def __init__(self, width, depth, height, origin=radgeom.Vector()):
@@ -39,12 +30,12 @@ class Shoebox(Room):
         self.srf_prims = []
         _temp = {'type': 'polygon', 'str_args': '0', 'int_arg': '0'}
 
-        ceiling = {'modifier': 'white_paint_80', 'identifier': 'ceiling'}
+        ceiling = {'modifier': 'white_paint_70', 'identifier': 'ceiling'}
         ceiling['real_args'] = self.clng.to_real()
         ceiling.update(_temp)
         self.srf_prims.append(ceiling)
 
-        floor = {'modifier': 'carpet_25', 'identifier': 'floor'}
+        floor = {'modifier': 'carpet_20', 'identifier': 'floor'}
         floor['real_args'] = self.floor.to_real()
         floor.update(_temp)
         self.srf_prims.append(floor)
@@ -76,7 +67,7 @@ class Shoebox(Room):
         self.wndw_prims = {}
         for wpolygon in self.swall.windows:
             win_prim = {
-                'modifier': 'glass_80',
+                'modifier': 'glass_60',
                 'type': 'polygon',
                 'str_args': '0',
                 'int_arg': '0'
@@ -140,44 +131,15 @@ class Wall(object):
 
 def make_room(dimension):
     """Make a side-lit shoebox room."""
-    theroom = room.Shoebox(float(dimensions['width']),
-                        float(dimensions['depth']),
-                        float(dimensions['height']))
-    wndw_names = [i for i in dimensions if i.startswith('window')]
+    theroom = Room(float(dimension['width']),
+                      float(dimension['depth']),
+                      float(dimension['height']))
+    wndw_names = [i for i in dimension if i.startswith('window')]
     for wd in wndw_names:
-        wdim = map(float, dimensions[wd].split())
+        wdim = map(float, dimension[wd].split())
         theroom.swall.add_window(wd, theroom.swall.make_window(*wdim))
-    theroom.swall.facadize(float(dimensions['facade_thickness']))
+    theroom.swall.facadize(float(dimension['facade_thickness']))
     theroom.surface_prim()
     theroom.window_prim()
-    mlib = radutil.material_lib()
-    #sensor_grid = radutil.gen_grid(theroom.floor, raysenders['distance'],
-                                   #raysenders['spacing'],
-                                   #op=raysenders.getboolean('opposite'))
-    #nsensor = len(sensor_grid)
-    return theroom#, sensor_grid
+    return theroom
 
-if __name__ == "__main__":
-    rm1 = Room(3.05, 4.57, 2.74)
-    swall = rm1.swall
-    swin1 = swall.make_window(.165, .18, 1.32, 1.4)
-    swin2 = swall.make_window(1.56, .18, 1.32, 1.4)
-    swin3 = swall.make_window(.165, 1.64, 1.32, .42)
-    swin4 = swall.make_window(1.56, 1.64, 1.32, .42)
-    swall.add_window('win1',swin1)
-    swall.add_window('win2',swin2)
-    swall.add_window('win3',swin3)
-    swall.add_window('win4',swin4)
-    #swin1 = swall.make_window(.165, .18, 2.71, .7)
-    #swin2 = swall.make_window(.165, .88, 2.71, .7)
-    #swin3 = swall.make_window(.165, 1.64, 2.71, .42)
-    #swall.add_window('win1',swin1)
-    #swall.add_window('win2',swin2)
-    #swall.add_window('win3',swin3)
-    swall.facadize(0.1)
-    rm1.surface_prim()
-    rm1.window_prim()
-    with open('window.rad', 'w') as wtr:
-        [wtr.write(radutil.put_primitive(rm1.wndw_prims[i])) for i in rm1.wndw_prims]
-    with open('test.rad', 'w') as wtr:
-        [wtr.write(radutil.put_primitive(i)) for i in rm1.srf_prims]

@@ -27,7 +27,7 @@ class Vector:
 
     def __str__(self):
         """Class string representation."""
-        return "\t{:02f}\t{:02f}\t{:02f}".format(self.x, self.y, self.z)
+        return "{:02f} {:02f} {:02f}".format(self.x, self.y, self.z)
 
     def __add__(self, other):
         """Add the two vectors."""

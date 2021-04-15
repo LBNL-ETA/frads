@@ -23,9 +23,7 @@ from frads import makesky
 from frads import radgeom
 from frads import radutil
 
-import pdb
 logger = logging.getLogger('frads.radmtx')
-
 
 class Sender:
     """Sender object for matrix generation.
@@ -181,7 +179,7 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
     """Prepare the sender or receiver surface, adding appropriate tags."""
     assert basis is not None, 'Sampling basis cannot be None'
     primscopy = copy.deepcopy(prims)
-    upvector = radutil.up_vector(prims)
+    upvector = str(radutil.up_vector(prims)).replace(' ', ',')
     # basis = "-" + basis if left else basis
     upvector = "-" + upvector if left else upvector
     modifier_set = {p['modifier'] for p in prims}
@@ -236,6 +234,13 @@ def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
         receiver_path = os.path.join(tempd, 'receiver')
         with open(receiver_path, 'w') as wtr:
             wtr.write(receiver.receiver)
+        if isinstance(env[0], dict):
+            env_path = os.path.join(tempd, 'env')
+            with open(env_path, 'w') as wtr:
+                [wtr.write(radutil.put_primitive(prim)) for prim in env]
+            env_paths = [env_path]
+        else:
+            env_paths = env
         cmd = ['rfluxmtx'] + opt.split()
         if sender.form == 's':
             sender_path = os.path.join(tempd, 'sender')
@@ -254,8 +259,8 @@ def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
                 cmd.extend(["-o", out])
             cmd.extend(['-', receiver_path])
             stdin = sender.sender
-        cmd.extend(env)
-        return radutil.spcheckout(cmd, input=stdin)
+        cmd.extend(env_paths)
+        return radutil.spcheckout(cmd, inp=stdin)
 
 
 def rcvr_oct(receiver, env, oct_path):
@@ -292,32 +297,12 @@ def rcontrib(*, sender, modifier: str, octree, out, opt) -> None:
             wtr.write(modifier)
         cmd = ['rcontrib'] + lopt
         if sender.form == 'p':
-            cmd += ['-I+', '-faf', '-y', sender.yres]
+            cmd += ['-I+', '-faf', '-y', str(sender.yres)]
             stdin = sender.sender.encode()
         elif sender.form == 'v':
             radutil.mkdir_p(out)
             out = os.path.join(out, '%04d.hdr')
-            cmd += ['-ffc', '-x', sender.xres, '-y', sender.yres]
+            cmd += ['-ffc', '-x', str(sender.xres), '-y', str(sender.yres)]
             stdin = sender.sender
         cmd += ['-o', out, '-M', modifier_path, octree]
-        radutil.spcheckout(cmd, input=stdin)
-
-
-# if __name__ == '__main__':
-#     with open('test.vf') as rdr:
-#         vuline = rdr.read()
-#     vu_dict = radutil.parse_vu(vuline)
-#     vu_sndr = Sender.as_view(vu_dict=vu_dict,xres=1000, yres=1000)
-#     pts_list = [[0,0,0,0,-1,0],[1,2,3,0,0,1]]
-#     pt_sndr = Sender.as_pts(pts_list)
-#     with open('test.rad') as rdr:
-#         rline = rdr.readlines()
-#     prim_list = radutil.parse_primitive(rline)
-#     srf_sndr = Sender.as_surface(prim_list=prim_list, basis='kf', offset=None)
-#     rsky = Receiver.as_sky(basis='r4')
-#     rsun = Receiver.as_sun(basis='r6', smx_path=None, window_paths=None)
-#     with open('test.rad') as rdr:
-#         rline = rdr.readlines()
-#     prim_list = radutil.parse_primitive(rline)
-#     rsrf = Receiver.as_surface(prim_list=prim_list, basis='kf', offset=1, left=False,
-#                         source='glow',out=None)
+        radutil.spcheckout(cmd, inp=stdin)
