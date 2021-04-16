@@ -81,7 +81,7 @@ def main():
         cfg_dict = cfg2dict(cfg)
         msetup = mtxmethod.MTXMethod(cfg_dict)
         ncp_shade = msetup.config.ncp_shade
-        smx = msetup.gen_smx(msetup.config.smx_basis)
+        smx = msetup.gen_smx(msetup.wea_path, msetup.config.smx_basis, msetup.mtxdir)
         if msetup.config.method is not None:
             _method = globals()[msetup.config.method]
             _method(msetup, smx, direct=msetup.config.separate_direct)

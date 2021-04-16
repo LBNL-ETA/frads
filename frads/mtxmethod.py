@@ -28,7 +28,7 @@ cfg_template = {
     'daylight_hours_only': False, 'start_hour': None, 'end_hour': None,
     'orientation': 0,
     'material': None, 'windows': None, 'scene': None,
-    'ncp_shade': None, 'BSDF': None, 'sunBSDF': None,
+    'ncp_shade': None, 'bsdf': None, 'dbsdf': None,
     'view1': None, 'grid_surface': None, 'grid_height': None,
     'grid_spacing': None, 'grid_opposite': True,
 }
@@ -121,10 +121,10 @@ class MTXMethod:
         else:
             self.windowpath = [pjoin(self.objdir, obj)
                                for obj in self.config.windows.split()]
-        self.maccfspath = None if self.config.sunBSDF is None else \
-            [pjoin(self.objdir, obj) for obj in self.config.sunBSDF.split()]
-        self.bsdfpath = None if self.config.BSDF is None else \
-            [pjoin(self.resodir, bsdf) for bsdf in self.config.BSDF.split()]
+        self.maccfspath = None if self.config.dbsdf is None else \
+            [pjoin(self.objdir, obj) for obj in self.config.dbsdf.split()]
+        self.bsdfpath = None if self.config.bsdf is None else \
+            [pjoin(self.resodir, bsdf) for bsdf in self.config.bsdf.split()]
         self.envpath = [self.materialpath]
         self.envpath.extend(self.scenepath)
 
@@ -279,7 +279,6 @@ class MTXMethod:
                 imgmult(pjoin(dsmx[view], '%04d.hdr'), smx, odir=opath))
             ofiles = [pjoin(opath, f) for f in sorted(os.listdir(opath))
                       if f.endswith('.hdr')]
-            breakpoint()
             for idx, val in enumerate(ofiles):
                 os.rename(val, pjoin(opath, self.dts[idx]+'.hdr'))
 
