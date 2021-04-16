@@ -1,4 +1,3 @@
-*.rad
 __pycache__
 *.xml
 frads.egg-info

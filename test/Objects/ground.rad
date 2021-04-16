@@ -1,0 +1,14 @@
+void plastic ground
+0
+0
+5 .2 .2 .2 0 0
+
+ground polygon grnd
+0
+0
+12
+	-40	0	0
+	80	0	0
+	80	-50	0
+	-40	-50	0
+
