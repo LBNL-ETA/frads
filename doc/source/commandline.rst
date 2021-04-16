@@ -73,6 +73,7 @@ If a configuration file has been prepared beforehand, for example as test.cfg, s
 
 to avoid running the init command.
 
+**Example: workplane illuminance using two-phase method**
 
 genmtx
 ------

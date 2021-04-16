@@ -3,8 +3,7 @@
 Welcome to frads
 ================
 
-frads is Python package for higher-level abstraction (wrapper) of Radiance workflows, especially for matrix-based simulation
-methods.
+Frads is an open-source library providing high-level abstraction (wrapper) of Radiance matrix-based simulation workflows.
 
 .. toctree::
    :maxdepth: 2
