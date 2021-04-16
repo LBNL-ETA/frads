@@ -10,7 +10,7 @@ methods.
    :maxdepth: 2
    :caption: Contents:
 
-Documentation
+User Guide
 -------------
 
 This part of the documentation guides you through all of the library's
