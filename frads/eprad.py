@@ -1,15 +1,17 @@
-#!/usr/bin/env python3
+"""EnergyPlus Radiance runtime interaction."""
 
-import os
-import sys
-import json
-import subprocess as sp
+import argparse
 import configparser
+import json
 import logging
-from frads import mtxmethod as mm
-from frads import radutil as ru
+import os
+import subprocess as sp
+import sys
 from frads import epjson2rad
 from frads import makesky
+from frads import mtxmethod as mm
+from frads import radutil as ru
+### Import EnergyPlus Python Library ###
 srcloc = {'win32': 'C:\\', 'darwin': '/Applications', 'linux': '/usr/local'}
 dname = [os.path.join(srcloc[sys.platform], d)
          for d in os.listdir(srcloc[sys.platform]) if d.startswith('EnergyPlus')]
@@ -18,6 +20,7 @@ ephome = input('Where is EnergyPlus installed?') if len(
 if ephome not in sys.path:
     sys.path.append(ephome)
 from pyenergyplus.api import EnergyPlusAPI
+########################################
 
 one_time = True
 
@@ -42,7 +45,7 @@ def read_epjs(fpath):
     return epjs
 
 
-def main(epjs_path, overwrite=False, nproc=1, run=False):
+def init_radiance(epjs_path, overwrite=False, nproc=1, run=False):
     global cfg, mtxmtd, pdsmx
     epjs = read_epjs(epjs_path)
     radobj = epjson2rad.epJSON2Rad(epjs)
@@ -161,8 +164,7 @@ def time_step_handler():
     api.exchange.set_actuator_value(west_zone_power_level, power_level)
 
 
-if __name__ == "__main__":
-    import argparse
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('ipath')
     parser.add_argument('-w', required=True)
@@ -181,7 +183,7 @@ if __name__ == "__main__":
     console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-    main(args.ipath, run=True, nproc=args.n, overwrite=args.f)
+    init_radiance(args.ipath, run=True, nproc=args.n, overwrite=args.f)
     # api.runtime.callback_end_zone_timestep_after_zone_reporting(
     # time_step_handler)
     api.runtime.callback_begin_zone_timestep_before_init_heat_balance(

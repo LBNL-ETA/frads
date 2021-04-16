@@ -1,11 +1,4 @@
 import setuptools
-import os
-import sys
-
-
-bin_path = [os.path.join('bin', p)
-            for p in os.listdir('bin') if not p.startswith('.')]
-
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
@@ -27,5 +20,12 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
-    scripts=bin_path,
+    entry_points={
+        'console_scripts': ['mrad=frads.mrad:main',
+                            'genmtx=frads.genmtx:main',
+                            'ep2rad=frads.ep2rad:main',
+                            'eprad=frads.eprad:main',
+                            'genfmtx=frads.genfmtx:main',
+                            ],
+    }
 )

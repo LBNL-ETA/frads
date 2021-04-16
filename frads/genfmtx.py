@@ -1,14 +1,14 @@
-#!/usr/bin/env python3
-"""Commandline tool for generating facade matrix.
-T.Wang"""
+"""Commandline tool for generating facade matrix."""
 
+from argparse import ArgumentParser
+from threading import Thread
+import logging
+import os
+import shutil
+import subprocess as sp
+import tempfile as tf
 from frads import mfacade as fcd
 from frads import radutil
-from threading import Thread
-import tempfile as tf
-import shutil
-import os
-import subprocess as sp
 
 def genfmtx_args(parser):
     parser.add_argument('-w', required=True, help='Window files')
@@ -36,7 +36,29 @@ def klems_wrap(out, out2, inp, basis):
     with open(out2, 'w') as wtr:
         [wtr.write('\t'.join(row)+'\n') for row in res]
 
-def main(**kwargs):
+def main():
+    parser = ArgumentParser()
+    genfmtx_parser = genfmtx_args(parser)
+    genfmtx_parser.add_argument('-vb', action='store_true', help='verbose mode')
+    genfmtx_parser.add_argument('-db', action='store_true', help='debug mode')
+    genfmtx_parser.add_argument('-si', action='store_true', help='silent mode')
+    args = genfmtx_parser.parse_args()
+    argmap = vars(args)
+    logger = logging.getLogger('frads')
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler = logging.StreamHandler()
+    if argmap['db']:
+        logger.setLevel(logging.DEBUG)
+        console_handler.setLevel(logging.DEBUG)
+    elif argmap['vb']:
+        logger.setLevel(logging.INFO)
+        console_handler.setLevel(logging.INFO)
+    elif argmap['si']:
+        logger.setLevel(logging.CRITICAL)
+        console_handler.setLevel(logging.CRITICAL)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    kwargs = argmap
     with open(kwargs['w']) as rdr:
         raw_wndw_prims = radutil.parse_primitive(rdr.readlines())
     with open(kwargs['ncp']) as rdr:
@@ -125,30 +147,3 @@ def main(**kwargs):
         os.system(cmd)
         shutil.rmtree(td)
         [os.remove(mtx) for mtx in mtxs]
-
-
-if __name__ == "__main__":
-    from argparse import ArgumentParser
-    import logging
-    parser = ArgumentParser()
-    genfmtx_parser = genfmtx_args(parser)
-    genfmtx_parser.add_argument('-vb', action='store_true', help='verbose mode')
-    genfmtx_parser.add_argument('-db', action='store_true', help='debug mode')
-    genfmtx_parser.add_argument('-si', action='store_true', help='silent mode')
-    args = genfmtx_parser.parse_args()
-    argmap = vars(args)
-    logger = logging.getLogger('frads')
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler = logging.StreamHandler()
-    if argmap['db']:
-        logger.setLevel(logging.DEBUG)
-        console_handler.setLevel(logging.DEBUG)
-    elif argmap['vb']:
-        logger.setLevel(logging.INFO)
-        console_handler.setLevel(logging.INFO)
-    elif argmap['si']:
-        logger.setLevel(logging.CRITICAL)
-        console_handler.setLevel(logging.CRITICAL)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    main(**argmap)

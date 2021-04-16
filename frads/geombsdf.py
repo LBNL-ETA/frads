@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Call genBSDF to generate BSDF."""
 
 import argparse
@@ -11,8 +10,21 @@ from frads import radutil, radgeom
 import math
 
 
-def main(args):
+def main():
     """Generate a BSDF for macroscopic systems."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-blinds', nargs=3, type=float, metavar=('depth', 'spacing', 'angle'))
+    parser.add_argument('-curve', default='')
+    parser.add_argument('-custom', nargs=3)
+    parser.add_argument('-section', nargs=2)
+    parser.add_argument('-gap', type=float, default=0.0)
+    parser.add_argument('-ext', action='store_true')
+    parser.add_argument('-m', nargs=3, type=float, required=True, metavar=('refl', 'spec', 'rough'))
+    parser.add_argument('-g', type=float)
+    parser.add_argument('-window')
+    parser.add_argument('-env')
+    parser.add_argument('-o', default='default_blinds.rad')
+    args = parser.parse_args()
     mat_prim = radutil.neutral_plastic_prim('void', 'blindmaterial', *args.m)
     mat_prim_str = radutil.put_primitive(mat_prim)
     if args.custom:
@@ -90,18 +102,3 @@ def main(args):
     os.remove("tmp_blinds.rad")
 
 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-blinds', nargs=3, type=float, metavar=('depth', 'spacing', 'angle'))
-    parser.add_argument('-curve', default='')
-    parser.add_argument('-custom', nargs=3)
-    parser.add_argument('-section', nargs=2)
-    parser.add_argument('-gap', type=float, default=0.0)
-    parser.add_argument('-ext', action='store_true')
-    parser.add_argument('-m', nargs=3, type=float, required=True, metavar=('refl', 'spec', 'rough'))
-    parser.add_argument('-g', type=float)
-    parser.add_argument('-window')
-    parser.add_argument('-env')
-    parser.add_argument('-o', default='default_blinds.rad')
-    main(parser.parse_args())

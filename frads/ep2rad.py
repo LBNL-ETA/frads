@@ -1,13 +1,12 @@
-#!/usr/bin/env python3
+"""Translate an EnergyPlus model (.epJSON) to Radiance model(s)."""
+
 import argparse
 import configparser
 import json
 import os
-import pdb
 from frads import epjson2rad as eprad
 from frads import radutil as ru
 from frads import mtxmethod as mm
-
 
 # Sensor grid dimension in meters
 GRID_HEIGHT = 0.75
@@ -18,7 +17,12 @@ def read_epjs(fpath):
         epjs = json.load(rdr)
     return epjs
 
-def main(kwargs):
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('fpath')
+    parser.add_argument('-run', action='store_true', default=False)
+    args = parser.parse_args()
+    kwargs = vars(args)
     epjs = read_epjs(kwargs['fpath'])
     radobj = eprad.epJSON2Rad(epjs)
     for zn in radobj.zones:
@@ -56,14 +60,3 @@ def main(kwargs):
             config.read_dict(cfg)
             with open(os.path.join(zn, 'run.cfg'), 'w') as wtr:
                 config.write(wtr)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('fpath')
-    parser.add_argument('-run', action='store_true', default=False)
-    args = parser.parse_args()
-    main(vars(args))
-
-
-

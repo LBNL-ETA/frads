@@ -1,6 +1,4 @@
-tags
 *.rad
-*.cfg
 __pycache__
 *.xml
 frads.egg-info

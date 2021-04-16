@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Command-line tool for generating matrices for different scenarios.
 TWang
@@ -9,58 +8,6 @@ import logging
 import shutil
 from frads import radmtx as rm
 from frads import radutil
-
-
-def main(**kwargs):
-    """Generate a matrix."""
-    assert len(kwargs['r']) == len(kwargs['o'])
-    # figure out environment
-    env = ' '.join(kwargs['env'])
-    if kwargs['i'] is not None:
-        env = "{} -i {}".format(env, kwargs['i'])
-    # figure out sender
-    with open(kwargs['s']) as rdr:
-        sndrlines = rdr.readlines()
-    if kwargs['st'] == 's':
-        prim_list = radutil.parse_primitive(sndrlines)
-        sender = rm.Sender.as_surface(prim_list=prim_list, basis=kwargs['ss'], offset=kwargs['so'])
-    elif kwargs['st'] == 'v':
-        vudict = radutil.parse_vu(sndrlines[-1]) # use the last view from a view file
-        sender = rm.Sender.as_view(vu_dict=vudict, ray_cnt=kwargs['rc'], xres=kwargs['xres'], yres=kwargs['yres'])
-    elif kwargs['st'] == 'p':
-        pts_list = [l.split() for l in sndrlines]
-        sender = rm.Sender.as_pts(pts_list=pts_list, ray_cnt=kwargs['rc'])
-    # figure out receiver
-    if kwargs['r'][0] == 'sky':
-        receiver = rm.Receiver.as_sky(kwargs['rs'])
-        kwargs['o'] = kwargs['o'][0]
-    elif kwargs['r'][0] == 'sun':
-        receiver = rm.Receiver.as_sun(basis=kwargs['rs'], smx_path=kwargs['smx'], window_paths=kwargs['wpths'])
-    else: # assuming multiple receivers
-        rcvr_prims = []
-        for path in kwargs['r']:
-            with open(path) as rdr:
-                rlines = rdr.readlines()
-            rcvr_prims.extend(radutil.parse_primitive(rlines))
-        modifiers = set([prim['modifier'] for prim in rcvr_prims])
-        receiver = rm.Receiver(receiver='', basis=kwargs['rs'], modifier=None)
-        for mod, op in zip(modifiers, kwargs['o']):
-            _receiver = [prim for prim in rcvr_prims
-                         if prim['modifier'] == mod and prim['type'] in ('polygon', 'ring') ]
-            if _receiver != []:
-                receiver += rm.Receiver.as_surface(prim_list=_receiver, basis=kwargs['rs'], offset=kwargs['ro'],
-                    left=None, source='glow', out=op)
-        kwargs['o'] = None
-    # generate matrices
-    if kwargs['r'][0] == 'sun':
-        sun_oct = 'sun.oct'
-        rm.rcvr_oct(receiver, kwargs['env'], sun_oct)
-        rm.rcontrib(sender=sender, modifier=receiver.modifier, octree=sun_oct,
-                   out=kwargs['o'], opt=kwargs['opt'])
-    else:
-        res = rm.rfluxmtx(sender=sender, receiver=receiver, env=kwargs['env'], opt=kwargs['opt'])
-        with open(kwargs['o'], 'w') as wtr:
-            wtr.write(res.decode())
 
 
 def genmtx_args(parser):
@@ -90,7 +37,8 @@ def genmtx_args(parser):
     return parser
 
 
-if __name__ == "__main__":
+def main():
+    """Generate a matrix."""
     parser = argparse.ArgumentParser()
     genmtx_parser = genmtx_args(parser)
     args = genmtx_parser.parse_args()
@@ -109,4 +57,55 @@ if __name__ == "__main__":
         console_handler.setLevel(logging.CRITICAL)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-    main(**argmap)
+    assert len(argmap['r']) == len(argmap['o'])
+    # what's the environment
+    env = ' '.join(argmap['env'])
+    if argmap['i'] is not None:
+        env = "{} -i {}".format(env, argmap['i'])
+    # what's the sender
+    with open(argmap['s']) as rdr:
+        sndrlines = rdr.readlines()
+    if argmap['st'] == 's':
+        prim_list = radutil.parse_primitive(sndrlines)
+        sender = rm.Sender.as_surface(prim_list=prim_list, basis=argmap['ss'], offset=argmap['so'])
+    elif argmap['st'] == 'v':
+        vudict = radutil.parse_vu(sndrlines[-1]) # use the last view from a view file
+        sender = rm.Sender.as_view(vu_dict=vudict, ray_cnt=argmap['rc'],
+                                   xres=argmap['xres'], yres=argmap['yres'])
+    elif argmap['st'] == 'p':
+        pts_list = [l.split() for l in sndrlines]
+        sender = rm.Sender.as_pts(pts_list=pts_list, ray_cnt=argmap['rc'])
+    # figure out receiver
+    if argmap['r'][0] == 'sky':
+        receiver = rm.Receiver.as_sky(argmap['rs'])
+        argmap['o'] = argmap['o'][0]
+    elif argmap['r'][0] == 'sun':
+        receiver = rm.Receiver.as_sun(basis=argmap['rs'], smx_path=argmap['smx'],
+                                      window_paths=argmap['wpths'])
+    else: # assuming multiple receivers
+        rcvr_prims = []
+        for path in argmap['r']:
+            with open(path) as rdr:
+                rlines = rdr.readlines()
+            rcvr_prims.extend(radutil.parse_primitive(rlines))
+        modifiers = set([prim['modifier'] for prim in rcvr_prims])
+        receiver = rm.Receiver(receiver='', basis=argmap['rs'], modifier=None)
+        for mod, op in zip(modifiers, argmap['o']):
+            _receiver = [prim for prim in rcvr_prims
+                         if prim['modifier'] == mod and prim['type'] in ('polygon', 'ring') ]
+            if _receiver != []:
+                receiver += rm.Receiver.as_surface(
+                    prim_list=_receiver, basis=argmap['rs'], offset=argmap['ro'],
+                    left=None, source='glow', out=op)
+        argmap['o'] = None
+    # generate matrices
+    if argmap['r'][0] == 'sun':
+        sun_oct = 'sun.oct'
+        rm.rcvr_oct(receiver, argmap['env'], sun_oct)
+        rm.rcontrib(sender=sender, modifier=receiver.modifier, octree=sun_oct,
+                   out=argmap['o'], opt=argmap['opt'])
+    else:
+        res = rm.rfluxmtx(sender=sender, receiver=receiver, env=argmap['env'], opt=argmap['opt'])
+        with open(argmap['o'], 'wb') as wtr:
+            wtr.write(res)
+
