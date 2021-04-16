@@ -8,6 +8,8 @@ _frads_ is a python3-based higher-level abstraction of Radiance command-line wor
 
 It also support EnergyPlus(>=9.3) integration with its new EMS module which allows EnergyPlus to be used as a library.
 
+[Documentation](https://frads.readthedocs.io/en/latest/)
+
 ## To do
 - [x] 2,3,4,5-phase methods implemented, (image based 5-phase not working on windows, 4-phase to be tested)
 - [x] epJSON to Radiance workflow implemented (not fully tested), window puncher + wall thickner
@@ -20,14 +22,10 @@ It also support EnergyPlus(>=9.3) integration with its new EMS module which allo
 
 ## Installation
 
-You can install stable _frads_ by entering the following command in your terminal/cmd/powershell:
+You can install _frads_ by entering the following command in your terminal/cmd/powershell:
 
 ```
-pip install frads
-```
-If you need the latest _frads_ you can clone this repository, or download and unzip the pacakge, and use the command:
-```
-pip install /PATH/TO/YOUR/frads
+pip install git+https://github.com/LBNL-ETA/frads.git
 ```
 
 
