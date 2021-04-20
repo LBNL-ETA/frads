@@ -26,6 +26,10 @@ setuptools.setup(
                             'ep2rad=frads.ep2rad:main',
                             'eprad=frads.eprad:main',
                             'genfmtx=frads.genfmtx:main',
+                            'gengrid=frads.radutil:gengrid',
+                            'getwea=frads.makesky:getwea',
+                            'rpxop=frads.radutil:rpxop',
+                            'varays=frads.radutil:varays',
                             ],
     }
 )

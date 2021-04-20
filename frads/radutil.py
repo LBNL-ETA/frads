@@ -15,7 +15,7 @@ except ModuleNotFoundError:
     print("Numpy not available")
     numpy_installed = False
 import xml.etree.ElementTree as ET
-from frads import radgeom
+from frads import radgeom, radmtx
 
 
 GEOM_TYPE = ['polygon', 'ring', 'tube', 'cone']
@@ -594,6 +594,24 @@ def gen_grid(polygon: radgeom.Polygon, height: float, spacing: float) -> list:
     return grid
 
 
+def gengrid():
+    """Commandline program for generating a grid of sensor points."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('surface')
+    parser.add_argument('spacing', type=float )
+    parser.add_argument('height', type=float)
+    parser.add_argument('-op', action='store_const', const='', default=True)
+    args = parser.parse_args()
+    with open(args.surface) as rdr:
+        prim = parse_primitive(rdr.readlines())
+    polygon = prim[0]['polygon']
+    if args.op:
+        polygon = polygon.flip()
+    grid_list = gen_grid(polygon, args.height, args.spacing)
+    grid_str = '\n'.join([' '.join(map(str, row)) for row in grid_list])
+    print(grid_str)
+
+
 def material_lib():
     mlib = []
     #carpet .2
@@ -739,6 +757,30 @@ def dctimestep(input_list):
         cmd = "dctimestep %s %s > %s" % (input_string, sky, out_path)
     sp.call(cmd, shell=True)
 
+def rpxop():
+    """Operate on input directories given a operation type.
+
+    Parameters:
+    op(str), operation type, choose either dcts or pcomb
+    inputs(list), input directories/file.
+                    For pcomb operations: include symbols like '+,'-','*' in-between;
+                    For dcts, operation defaults matrix multiplications
+    out_dir(str), path to store your output
+    nproc(int), number of processors to use, default: total available
+
+    """
+    PROGRAM_SCRIPTION = "Image operations with parallel processing"
+    parser = argparse.ArgumentParser(prog='imgop', description=PROGRAM_SCRIPTION)
+    parser.add_argument('-t', type=str, required=True, choices=['dcts', 'pcomb'],
+                        help='operation types: {pcomb|dcts}')
+    parser.add_argument('-i', type=str, required=True, nargs="+", help='list of inputs')
+    parser.add_argument('-o', type=str, required=True, help="output directory")
+    parser.add_argument('-n', type=int, help='number of processors to use')
+    args = parser.parse_args()
+    if args.t == "pcomb":
+        pcombop(args.i, args.o, nproc=args.n)
+    elif args.t == 'dcts':
+        dctsop(args.i, args.o, nproc=args.n)
 
 def combine_mtx(mtxs, out_dir):
     """."""
@@ -843,3 +885,15 @@ def analyze_window(window_prim, movedown):
             radgeom.Vector(1, 0, 0), math.pi/2)
     translate = radgeom.Vector(0, 0, -movedown) - rotate_window
     return height, width, angle2negY, translate
+
+def varays():
+    """Commandline utility program for generating circular fisheye rays."""
+    aparser = argparse.ArgumentParser()
+    aparser.add_argument('-x', required=True, help='square image resolution')
+    aparser.add_argument('-c', default='1')
+    aparser.add_argument('-vf', required=True)
+    args = aparser.parse_args()
+    cmd = "vwrays -ff -vf {} -x {} -y {} ".format(args.vf, args.x, args.x)
+    cmd += '-c {} -pj 0.7 '.format(args.c)
+    cmd += radmtx.Sender.crop2circle(args.c, args.x)
+    sp.run(cmd, shell=True)

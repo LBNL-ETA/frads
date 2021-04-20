@@ -39,23 +39,15 @@ def klems_wrap(out, out2, inp, basis):
 def main():
     parser = ArgumentParser()
     genfmtx_parser = genfmtx_args(parser)
-    genfmtx_parser.add_argument('-vb', action='store_true', help='verbose mode')
-    genfmtx_parser.add_argument('-db', action='store_true', help='debug mode')
-    genfmtx_parser.add_argument('-si', action='store_true', help='silent mode')
+    genfmtx_parser.add_argument('-v', '--verbose', action='count', default=0, help='verbose mode')
     args = genfmtx_parser.parse_args()
     argmap = vars(args)
     logger = logging.getLogger('frads')
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler = logging.StreamHandler()
-    if argmap['db']:
-        logger.setLevel(logging.DEBUG)
-        console_handler.setLevel(logging.DEBUG)
-    elif argmap['vb']:
-        logger.setLevel(logging.INFO)
-        console_handler.setLevel(logging.INFO)
-    elif argmap['si']:
-        logger.setLevel(logging.CRITICAL)
-        console_handler.setLevel(logging.CRITICAL)
+    _level = args.verbose * 10
+    logger.setLevel(_level)
+    console_handler.setLevel(_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     kwargs = argmap

@@ -31,9 +31,7 @@ def genmtx_args(parser):
     parser.add_argument('-yres', type=int, help='Y resolution')
     parser.add_argument('-smx', help='Sky matrix file path')
     parser.add_argument('-wpths', nargs='+', help='Windows polygon paths')
-    parser.add_argument('-vb', action='store_true', help='verbose mode')
-    parser.add_argument('-db', action='store_true', help='debug mode')
-    parser.add_argument('-si', action='store_true', help='silent mode')
+    parser.add_argument('-v', '--verbose', action='count', default=0, help='verbose mode')
     return parser
 
 
@@ -46,15 +44,9 @@ def main():
     logger = logging.getLogger('frads')
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler = logging.StreamHandler()
-    if args.db:
-        logger.setLevel(logging.DEBUG)
-        console_handler.setLevel(logging.DEBUG)
-    elif args.vb:
-        logger.setLevel(logging.INFO)
-        console_handler.setLevel(logging.INFO)
-    elif args.si:
-        logger.setLevel(logging.CRITICAL)
-        console_handler.setLevel(logging.CRITICAL)
+    _level = args.verbose * 10
+    logger.setLevel(_level)
+    console_handler.setLevel(_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     assert len(argmap['r']) == len(argmap['o'])

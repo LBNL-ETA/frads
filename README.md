@@ -1,8 +1,8 @@
 # Radiance matrix-based simulation control (WIP)
 
-_frads_ is a python3-based higher-level abstraction of Radiance command-line workflow for multi-phase matrix-based simulation and beyond. It consists of
+_frads_ is a open-source python-based high-level abstraction of Radiance command-line workflow for multi-phase matrix-based simulation and beyond. It consists of
 
-1) a series of commandline tools, in the _/bin_, that automates standard workflow, and;
+1) a series of commandline tools that automates standard workflow, and;
 
 2) a library that facilitates Radiance matrix-based simulation workflow setup.
 

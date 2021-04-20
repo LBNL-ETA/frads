@@ -2,14 +2,14 @@
 Typical Radiance matrix-based simulation workflows
 """
 
-import os
-import copy
-import shutil
-import tempfile as tf
-import logging
-import subprocess as sp
-import multiprocessing as mp
 from collections import namedtuple
+import copy
+import logging
+import multiprocessing as mp
+import os
+import shutil
+import subprocess as sp
+import tempfile as tf
 from frads import radutil, radmtx, makesky, mfacade
 
 logger = logging.getLogger('frads.mtxmethod')
@@ -58,8 +58,6 @@ def imgmult(*mtx, odir):
     cmd = ['dctimestep', '-oc', '-o', pjoin(odir, '%04d.hdr')] + list(mtx)
     return cmd
 
-# def get_avgskv(self):
-#   radutil.sprun(f"gendaymtx -m {self.mf_sky} -A {self.wea} > {avgskyv}")
 
 def two_phase(_setup, smx):
     pdsmx = _setup.prep_2phase_pt()
@@ -67,17 +65,18 @@ def two_phase(_setup, smx):
     _setup.calc_2phase_pt(pdsmx, smx)
     _setup.calc_2phase_vu(vdsmx, smx)
 
+
 def three_phase(_setup, smx, direct=False):
     pvmxs = _setup.view_matrix_pt()
     vvmxs = _setup.view_matrix_vu()
-    dmxs = _setup.daylight_matrix()
+    dmxs = _setup.daylight_matrix(_setup.window_prims)
     if direct:
         smxd = _setup.gen_smx(_setup.config.smx_basis, direct=True)
         smx_sun = _setup.gen_smx(_setup.config.cdsmx_basis, onesun=True, direct=True)
         _setup.blacken_env()
         pcdsmx = _setup.direct_sun_matrix_pt(smx_sun)
         vcdfmx, vcdrmx, vmap_paths, cdmap_paths = _setup.direct_sun_matrix_vu(smx_sun)
-        dmxsd = _setup.daylight_matrix(direct=True)
+        dmxsd = _setup.daylight_matrix(_setup.window_prims, direct=True)
         pvmxsd = _setup.view_matrix_pt(direct=True)
         vvmxsd = _setup.view_matrix_vu(direct=True)
         _setup.calc_5phase_pt(pvmxs, pvmxsd, dmxs, dmxsd, pcdsmx, smx, smxd, smx_sun)
@@ -90,6 +89,24 @@ def three_phase(_setup, smx, direct=False):
 def four_phase(_setup, smx, direct=False):
     pvmxs = _setup.view_matrix_pt()
     vvmxs = _setup.view_matrix_vu()
+    fmxs = _setup.facade_matrix()
+    dmxs = _setup.daylight_matrix(_setup.port_prims)
+    if direct:
+        smxd = _setup.gen_smx(_setup.config.smx_basis, direct=True)
+        smx_sun = _setup.gen_smx(_setup.config.cdsmx_basis, onesun=True, direct=True)
+        _setup.blacken_env()
+        pcdsmx = _setup.direct_sun_matrix_pt(smx_sun)
+        vcdfmx, vcdrmx, vmap_paths, cdmap_paths = _setup.direct_sun_matrix_vu(smx_sun)
+        dmxsd = _setup.daylight_matrix(_setup.window_prims, direct=True)
+        fmxsd = _setup.facade_matrix(direct=True)
+        pvmxsd = _setup.view_matrix_pt(direct=True)
+        vvmxsd = _setup.view_matrix_vu(direct=True)
+        _setup.calc_6phase_pt(pvmxs, pvmxsd, fmxs, fmxsd, dmxs, dmxsd, pcdsmx, smx, smxd, smx_sun)
+        _setup.calc_6phase_vu(vvmxs, vvmxsd, fmxs, fmxsd, dmxs, dmxsd, vcdfmx,
+                              vcdrmx, vmap_paths, cdmap_paths, smx, smxd, smx_sun)
+    else:
+        _setup.calc_4phase_pt(pvmxs, fmxs, dmxs, smx)
+        _setup.calc_4phase_vu(vvmxs, fmxs, dmxs, smx)
 
 
 class MTXMethod:
@@ -127,6 +144,12 @@ class MTXMethod:
             [pjoin(self.resodir, bsdf) for bsdf in self.config.bsdf.split()]
         self.envpath = [self.materialpath]
         self.envpath.extend(self.scenepath)
+        if self.config.ncp_shade is not None:
+            ncppaths = self.config.ncp_shade.split()
+            if len(ncppaths) > 1:
+                self.ncppath = [pjoin(self.objdir, obj) for obj in ncppaths]
+            else:
+                self.envpath.extend(ncppaths)
 
     def _add_black_glow(self):
         """Add black and glow material to material file."""
@@ -154,9 +177,9 @@ class MTXMethod:
                     radutil.parse_primitive(rdr.readlines()))
         self.window_prims = {}
         self.bsdf = {}
-        for idx in range(len(self.windowpath)):
-            wname = radutil.basename(self.windowpath[idx])
-            with open(self.windowpath[idx]) as rdr:
+        for idx, windowpath in enumerate(self.windowpath):
+            wname = radutil.basename(windowpath)
+            with open(windowpath) as rdr:
                 self.window_prims[wname] = radutil.parse_primitive(
                     rdr.readlines())
             if self.bsdfpath is not None:
@@ -185,7 +208,7 @@ class MTXMethod:
         self.rcvr_sky = radmtx.Receiver.as_sky(basis=self.config.smx_basis)
 
     def get_wea(self):
-        """."""
+        """Obtain and prepare weather file data."""
         if self.config.wea_path is not None:
             self.wea_path = pjoin(self.resodir, self.config.wea_path)
             with open(self.wea_path) as rdr:
@@ -282,7 +305,7 @@ class MTXMethod:
             for idx, val in enumerate(ofiles):
                 os.rename(val, pjoin(opath, self.dts[idx]+'.hdr'))
 
-    def daylight_matrix(self, direct=False):
+    def daylight_matrix(self, sender_prims: dict, direct=False):
         """."""
         self.logger.info("Daylight matrix:")
         dmxs = {}
@@ -291,21 +314,54 @@ class MTXMethod:
         if direct:
             _opt += ' -ab 0'
             _env = [self.materialpath, self.blackenvpath]
-        for wname in self.window_prims:
-            _name = wname
+        for sname in sender_prims:
+            _name = sname
             if direct:
                 _name += '_d'
-            dmxs[wname] = pjoin(self.mtxdir, f'dmx_{_name}.mtx')
-            wndw_prim = self.window_prims[wname]
-            sndr_wndw = radmtx.Sender.as_surface(
-                prim_list=wndw_prim, basis=self.config.vmx_basis)
-            if not isfile(dmxs[wname]) or self.config.overwrite:
+            dmxs[sname] = pjoin(self.mtxdir, f'dmx_{_name}.mtx')
+            window_prim = sender_prims[sname]
+            sndr_window = radmtx.Sender.as_surface(
+                prim_list=window_prim, basis=self.config.vmx_basis)
+            if not isfile(dmxs[sname]) or self.config.overwrite:
                 self.logger.info("Generating daylight matrix for %s", _name)
-                dmx_res = radmtx.rfluxmtx(sender=sndr_wndw, receiver=self.rcvr_sky,
+                dmx_res = radmtx.rfluxmtx(sender=sndr_window, receiver=self.rcvr_sky,
                                           env=_env, out=None, opt=_opt)
-                with open(dmxs[wname], 'wb') as wtr:
+                with open(dmxs[sname], 'wb') as wtr:
                     wtr.write(dmx_res)
         return dmxs
+
+    def facade_matrix(self, direct=False):
+        self.logger.info("Facade matrix:")
+        fmxs = {}
+        _opt = self.config.dmx_opt
+        _env = self.envpath
+        if direct:
+            _opt += ' -ab 0'
+            _env = [self.materialpath, self.blackenvpath]
+        ncp_prims = {}
+        for ncppath in self.ncppath:
+            name = radutil.basename(ncppath)
+            with open(ncppath) as rdr:
+                ncp_prims[name] = radutil.parse_primitive(rdr.readlines())
+        all_ncp_prims = [prim for key, prim in ncp_prims.items()]
+        all_window_prims = [prim for key, prim in self.window_prims.items()]
+        port_prims = mfacade.genport(wpolys=all_window_prims, npolys=all_ncp_prims,
+                                     depth=None, scale=None)
+        port_rcvr = radmtx.Receiver.as_surface(
+            prim_list=port_prims, basis=self.config.fmx_basis, out=None)
+        for wname in self.window_prims:
+            _name = wname + '_d' if direct else wname
+            fmxs[wname] = pjoin(self.mtxdir, f'fmx_{_name}.mtx')
+            window_prim = self.window_prims[wname]
+            sndr_window = radmtx.Sender.as_surface(
+                prim_list=window_prim, basis=self.config.fmx_basis)
+            if not isfile(dmxs[wname]) or self.config.overwrite:
+                self.logger.info("Generating facade matrix for %s", _name)
+                fmx_res = radmtx.rfluxmtx(sender=sndr_window, receiver=port_rcvr,
+                                          env=_env, out=None, opt=_opt)
+                with open(fmxs[wname], 'wb') as wtr:
+                    wtr.write(fmx_res)
+        return fmxs
 
     def view_matrix_pt(self, direct=False):
         """."""
@@ -318,20 +374,20 @@ class MTXMethod:
         else:
             self.logger.info("View matrix for sensor point:")
         vmxs = {}
-        rcvr_wndws = radmtx.Receiver(
+        rcvr_windows = radmtx.Receiver(
             receiver='', basis=self.config.vmx_basis, modifier=None)
         for wname in self.window_prims:
-            wndw_prim = self.window_prims[wname]
+            window_prim = self.window_prims[wname]
             _name = wname
             if direct:
                 _name += '_d'
             vmxs[wname] = pjoin(self.mtxdir, f'pvmx_{_name}.mtx')
-            rcvr_wndws += radmtx.Receiver.as_surface(
-                prim_list=wndw_prim, basis=self.config.vmx_basis,
+            rcvr_windows += radmtx.Receiver.as_surface(
+                prim_list=window_prim, basis=self.config.vmx_basis,
                 offset=None, left=None, source='glow', out=vmxs[wname])
         if not all([isfile(f) for f in vmxs.values()]) or self.config.overwrite:
             self.logger.info(f"Generating using rfluxmtx")
-            radmtx.rfluxmtx(sender=self.sndr_pts, receiver=rcvr_wndws,
+            radmtx.rfluxmtx(sender=self.sndr_pts, receiver=rcvr_windows,
                             env=_env, opt=_opt, out=None)
         return vmxs
 
@@ -344,26 +400,26 @@ class MTXMethod:
             _opt += ' -i -ab 1'
             _env = [self.materialpath, self.blackenvpath]
         vmxs = {}
-        vrcvr_wndws = {}
+        vrcvr_windows = {}
         for view in self.sndr_vus:
             for wname in self.window_prims:
-                vrcvr_wndws[view+wname] = radmtx.Receiver(
+                vrcvr_windows[view+wname] = radmtx.Receiver(
                     receiver='', basis=self.config.vmx_basis, modifier=None)
         for view in self.sndr_vus:
-            for wname, wndw_prim in self.window_prims.items():
+            for wname, window_prim in self.window_prims.items():
                 _name = view + wname
                 if direct:
                     _name += '_d'
                 vmxs[view+wname] = pjoin(
                     self.mtxdir, f'vvmx_{_name}', '%04d.hdr')
-                vrcvr_wndws[view+wname] += radmtx.Receiver.as_surface(
-                    prim_list=wndw_prim, basis=self.config.vmx_basis, out=vmxs[view+wname])
+                vrcvr_windows[view+wname] += radmtx.Receiver.as_surface(
+                    prim_list=window_prim, basis=self.config.vmx_basis, out=vmxs[view+wname])
         for view in self.sndr_vus:
             for wname in self.window_prims:
                 if not isdir(vmxs[view+wname][:-8]) or self.config.overwrite:
                     self.logger.info("Generating for %s", view)
                     radutil.mkdir_p(os.path.dirname(vmxs[view+wname]))
-                    radmtx.rfluxmtx(sender=self.sndr_vus[view], receiver=vrcvr_wndws[view+wname],
+                    radmtx.rfluxmtx(sender=self.sndr_vus[view], receiver=vrcvr_windows[view+wname],
                                     env=_env, opt=_opt, out=None)
         return vmxs
 
@@ -387,7 +443,7 @@ class MTXMethod:
         """."""
         self.logger.info("Computing rendering results:")
         for view in self.sndr_vus:
-            opath = pjoin(self.resdir, f'{view}_3ph')
+            opath = pjoin(self.resdir, f'{view}_3phm')
             if not isdir(opath) or self.config.overwrite:
                 self.logger.info("for %s", view)
                 vresl = []
@@ -423,13 +479,13 @@ class MTXMethod:
             _opt += ' -ab 0'
         ncp_prims = None
         for wname in self.window_prims:
-            wndw_prim = self.window_prims[wname]
+            window_prim = self.window_prims[wname]
             if direct:
                 _name = wname + '_d'
             fmxs[wname] = pjoin(self.mtxdir, 'fmx_{_name}.mtx')
             port_prims = mfacade.genport(
-                wpolys=wndw_prim, npolys=ncp_prims, depth=None, scale=None)
-            mfacade.Genfmtx(win_polygons=wndw_prim['polygon'], port_prim=port_prims,
+                wpolys=window_prim, npolys=ncp_prims, depth=None, scale=None)
+            mfacade.Genfmtx(win_polygons=window_prim['polygon'], port_prim=port_prims,
                             out=fmxs[wname], env=_env, sbasis=self.config.vmx_basis,
                             rbasis=self.config.fmx_basis, opt=_opt, refl=False,
                             forw=False, wrap=False)
@@ -446,25 +502,25 @@ class MTXMethod:
         vvmxs = {}
         dmxs = {}
         fmxs = {}
-        prcvr_wndws = radmtx.Receiver(
+        prcvr_windows = radmtx.Receiver(
             receiver='', basis=self.vmx_basis, modifier=None)
         if len(self.sndr_views) > 0:
-            vrcvr_wndws = {}
+            vrcvr_windows = {}
             for view in self.sndr_vus:
-                vrcvr_wndws[view] = radmtx.Receiver(
+                vrcvr_windows[view] = radmtx.Receiver(
                     receiver='', basis=self.vmx_basis, modifier=None)
         port_prims = mfacade.genport(
-            wpolys=wndw_prims, npolys=ncp_prims, depth=None, scale=None)
-        mfacade.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims,
+            wpolys=window_prims, npolys=ncp_prims, depth=None, scale=None)
+        mfacade.Genfmtx(win_polygons=window_polygon, port_prim=port_prims,
                         out=kwargs['o'], env=kwargs['env'], sbasis=kwargs['ss'],
                         rbasis=kwargs['rs'], opt=kwargs['opt'], refl=False,
                         forw=False, wrap=False)
         for wname in self.window_prims:
-            wndw_prim = self.window_prims[wname]
+            window_prim = self.window_prims[wname]
             self.logger.info(f"Generating daylight matrix for {wname}")
             dmxs[wname] = pjoin(self.mtxdir, f'dmx_{wname}.mtx')
-            sndr_wndw = radmtx.Sender.as_surface(
-                prim_list=wndw_prim, basis=self.vmx_basis, offset=None)
+            sndr_window = radmtx.Sender.as_surface(
+                prim_list=window_prim, basis=self.vmx_basis, offset=None)
             sndr_port = radmtx.Sender.as_surface(
                 prim_list=port_prims, basis=self.fmx_basis, offset=None)
             radmtx.rfluxmtx(sender=sndr_port, receiver=self.rcvr_sky,
@@ -473,12 +529,12 @@ class MTXMethod:
                 vvmxs[view+wname] = pjoin(
                     self.mtxdir, f'vvmx_{view}_{wname}', '%04d.hdr')
                 radutil.mkdir_p(os.path.dirname(vvmxs[view+wname]))
-                vrcvr_wndws[view] += radmtx.Receiver.as_surface(
-                    prim_list=wndw_prim, basis=self.vmx_basis,
+                vrcvr_windows[view] += radmtx.Receiver.as_surface(
+                    prim_list=window_prim, basis=self.vmx_basis,
                     offset=None, left=None, source='glow', out=vvmxs[view+wname])
         self.logger.info(f"Generating view matrix for {view}")
         for view in self.sndr_vus:
-            radmtx.rfluxmtx(sender=self.sndr_vus[view], receiver=vrcvr_wndws[view],
+            radmtx.rfluxmtx(sender=self.sndr_vus[view], receiver=vrcvr_windows[view],
                             env=self.envpath, opt=self.vmx_opt, out=None)
 
     def blacken_env(self):
@@ -500,13 +556,13 @@ class MTXMethod:
         bwindow_path = pjoin(self.objdir, 'blackened_window.rad')
         gwindow_path = pjoin(self.objdir, 'glowing_window.rad')
         with open(bwindow_path, 'w') as wtr:
-            for wndw in blackwindow:
+            for window in blackwindow:
                 [wtr.write(radutil.put_primitive(prim))
-                 for prim in blackwindow[wndw]]
+                 for prim in blackwindow[window]]
         with open(gwindow_path, 'w') as wtr:
-            for wndw in glowwindow:
+            for window in glowwindow:
                 [wtr.write(radutil.put_primitive(prim))
-                 for prim in glowwindow[wndw]]
+                 for prim in glowwindow[window]]
         self.vmap_oct = pjoin(self.resodir, 'vmap.oct')
         self.cdmap_oct = pjoin(self.resodir, 'cdmap.oct')
         vmap = radutil.spcheckout(['oconv']+self.envpath+[bwindow_path])
@@ -601,7 +657,7 @@ class MTXMethod:
 
     def calc_5phase_vu(self, vmx, vmxd, dmx, dmxd, vcdrmx, vcdfmx,
                        vmap_paths, cdmap_paths, smx, smxd, smx_sun):
-        """."""
+        """Compute for image-based 5-phase method result."""
         for view in self.sndr_vus:
             self.logger.info(f"Computing for image-based results for {view}")
             vresl = []

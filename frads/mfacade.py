@@ -94,23 +94,22 @@ class Genfmtx(object):
     def compute_back(self, src_dict):
         """compute front side calculation(backwards)."""
         logger.info('Computing for front side')
-        for i in range(len(self.win_polygon)):
-            logger.info(f'Front transmission for window {i}')
+        for idx, win_polygon in enumerate(self.win_polygon):
+            logger.info(f'Front transmission for window {idx}')
             front_rcvr = rm.Receiver.as_surface(
                 prim_list=self.port_prim, basis=self.rbasis,
-                left=True, offset=None, source='glow', out=src_dict[f'tb{i}'])
-            win_polygon = self.win_polygon[i]
-            sndr_prim = polygon_prim(win_polygon, 'fsender', f'window{i}')
+                left=True, offset=None, source='glow', out=src_dict[f'tb{idx}'])
+            sndr_prim = radutil.polygon2prim(win_polygon, 'fsender', f'window{idx}')
             sndr = rm.Sender.as_surface(
                 prim_list=[sndr_prim], basis=self.sbasis, left=True, offset=None)
             if self.refl:
-                logger.info(f'Front reflection for window {i}')
+                logger.info(f'Front reflection for window {idx}')
                 back_window = win_polygon.flip()
-                back_window_prim = polygon_prim(
-                    back_window, 'breceiver', f'window{i}')
+                back_window_prim = radutil.polygon2prim(
+                    back_window, 'breceiver', f'window{idx}')
                 back_rcvr = rm.Receiver.as_surface(
                     prim_list=[back_window_prim], basis="-"+self.rbasis,
-                    left=False, offset=None, source='glow', out=src_dict[f'rb{i}'])
+                    left=False, offset=None, source='glow', out=src_dict[f'rb{idx}'])
                 front_rcvr += back_rcvr
             rm.rfluxmtx(sender=sndr, receiver=front_rcvr, env=self.env,
                         out=None, opt=self.opt)
@@ -128,14 +127,14 @@ class Genfmtx(object):
         for idx in range(len(self.win_polygon)):
             logger.info(f'Back transmission for window {idx}')
             win_polygon = self.win_polygon[idx].flip()
-            rcvr_prim = polygon_prim(win_polygon, 'breceiver', f'window{idx}')
+            rcvr_prim = radutil.polygon2prim(win_polygon, 'breceiver', f'window{idx}')
             rcvr = rm.Receiver.as_surface(
                 prim_list=[rcvr_prim], basis="-"+self.sbasis,
                 left=False, offset=None, source='glow', out=src_dict[f'tf{idx}'])
             if self.refl:
                 logger.info(f'Back reflection for window {idx}')
                 brcvr_prim = [
-                    polygon_prim(self.port_prim[i]['polygon'], 'freceiver', 'window' + str(i))
+                    radutil.polygon2prim(self.port_prim[i]['polygon'], 'freceiver', 'window' + str(i))
                     for i in range(len(self.port_prim))]
                 brcvr = rm.Receiver.as_surface(
                     prim_list=brcvr_prim, basis=self.rbasis,
@@ -243,7 +242,7 @@ def genport(*, wpolys, npolys, depth, scale):
     ports = all_ports
     port_prims = []
     for pi in range(len(all_ports)):
-        new_prim = polygon_prim(all_ports[pi], 'port',
+        new_prim = radutil.polygon2prim(all_ports[pi], 'port',
                                      'portf%s' % str(pi + 1))
         logger.debug(radutil.put_primitive(new_prim))
         port_prims.append(new_prim)
@@ -307,15 +306,7 @@ def merge_windows(primitive_list):
     real_args = hull_polygon.to_real()
     modifier = primitive_list[0]['modifier']
     identifier = primitive_list[0]['identifier']
-    new_prim = polygon_prim(hull_polygon, modifier, identifier)
+    new_prim = radutil.polygon2prim(hull_polygon, modifier, identifier)
     return new_prim
 
-def polygon_prim(polygon, mod, ident):
-    """prepare a polygon primitive."""
-    new_prim = {'str_args': '0', 'int_arg': '0', 'type': 'polygon'}
-    new_prim['modifier'] = mod
-    new_prim['identifier'] = ident
-    new_prim['polygon'] = polygon
-    new_prim['real_args'] = polygon.to_real()
-    return new_prim
 
