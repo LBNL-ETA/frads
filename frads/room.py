@@ -1,5 +1,7 @@
-"T.Wang"
+"""Generic room model"""
 
+import argparse
+import os
 from frads import radgeom
 from frads import radutil
 
@@ -40,17 +42,17 @@ class Room(object):
         floor.update(_temp)
         self.srf_prims.append(floor)
 
-        nwall = {'modifier': 'white_paint_50', 'identifier': 'nwall'}
+        nwall = {'modifier': 'white_paint_50', 'identifier': 'wall.north'}
         nwall['real_args'] = self.nwall.polygon.to_real()
         nwall.update(_temp)
         self.srf_prims.append(nwall)
 
-        ewall = {'modifier': 'white_paint_50', 'identifier': 'ewall'}
+        ewall = {'modifier': 'white_paint_50', 'identifier': 'wall.east'}
         ewall['real_args'] = self.ewall.polygon.to_real()
         ewall.update(_temp)
         self.srf_prims.append(ewall)
 
-        wwall = {'modifier': 'white_paint_50', 'identifier': 'wwall'}
+        wwall = {'modifier': 'white_paint_50', 'identifier': 'wall.west'}
         wwall['real_args'] = self.wwall.polygon.to_real()
         wwall.update(_temp)
         self.srf_prims.append(wwall)
@@ -58,7 +60,7 @@ class Room(object):
         # Windows on south wall only, for now.
         for idx in range(len(self.swall.facade)):
             _id = {'modifier': 'white_paint_50'}
-            _id['identifier'] = 'swall_{:02d}'.format(idx)
+            _id['identifier'] = 'wall.south.{:02d}'.format(idx)
             _id['real_args'] = self.swall.facade[idx].to_real()
             _id.update(_temp)
             self.srf_prims.append(_id)
@@ -130,7 +132,7 @@ class Wall(object):
         self.windows = offset_wndw
 
 def make_room(dimension):
-    """Make a side-lit shoebox room."""
+    """Make a side-lit shoebox room as a Room object."""
     theroom = Room(float(dimension['width']),
                       float(dimension['depth']),
                       float(dimension['height']))
@@ -143,3 +145,40 @@ def make_room(dimension):
     theroom.window_prim()
     return theroom
 
+def genradroom():
+    """Commandline interface for generating a generic room.
+    Resulting Radiance .rad files will be written to a local
+    Objects directory, which will be created if not existed before."""
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('width', type=float)
+    parser.add_argument('depth', type=float)
+    parser.add_argument('height', type=float)
+    parser.add_argument('-w', '--window', nargs=4, action='append', type=float)
+    parser.add_argument('-t', '--facade-thickness', type=float)
+    args = parser.parse_args()
+    dims = vars(args)
+    for idx, window in enumerate(dims['window']):
+        dims['window%s'%idx] = ' '.join(map(str, window))
+    dims.pop('window')
+    room = make_room(dims)
+    material_primitives = radutil.material_lib()
+    radutil.mkdir_p('Objects')
+    with open(os.path.join('Objects', 'materials.mat'), 'w') as wtr:
+        for prim in material_primitives:
+            wtr.write(radutil.put_primitive(prim))
+    with open(os.path.join('Objects', 'ceiling.rad'), 'w') as wtr:
+        for prim in room.srf_prims:
+            if prim['identifier'].startswith('ceiling'):
+                wtr.write(radutil.put_primitive(prim))
+    with open(os.path.join('Objects', 'floor.rad'), 'w') as wtr:
+        for prim in room.srf_prims:
+            if prim['identifier'].startswith('floor'):
+                wtr.write(radutil.put_primitive(prim))
+    with open(os.path.join('Objects', 'wall.rad'), 'w') as wtr:
+        for prim in room.srf_prims:
+            if prim['identifier'].startswith('wall'):
+                wtr.write(radutil.put_primitive(prim))
+    for key, prim in room.wndw_prims.items():
+        with open(os.path.join('Objects', '%s.rad'%key), 'w') as wtr:
+            wtr.write(radutil.put_primitive(prim))
