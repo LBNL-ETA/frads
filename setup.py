@@ -30,6 +30,7 @@ setuptools.setup(
                             'getwea=frads.makesky:getwea',
                             'rpxop=frads.radutil:rpxop',
                             'varays=frads.radutil:varays',
+                            'genradroom=frads.room:genradroom',
                             ],
     }
 )
