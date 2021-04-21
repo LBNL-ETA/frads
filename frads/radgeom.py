@@ -26,11 +26,23 @@ class Vector:
         self.length: float = math.sqrt(x**2 + y**2 + z**2)
 
     def __str__(self):
-        """Class string representation."""
+        """Class string representation.
+
+        Returns:
+            The string representation of the vector(str)
+
+        """
         return "{:02f} {:02f} {:02f}".format(self.x, self.y, self.z)
 
     def __add__(self, other):
-        """Add the two vectors."""
+        """Add the two vectors.
+        Args:
+            other(Vector): vector to add
+
+        Returns:
+            The added vector(Vector)
+
+        """
         return Vector(self.x + other.x, self.y + other.y, self.z + other.z)
 
     def __sub__(self, other):
@@ -202,7 +214,13 @@ class Polygon:
         return sum(self.vertices, Vector()).scale(1/self.vert_cnt)
 
     def area(self):
-        """Calculate the area of the polygon."""
+        """Calculate the area of the polygon.
+
+        Returns:
+            polygon area(float)
+
+        """
+
         total = Vector()
         for i in range(self.vert_cnt):
             vect1 = self.vertices[i]

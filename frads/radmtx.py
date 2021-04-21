@@ -26,19 +26,19 @@ from frads import radutil
 logger = logging.getLogger('frads.radmtx')
 
 class Sender:
-    """Sender object for matrix generation.
+    """Sender object for matrix generation with the following attributes:
 
     Attributes:
-        form: types of sender, {surface|view|points}
-        sender: the sender object
-        xres: sender x dimension
-        yres: sender y dimension
+        form(str): types of sender, {surface(s)|view(v)|points(p)}
+        sender(str): the sender object
+        xres(int): sender x dimension
+        yres(int): sender y dimension
     """
 
     def __init__(self, *, form: str, sender: str, xres: int, yres: int) -> None:
         """Instantiate the instance.
 
-        Parameters:
+        Args:
             form(str): Sender as (s, v, p) for surface, view, and points;
             path(str): sender file path;
             sender(str):  content of the sender file;
@@ -53,27 +53,38 @@ class Sender:
 
 
     @classmethod
-    def as_surface(cls, *, prim_list: list, basis: str, offset=None, left=None):
+    def as_surface(cls, *, prim_list: list, basis: str, offset=None, left=None) -> Sender:
         """
         Construct a sender from a surface.
-        Parameters:
-            prim_list(list): a list of primitives(dictionary)
-            basis(str): sender sampling basis;
-            offset(float): move the sender surface in its normal direction;
+
+        Args:
+            prim_list(list): a list of primitives
+            basis(str): sender sampling basis
+            offset(float): move the sender surface in its normal direction
+            left(bool): Use left-hand rule instead for matrix generation
+
+        Returns:
+            A sender object (Sender)
+
         """
         prim_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
                                    left=left, source=None, out=None)
         return cls(form='s', sender=prim_str, xres=None, yres=None)
 
     @classmethod
-    def as_view(cls, *, vu_dict: dict, ray_cnt: int, xres: int, yres: int):
+    def as_view(cls, *, vu_dict: dict, ray_cnt: int, xres: int, yres: int) -> Sender:
         """
         Construct a sender from a view.
-        Parameters:
-            vu_dict(dict): a dictionary containing view parameters;
-            ray_cnt(int): ray count;
-            xres, yres(int): image resolution
-            c2c(bool): Set to True to trim the fisheye corner rays.
+
+        Args:
+            vu_dict: a dictionary containing view parameters;
+            ray_cnt: ray count;
+            xres, yres: image resolution
+            c2c: Set to True to trim the fisheye corner rays.
+
+        Returns:
+            A sender object
+
         """
         if None in (xres, yres):
             raise ValueError("Need to specify resolution")
@@ -95,9 +106,13 @@ class Sender:
     @classmethod
     def as_pts(cls, *, pts_list: list, ray_cnt=1) -> Sender:
         """Construct a sender from a list of points.
-        Parameters:
+
+        Args:
             pts_list(list): a list of list of float
             ray_cnt(int): sender ray count
+
+        Returns:
+            A sender object
         """
         if pts_list is None:
             raise ValueError("pts_list is None")
@@ -109,9 +124,14 @@ class Sender:
     @staticmethod
     def crop2circle(ray_cnt: int, xres: int) -> str:
         """Flush the corner rays from a fisheye view
-        Parameters:
-            ray_cnt(int): ray count;
-            xres(int): resolution of the square image;
+
+        Args:
+            ray_cnt: ray count;
+            xres: resolution of the square image;
+
+        Returns:
+            Command to generate cropped rays
+
         """
         cmd = "rcalc -if6 -of "
         cmd += f'-e "DIM:{xres};CNT:{ray_cnt}" '
@@ -130,8 +150,11 @@ class Receiver:
 
     def __init__(self, receiver: str, basis: str, modifier=None) -> None:
         """Instantiate the receiver object.
+
         Parameters:
-            receiver (str): filepath {sky | sun | file_path}
+            receiver(str): filepath {sky | sun | file_path};
+            basis(str): receiver basis, usually kf, r4, r6;
+            modifier(str): modifiers to the receiver objects;
         """
         self.receiver = receiver
         self.basis = basis
