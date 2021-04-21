@@ -89,7 +89,7 @@ def main():
     parser_init.set_defaults(func=initialize)
     parser_run = subparser.add_parser('run')
     parser_run.add_argument('cfg', nargs='?', default='run.cfg')
-    parser_run.add_argument(
+    parser.add_argument(
         '-v', '--verbose', action='count', default=0,
         help='Verbose mode: 1=Debug; 2=Info; 3=Warning; 4=Error; 5=Critical. E.g. -vvv=Warning')
     parser_run.set_defaults(func=run)

@@ -37,6 +37,9 @@ def main():
         with open(args.window) as rdr:
             lines = rdr.readlines()
         primitves = radutil.parse_primitive(lines)
+        with open(args.env) as rdr:
+            env_primitives = radutil.parse_primitive(rdr.readlines())
+        env_identifier = [prim['identifier'] for prim in env_primitive]
         windows = [p for p in primitves if p['identifier'].startswith('window')]
         window = windows[0] # only take the first window primitive
         depth, spacing, angle = args.blinds
@@ -67,9 +70,10 @@ def main():
         ps2 = sp.Popen(xform_back_cmd, stdin=ps1.stdout, stdout=sp.PIPE)
         ps1.stdout.close()
         _stdout, _ = ps2.communicate()
+        result_primitives = radutil.parse_primitive(_stdout.decode().splitlines())
+        result_primitives = [prim for prim in result_primitives if prim['identifier'] not in env_identifier]
         with open(args.o, 'w') as wtr:
-            wtr.write(_stdout.decode())
-
+            [wtr.write(radutil.put_primitive(prim)) for prim in result_primitives]
     else:
         width = 10
         height = 0.096
