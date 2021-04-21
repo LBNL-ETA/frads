@@ -21,7 +21,7 @@ cfg_template = {
     'dsmx_opt': '-ab 2 -ad 64 -lw 1e-4',
     'cdsmx_opt': '-ab 0', 'ray_count': 1,
     'pixel_jitter': .7, 'separate_direct': False,
-    'nprocess': 1, 'overwrite': False,
+    'nprocess': 1, 'overwrite': False, 'method':None,
     'base': '', 'matrices': 'Matrices', 'results': 'Results',
     'objects': 'Objects', 'resources': 'Resources',
     'wea_path': None, 'latitude': None, 'longitude': None, 'zipcode': None,
@@ -29,8 +29,8 @@ cfg_template = {
     'orientation': 0,
     'material': None, 'windows': None, 'scene': None,
     'ncp_shade': None, 'bsdf': None, 'dbsdf': None,
-    'view1': None, 'grid_surface': None, 'grid_height': None,
-    'grid_spacing': None, 'grid_opposite': True,
+    'view1': None, 'grid_surface': None, 'grid_height': .76,
+    'grid_spacing': .6, 'grid_opposite': True,
 }
 
 pjoin = os.path.join
@@ -219,14 +219,20 @@ class MTXMethod:
                 raw = rdr.read()
             sec = raw.split('\n\n')
             lines = [l.split() for l in sec[1].splitlines()]
-            self.dts = [
-                f"{int(l[0]):02d}{int(l[1]):02d}_{int(float(l[2])):02d}30" for l in lines]
+            self.datetime_stamps = []
+            for line in lines:
+                month = int(line[0])
+                day = int(line[1])
+                hours = float(line[2])
+                hour = int(hours)
+                minutes = 60 * (hours - hour)
+                self.datetime_stamps.append('%02d%02d_%02d%02d'%(month, day, hour, minutes))
         else:
             if self.config.zipcode is not None:
-                self.logger('Downloading EPW file using zipcode.')
+                self.logger.info('Downloading EPW file using zipcode.')
                 epw = makesky.getEPW.from_zip(self.config.zipcode)
             elif None not in (self.config.latitude, self.config.longitude):
-                self.logger('Downloading EPW file using lat&lon.')
+                self.logger.info('Downloading EPW file using lat&lon.')
                 epw = makesky.getEPW(self.config.latitude,
                                      float(self.config.longitude))
             else:
@@ -236,7 +242,7 @@ class MTXMethod:
             try:
                 os.rename(epw.fname, epw_path)
             except FileExistsError as fee:
-                logger.info(fee)
+                self.logger.info(fee)
             self.logger.info('Converting EPW to a .wea file')
             wea = makesky.epw2wea(
                 epw=epw_path, dh=self.config.daylight_hours_only,
@@ -245,18 +251,18 @@ class MTXMethod:
                 self.resodir, radutil.basename(epw.fname) + '.wea')
             with open(self.wea_path, 'w') as wtr:
                 wtr.write(wea.wea)
-            self.dts = wea.dt_string
+            self.datetime_stamps = wea.dt_string
 
     @staticmethod
     def gen_smx(wea_path, mfactor, outdir, onesun=False, direct=False):
         """Generate sky/sun matrix."""
         sun_only = ' -d' if direct else ''
         _five = ' -5 .533' if onesun else ''
-        oname = radutil.basename(wea_path)
+        oname = radutil.basename(wea_path))
         cmd = f"gendaymtx -of -m {mfactor[-1]}{sun_only}{_five}".split()
         cmd.append(wea_path)
-        self.logger.info('Generating sku/sun matrix using command')
-        self.logger.info(' '.join(cmd))
+        logger.info('Generating sku/sun matrix using command')
+        logger.info(' '.join(cmd))
         res = radutil.spcheckout(cmd)
         if direct:
             if onesun:
@@ -302,7 +308,7 @@ class MTXMethod:
         respath = pjoin(self.resdir, 'pdsmx.txt')
         with open(respath, 'w') as wtr:
             for idx, _ in enumerate(res):
-                wtr.write(self.dts[idx] + '\t')
+                wtr.write(self.datetime_stamps[idx] + '\t')
                 wtr.write(res[idx].decode() + '\n')
 
     def calc_2phase_vu(self, dsmx, smx):
@@ -315,7 +321,7 @@ class MTXMethod:
             ofiles = [pjoin(opath, f) for f in sorted(os.listdir(opath))
                       if f.endswith('.hdr')]
             for idx, val in enumerate(ofiles):
-                os.rename(val, pjoin(opath, self.dts[idx]+'.hdr'))
+                os.rename(val, pjoin(opath, self.datetime_stamps[idx]+'.hdr'))
 
     def daylight_matrix(self, sender_prims: dict, direct=False):
         """."""
@@ -448,7 +454,7 @@ class MTXMethod:
         respath = pjoin(self.resdir, 'points3ph.txt')
         with open(respath, 'w') as wtr:
             for idx, val in enumerate(res):
-                wtr.write(self.dts[idx] + ',')
+                wtr.write(self.datetime_stamps[idx] + ',')
                 wtr.write(','.join(map(str, val)) + '\n')
 
     def calc_3phase_vu(self, vmx, dmx, smx):
@@ -477,7 +483,7 @@ class MTXMethod:
                 ofiles = [pjoin(opath, f) for f in sorted(os.listdir(opath)) if
                           f.endswith('.hdr')]
                 for idx, ofile in enumerate(ofiles):
-                    os.rename(ofile, pjoin(opath, self.dts[idx]+'.hdr'))
+                    os.rename(ofile, pjoin(opath, self.datetime_stamps[idx]+'.hdr'))
 
     def prep_4phase_pt(self, direct=False):
         """Prepare matrices using four-phase methods for point-based calculation."""
@@ -664,7 +670,7 @@ class MTXMethod:
         respath = pjoin(self.resdir, 'points5ph.txt')
         with open(respath, 'w') as wtr:
             for idx in range(len(res)):
-                wtr.write(self.dts[idx] + ',')
+                wtr.write(self.datetime_stamps[idx] + ',')
                 wtr.write(','.join(map(str, res[idx])) + '\n')
 
     def calc_5phase_vu(self, vmx, vmxd, dmx, dmxd, vcdrmx, vcdfmx,
@@ -714,6 +720,6 @@ class MTXMethod:
                 radutil.pcombop([res3, '-', res3d, '+', vrescd], opath)
                 ofiles = [pjoin(opath, f) for f in sorted(os.listdir(opath)) if
                           f.endswith('.hdr')]
-                [os.rename(ofiles[idx], pjoin(opath, self.dts[idx]+'.hdr'))
+                [os.rename(ofiles[idx], pjoin(opath, self.datetime_stamps[idx]+'.hdr'))
                  for idx in range(len(ofiles))]
                 self.logger.info(f"Done computing for {view}")
