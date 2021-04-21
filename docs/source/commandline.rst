@@ -69,7 +69,7 @@ When ready to carry out the simulation, run
 
 If a configuration file has been prepared beforehand, for example as test.cfg, simple append the files name as such::
 
-   mrad run test.cfg
+   $ mrad run test.cfg
 
 to avoid running the init command.
 
@@ -111,7 +111,7 @@ Take the following simple geometry in Radiance format in a local **Objects** dir
 
 We can use the *init* command like so::
 
-   mrad init
+   $ mrad init
 
 After which a run.cfg file will be created as a template configuration file along with default directories to store various files. We can add *floor.rad* to the grid_surface variable to generate our sensor grid from. We need to also add site location information to obtain weather data. We have the option to input *.wea* file path, latitude and longitude, or zipcode (US only). After the modification we arrive at a configuration file like so::
 
@@ -158,7 +158,7 @@ After which a run.cfg file will be created as a template configuration file alon
 
 Once we have the configuration file ready, we can start the simulation::
 
-   mrad -vv run
+   $ mrad -vv run
 
 which will run the simulation with verbose set to *info* level using the default run.cfg file. Your console should print out the following information::
 
@@ -182,21 +182,16 @@ After the simulation had finished, the results are in the Results directory. In 
 
 
 
-
-
-
-
-
-
-
 genmtx
 ------
-   genmtx
+*genmtx* helps with matrix generation using rfluxmtx and rcontrib, it automatically wraps and decorates the primitive files. We can generate a simple daylight coefficient matrix using the example from mrad section::
 
-.. _ep2rad:
+   # generate a grid from floor surface
+   $ gengrid floor.rad .76 .6 > grid.pts
 
+   # using genmtx to generate a daylight coefficient matrix and save it as dsmx.mtx
+   $ genmtx -st p -s grid.pts -r sky -rs r4 -env Objects/materials.mat Objects/ceiling.rad Objects/wall.rad Objects/floor.rad Objects/window0.rad -o dsmx.mtx
 
-.. _eprad:
 
 eprad
 -----
