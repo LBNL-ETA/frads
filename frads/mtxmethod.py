@@ -73,8 +73,8 @@ def three_phase(_setup, smx, direct=False):
     vvmxs = _setup.view_matrix_vu()
     dmxs = _setup.daylight_matrix(_setup.window_prims)
     if direct:
-        smxd = _setup.gen_smx(_setup.config.smx_basis, direct=True)
-        smx_sun = _setup.gen_smx(_setup.config.cdsmx_basis, onesun=True, direct=True)
+        smxd = _setup.gen_smx(_setup.wea_path, _setup.config.smx_basis, _setup.mtxdir, direct=True)
+        smx_sun = _setup.gen_smx(_setup.wea_path, _setup.config.cdsmx_basis, _setup.mtxdir, onesun=True, direct=True)
         _setup.blacken_env()
         pcdsmx = _setup.direct_sun_matrix_pt(smx_sun)
         vcdfmx, vcdrmx, vmap_paths, cdmap_paths = _setup.direct_sun_matrix_vu(smx_sun)
