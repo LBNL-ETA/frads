@@ -22,7 +22,7 @@ rad_progs = [
 for prog in rad_progs:
     ppath = shutil.which(prog)
     if ppath is None:
-        logger.warn(f"{prog} not found; check Radiance installation")
+        logger.info(f"{prog} not found; check Radiance installation")
 
 try:
     # Check Radiance version, need to be at least 5.X
@@ -31,11 +31,11 @@ try:
     try:
         rad_version = float(version_check.split()[1][:3])
         if rad_version < 5.3:
-            logger.warn(msg)
+            logger.info(msg)
     except ValueError:
-        logger.warn(msg)
+        logger.info(msg)
 except FileNotFoundError as err:
-    logger.warn(err)
+    logger.info(err)
 
 
 if not sys.platform.startswith('win'):
