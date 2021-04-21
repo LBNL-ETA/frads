@@ -60,6 +60,7 @@ def imgmult(*mtx, odir):
 
 
 def two_phase(_setup, smx):
+    """Two-phase simulation workflow."""
     pdsmx = _setup.prep_2phase_pt()
     vdsmx = _setup.prep_2phase_vu()
     _setup.calc_2phase_pt(pdsmx, smx)
@@ -67,6 +68,7 @@ def two_phase(_setup, smx):
 
 
 def three_phase(_setup, smx, direct=False):
+    """3/5-phase simulation workflow."""
     pvmxs = _setup.view_matrix_pt()
     vvmxs = _setup.view_matrix_vu()
     dmxs = _setup.daylight_matrix(_setup.window_prims)
@@ -87,6 +89,7 @@ def three_phase(_setup, smx, direct=False):
         _setup.calc_3phase_vu(vvmxs, dmxs, smx)
 
 def four_phase(_setup, smx, direct=False):
+    """Four-phase simulation workflow."""
     pvmxs = _setup.view_matrix_pt()
     vvmxs = _setup.view_matrix_vu()
     fmxs = _setup.facade_matrix()
@@ -210,6 +213,7 @@ class MTXMethod:
     def get_wea(self):
         """Obtain and prepare weather file data."""
         if self.config.wea_path is not None:
+            self.logger.info('Using user specified .wea file.')
             self.wea_path = pjoin(self.resodir, self.config.wea_path)
             with open(self.wea_path) as rdr:
                 raw = rdr.read()
@@ -219,8 +223,10 @@ class MTXMethod:
                 f"{int(l[0]):02d}{int(l[1]):02d}_{int(float(l[2])):02d}30" for l in lines]
         else:
             if self.config.zipcode is not None:
+                self.logger('Downloading EPW file using zipcode.')
                 epw = makesky.getEPW.from_zip(self.config.zipcode)
             elif None not in (self.config.latitude, self.config.longitude):
+                self.logger('Downloading EPW file using lat&lon.')
                 epw = makesky.getEPW(self.config.latitude,
                                      float(self.config.longitude))
             else:
@@ -231,6 +237,7 @@ class MTXMethod:
                 os.rename(epw.fname, epw_path)
             except FileExistsError as fee:
                 logger.info(fee)
+            self.logger.info('Converting EPW to a .wea file')
             wea = makesky.epw2wea(
                 epw=epw_path, dh=self.config.daylight_hours_only,
                 sh=self.config.start_hour, eh=self.config.end_hour)
@@ -248,6 +255,8 @@ class MTXMethod:
         oname = radutil.basename(wea_path)
         cmd = f"gendaymtx -of -m {mfactor[-1]}{sun_only}{_five}".split()
         cmd.append(wea_path)
+        self.logger.info('Generating sku/sun matrix using command')
+        self.logger.info(' '.join(cmd))
         res = radutil.spcheckout(cmd)
         if direct:
             if onesun:
@@ -262,6 +271,7 @@ class MTXMethod:
 
     def prep_2phase_pt(self):
         """Prepare matrices two phase methods."""
+        self.logger.info('Computing for 2-phase sensor point matrices...')
         env = self.envpath + self.windowpath
         pdsmx = pjoin(self.mtxdir, 'pdsmx.mtx')
         if not isfile(pdsmx) or self.config.overwrite:
@@ -273,7 +283,7 @@ class MTXMethod:
 
     def prep_2phase_vu(self):
         """Generate image-based matrices if view defined."""
-        self.logger.info("Image-based daylight coefficient matrix:")
+        self.logger.info("Computing for image-based 2-phase matrices...")
         env = self.envpath + self.windowpath
         vdsmx = {}
         for view in self.sndr_vus:
@@ -287,6 +297,7 @@ class MTXMethod:
 
     def calc_2phase_pt(self, dsmx, smx):
         """."""
+        self.logger.info("Computing for 2-phase sensor grid results.")
         res = mtxmult(dsmx, smx).splitlines()
         respath = pjoin(self.resdir, 'pdsmx.txt')
         with open(respath, 'w') as wtr:
@@ -296,7 +307,7 @@ class MTXMethod:
 
     def calc_2phase_vu(self, dsmx, smx):
         """."""
-        self.logger.info("Compute for image-based daylight coefficient results")
+        self.logger.info("Computing for 2-phase image-based results")
         opath = pjoin(self.resdir, 'view2ph')
         for view in dsmx:
             radutil.sprun(
@@ -308,7 +319,7 @@ class MTXMethod:
 
     def daylight_matrix(self, sender_prims: dict, direct=False):
         """."""
-        self.logger.info("Daylight matrix:")
+        self.logger.info("Computing daylight matrix...")
         dmxs = {}
         _opt = self.config.dmx_opt
         _env = self.envpath
@@ -332,7 +343,7 @@ class MTXMethod:
         return dmxs
 
     def facade_matrix(self, direct=False):
-        self.logger.info("Facade matrix:")
+        self.logger.info("Computing facade matrix...")
         fmxs = {}
         _opt = self.config.dmx_opt
         _env = self.envpath
@@ -369,11 +380,11 @@ class MTXMethod:
         _opt = self.config.vmx_opt
         _env = self.envpath
         if direct:
-            self.logger.info("Direct View matrix for sensor point:")
+            self.logger.info("Computing direct view matrix for sensor grid:")
             _opt += ' -ab 1'
             _env = [self.materialpath, self.blackenvpath]
         else:
-            self.logger.info("View matrix for sensor point:")
+            self.logger.info("Computing view matrix for sensor grid:")
         vmxs = {}
         rcvr_windows = radmtx.Receiver(
             receiver='', basis=self.config.vmx_basis, modifier=None)
@@ -394,7 +405,7 @@ class MTXMethod:
 
     def view_matrix_vu(self, direct=False):
         """Prepare matrices using three-phase methods."""
-        self.logger.info("Image-based view matrix:")
+        self.logger.info("Computing image-based view matrix:")
         _opt = self.config.vmx_opt
         _env = self.envpath
         if direct:
@@ -426,7 +437,7 @@ class MTXMethod:
 
     def calc_3phase_pt(self, vmx, dmx, smx):
         """."""
-        self.logger.info("Computing for point grid results")
+        self.logger.info("Computing for 3-phase sensor grid results")
         presl = []
         for wname in self.window_prims:
             _res = mtxmult(vmx[wname], self.bsdf[wname],
@@ -442,7 +453,7 @@ class MTXMethod:
 
     def calc_3phase_vu(self, vmx, dmx, smx):
         """."""
-        self.logger.info("Computing rendering results:")
+        self.logger.info("Computing for 3-phase image-based results:")
         for view in self.sndr_vus:
             opath = pjoin(self.resdir, f'{view}_3phm')
             if not isdir(opath) or self.config.overwrite:
