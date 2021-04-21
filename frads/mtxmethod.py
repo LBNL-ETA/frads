@@ -267,8 +267,8 @@ class MTXMethod:
         if not isfile(pdsmx) or self.config.overwrite:
             res = radmtx.rfluxmtx(sender=self.sndr_pts, receiver=self.rcvr_sky,
                                   env=env, opt=self.config.dsmx_opt)
-            with open(pdsmx, 'w') as wtr:
-                wtr.write(res.decode())
+            with open(pdsmx, 'wb') as wtr:
+                wtr.write(res)
         return pdsmx
 
     def prep_2phase_vu(self):
@@ -292,10 +292,11 @@ class MTXMethod:
         with open(respath, 'w') as wtr:
             for idx, _ in enumerate(res):
                 wtr.write(self.dts[idx] + '\t')
-                wtr.write(res[idx].decode() + os.linesep)
+                wtr.write(res[idx].decode() + '\n')
 
     def calc_2phase_vu(self, dsmx, smx):
         """."""
+        self.logger.info("Compute for image-based daylight coefficient results")
         opath = pjoin(self.resdir, 'view2ph')
         for view in dsmx:
             radutil.sprun(
@@ -437,7 +438,7 @@ class MTXMethod:
         with open(respath, 'w') as wtr:
             for idx, val in enumerate(res):
                 wtr.write(self.dts[idx] + ',')
-                wtr.write(','.join(map(str, val)) + os.linesep)
+                wtr.write(','.join(map(str, val)) + '\n')
 
     def calc_3phase_vu(self, vmx, dmx, smx):
         """."""
@@ -653,7 +654,7 @@ class MTXMethod:
         with open(respath, 'w') as wtr:
             for idx in range(len(res)):
                 wtr.write(self.dts[idx] + ',')
-                wtr.write(','.join(map(str, res[idx])) + os.linesep)
+                wtr.write(','.join(map(str, res[idx])) + '\n')
 
     def calc_5phase_vu(self, vmx, vmxd, dmx, dmxd, vcdrmx, vcdfmx,
                        vmap_paths, cdmap_paths, smx, smxd, smx_sun):
