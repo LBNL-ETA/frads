@@ -12,12 +12,14 @@ from frads import radutil
 
 
 def genmtx_args(parser):
-    parser.add_argument('-st', dest='sender_type', choices=['s','v','p'], required=True, help='Sender object type')
-    parser.add_argument('-s', dest='sender', required=True, help='Sender object')
-    parser.add_argument('-r', dest='receiver', nargs='+', required=True, help='Receiver objects')
-    parser.add_argument('-i', dest='octree', help='Scene octree file path')
+    """Add arguments to parser."""
+    parser.add_argument('-st', dest='sender_type', choices=['s','v','p'], required=True,
+                        help='Sender object type: (s)urface, (v)iew, (p)oint')
+    parser.add_argument('-s', dest='sender', required=True,
+                        help='Sender object: can be a view file, a grid point file, a .rad file')
+    parser.add_argument('-r', dest='receiver', nargs='+', required=True, help='Receiver objects, can be "sky", "sun", or .rad files')
+    parser.add_argument('-i', dest='octree', help='Scene octree file path (.oct)')
     parser.add_argument('-o', dest='outpath', nargs='+', required=True, help='Output file path | directory')
-    # parser.add_argument('-mod', '--modpath', help='modifier path for sun sources')
     parser.add_argument('-env', nargs='+', default=[], help='Environment file paths')
     parser.add_argument('-rs', dest='receiver_basis', required=True, choices=('r1','r2','r4','r6','kf','sc25'),
                         help='Receiver sampling basis, ....')
@@ -28,7 +30,8 @@ def genmtx_args(parser):
                         help='Move sender surface in normal direction')
     parser.add_argument('-opt', dest='option', type=str, default='-ab 1', help='Simulation parameters enclosed in double quotation marks, e.g. "-ab 1 -ad 64"')
     parser.add_argument('-rc', dest='ray_count', type=int, default=1, help='Ray count')
-    parser.add_argument('-res', dest='resolu', nargs=2, default=[500, 500], type=int, help='X and Y resolution for the image')
+    parser.add_argument('-res', dest='resolu', nargs=2, default=[800, 800], type=int,
+                        help='X and Y resolution for the image, defeault=%(default)s')
     parser.add_argument('-smx', help='Sky matrix file path, used to cull redundant suns')
     parser.add_argument('-wpths', nargs='+', help='window primitive paths, used to cull redundant suns')
     parser.add_argument('-v', '--verbose', action='count', default=0, help='verbose mode')
