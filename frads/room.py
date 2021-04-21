@@ -150,12 +150,14 @@ def genradroom():
     Resulting Radiance .rad files will be written to a local
     Objects directory, which will be created if not existed before."""
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('width', type=float)
-    parser.add_argument('depth', type=float)
-    parser.add_argument('height', type=float)
-    parser.add_argument('-w', '--window', nargs=4, action='append', type=float)
-    parser.add_argument('-t', '--facade-thickness', type=float)
+    parser = argparse.ArgumentParser(
+        prog='genradroom', description='Generate a generic room with window facing the -Y direction')
+    parser.add_argument('width', type=float, help='room width along X axis, starting from x=0')
+    parser.add_argument('depth', type=float, help='room depth along Y axis, starting from y=0')
+    parser.add_argument('height', type=float, help='room height along Z axis, starting from z=0')
+    parser.add_argument('-w', metavar=('start_x', 'start_z', 'width', 'height'),
+                        nargs=4, action='append', type=float, help='Define a window from lower left corner')
+    parser.add_argument('-t', metavar='Facade thickness', type=float)
     args = parser.parse_args()
     dims = vars(args)
     for idx, window in enumerate(dims['window']):
