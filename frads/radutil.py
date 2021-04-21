@@ -106,7 +106,7 @@ def parse_polygon(primitive: dict) -> dict:
         primitive: a dictionary object containing a primitive
 
     Returns:
-        returns modified primitive
+        modified primitive
 
     """
     real_args = primitive['real_args'].split()
@@ -118,7 +118,15 @@ def parse_polygon(primitive: dict) -> dict:
 
 
 def parse_vu(vu_str: str) -> dict:
-    """Parse view string into a dictionary."""
+    """Parse view string into a dictionary.
+
+    Args:
+        vu_str: view parameters as a string
+
+    Returns:
+        A view dictionary
+    """
+
     args_list = vu_str.strip().split()
     vparser = argparse.ArgumentParser()
     vparser.add_argument('-v', action='store', dest='vt')
@@ -142,7 +150,15 @@ def parse_vu(vu_str: str) -> dict:
 
 
 def parse_opt(opt_str: str) -> dict:
-    """Parsing option string into a dictionary."""
+    """Parsing option string into a dictionary.
+
+    Args:
+        opt_str: rtrace option parameters as a string
+
+    Returns:
+        An option dictionary
+    """
+
     args_list = opt_str.strip().split()
     oparser = argparse.ArgumentParser()
     oparser.add_argument('-I', action='store_const', const='', default=None)
@@ -203,8 +219,16 @@ def polygon2prim(polygon, modifier, identifier):
             'polygon':polygon,
             'str_args':'0', 'real_args':polygon.to_real()}
 
-def put_primitive(prim):
-    """Convert a primitive into a string for writing."""
+def put_primitive(prim) -> str:
+    """Convert a primitive into a string for writing.
+
+    Args:
+        prim: A primitive as a dictionary
+
+    Returns:
+        A formated primitive string
+    """
+
     if isinstance(prim, str):
         ostring = prim + os.linesep
     else:
@@ -251,16 +275,17 @@ def up_vector(primitives: list) -> str:
 def neutral_plastic_prim(mod, ident, refl, spec, rough):
     """Generate a neutral color plastic material.
 
-    Inputs:
+    Args:
         mod(str): modifier to the primitive
         ident(str): identifier to the primitive
         refl (float): measured reflectance (0.0 - 1.0)
         specu (float): material specularity (0.0 - 1.0)
         rough (float): material roughness (0.0 - 1.0)
-    Return:
-        material primtive (dict)
 
+    Returns:
+        A material primtive
     """
+
     err_msg = 'reflectance, speculariy, and roughness have to be 0-1'
     assert all(0 <= i <= 1 for i in [spec, refl, rough]), err_msg
     prim = {'type': 'plastic', 'int_arg': '0', 'str_args': '0'}
@@ -274,15 +299,16 @@ def neutral_plastic_prim(mod, ident, refl, spec, rough):
 def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough):
     """Generate a colored plastic material.
 
-    Inputs:
+    Args:
         mod(str): modifier to the primitive
         ident(str): identifier to the primitive
         refl (float): measured reflectance (0.0 - 1.0)
         red; green; blue (int): rgb values (0 - 255)
         specu (float): material specularity (0.0 - 1.0)
         rough (float): material roughness (0.0 - 1.0)
-    Return:
-        material primtive (dict)
+
+    Returns:
+        A material primtive
 
     """
     err_msg = 'reflectance, speculariy, and roughness have to be 0-1'
@@ -310,12 +336,12 @@ def tmit2tmis(tmit):
 def glass_prim(mod, ident, tr, tg, tb, refrac=1.52):
     """Generate a glass material.
 
-    Inputs:
+    Args:
         mod (str): modifier to the primitive
         ident (str): identifier to the primtive
         tr, tg, tb (float): transmmisivity in each channel (0.0 - 1.0)
         refrac (float): refraction index (default=1.52)
-    Return:
+    Returns:
         material primtive (dict)
 
     """
@@ -596,9 +622,10 @@ def gen_grid(polygon: radgeom.Polygon, height: float, spacing: float) -> list:
 
 def gengrid():
     """Commandline program for generating a grid of sensor points."""
-    parser = argparse.ArgumentParser()
-    parser.add_argument('surface')
-    parser.add_argument('spacing', type=float )
+    parser = argparse.ArgumentParser(
+        prog='gengrid', description='Generate an equal-spaced sensor grid based on a surface.')
+    parser.add_argument('surface', help='surface file path')
+    parser.add_argument('spacing', type=float)
     parser.add_argument('height', type=float)
     parser.add_argument('-op', action='store_const', const='', default=True)
     args = parser.parse_args()
@@ -620,8 +647,9 @@ def material_lib():
     mlib.append(neutral_plastic_prim('void', 'white_paint_50', .5, 0, 0))
     # Paint .7
     mlib.append(neutral_plastic_prim('void', 'white_paint_70', .7, 0, 0))
-    # Glass .7
-    mlib.append(glass_prim('void', 'glass_60', .64, .64, .64))
+    # Glass .6
+    tmis = tmit2tmis(.6)
+    mlib.append(glass_prim('void', 'glass_60', tmis, tmis, tmis))
     return mlib
 
 def pcomb(inputs):
@@ -888,10 +916,11 @@ def analyze_window(window_prim, movedown):
 
 def varays():
     """Commandline utility program for generating circular fisheye rays."""
-    aparser = argparse.ArgumentParser()
+    aparser = argparse.ArgumentParser(
+        prog='varays', description='Generate a fisheye view rays with blackedout corners')
     aparser.add_argument('-x', required=True, help='square image resolution')
-    aparser.add_argument('-c', default='1')
-    aparser.add_argument('-vf', required=True)
+    aparser.add_argument('-c', default='1', help='Ray count')
+    aparser.add_argument('-vf', required=True, help='View file path, -vta only')
     args = aparser.parse_args()
     cmd = "vwrays -ff -vf {} -x {} -y {} ".format(args.vf, args.x, args.x)
     cmd += '-c {} -pj 0.7 '.format(args.c)
