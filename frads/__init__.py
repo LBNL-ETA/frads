@@ -2,9 +2,12 @@
 Does not raise exception when Radiance not installed properly, hence the print statement instaed of raise.
 also modify file limit on unix systems."""
 
+import logging
 import shutil
 import subprocess as sp
 import sys
+
+logger = logging.getLogger('frads')
 
 # Check if Radiance is installed more or less
 rad_progs = [
@@ -19,7 +22,7 @@ rad_progs = [
 for prog in rad_progs:
     ppath = shutil.which(prog)
     if ppath is None:
-        print(f"{prog} not found; check Radiance installation")
+        logger.warn(f"{prog} not found; check Radiance installation")
 
 try:
     # Check Radiance version, need to be at least 5.X
@@ -28,11 +31,11 @@ try:
     try:
         rad_version = float(version_check.split()[1][:3])
         if rad_version < 5.3:
-            print(msg)
+            logger.warn(msg)
     except ValueError:
-        print(msg)
+        logger.warn(msg)
 except FileNotFoundError as err:
-    print(err)
+    logger.warn(err)
 
 
 if not sys.platform.startswith('win'):
