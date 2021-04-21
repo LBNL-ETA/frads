@@ -75,6 +75,120 @@ to avoid running the init command.
 
 **Example: workplane illuminance using two-phase method**
 
+Take the following simple geometry in Radiance format in a local **Objects** directory::
+
+   #materials.mat
+   void plastic carpet 0 0 5 .2 .2 .2 0 0
+   void plsatic white_70 0 0 5 .7 .7 .7 0 0
+   void plsatic white_50 0 0 5 .5 .5 .5 0 0
+   void glass glass_60 0 0 3 .64 .64 .64
+
+   #floor.rad
+   carpet polygon floor
+   0 0 12 0 0 0 3 0 0 3 5 0 0 5 0
+
+   #ceiling.rad
+   white_70 polygon ceiling
+   0 0 12 0 0 2.5 3 0 2.5 3 5 2.5 0 5 2.5
+
+   #wall.rad
+   white_50 polygon wall.north
+   0 0 12 3 5 0 3 5 2.5 0 5 2.5 0 5 0
+
+   white_50 polygon wall.east
+   0 0 12 3 0 0 3 0 2.5 3 5 2.5 3 5 0
+
+   white_50 polygon wall.west
+   0 0 12 0 5 0 0 5 2.5 0 0 2.5 0 0 0
+
+   white_50 polygon wall.south.00
+   0 0 30 0 0 0 0.5 0 0.3 2.5 0 0.3 2.5 0 1.8 0.5 0 1.8 0.5 0 0.3 0 0 0 0 0 2.5 3 0 2.5 3 0 0
+
+.. note::
+   the same geometry can be generated using *genradroom* command from terminal/cmd:
+
+   genradroom 3 5 3 -w 0.5 0.3 2 1.5 -t 0
+
+We can use the *init* command like so::
+
+   mrad init
+
+After which a run.cfg file will be created as a template configuration file along with default directories to store various files. We can add *floor.rad* to the grid_surface variable to generate our sensor grid from. We need to also add site location information to obtain weather data. We have the option to input *.wea* file path, latitude and longitude, or zipcode (US only). After the modification we arrive at a configuration file like so::
+
+   #run.cfg
+   [mrad configration]
+   vmx_basis = kf
+   vmx_opt = -ab 5 -ad 65536 -lw 1e-8
+   fmx_basis = kf
+   fmx_opt
+   smx_basis = r4
+   dmx_opt = -ab 2 -ad 128 -c 2000
+   dsmx_opt = -ab 2 -ad 64 -lw 1e-4
+   cdsmx_opt = -ab 0
+   ray_count = 1
+   pixel_jitter = 0.7
+   separate_direct = False
+   nprocess = 1
+   overwrite = False
+   method
+   base = /Users/taoning
+   matrices = Matrices
+   results = Results
+   objects = Objects
+   resources = Resources
+   wea_path
+   latitude = 37.78
+   longitude = -122.2
+   zipcode
+   daylight_hours_only = True
+   start_hour
+   end_hour
+   orientation = 0
+   material = materials.mat
+   windows
+   scene = floor.rad wall.rad window1.rad window0.rad ceiling.rad
+   ncp_shade
+   bsdf
+   dbsdf
+   view1
+   grid_surface = floor.rad
+   grid_height = .76
+   grid_spacing = .6
+   grid_opposite = True
+
+Once we have the configuration file ready, we can start the simulation::
+
+   mrad -vv run
+
+which will run the simulation with verbose set to *info* level using the default run.cfg file. Your console should print out the following information::
+
+   2021-04-20 22:10:43,857 - frads.mtxmethod.Prepare - INFO - Downloading EPW file using lat&lon.
+   2021-04-20 22:10:44,936 - frads.mtxmethod.Prepare - INFO - Downloaded : USA_CA_Oakland.Intl.AP.724930_TMY3.epw
+   2021-04-20 22:10:44,937 - frads.mtxmethod.Prepare - INFO - Converting EPW to a .wea file
+   2021-04-20 22:10:44,983 - frads.mtxmethod - INFO - Generating sku/sun matrix using command
+   2021-04-20 22:10:44,983 - frads.mtxmethod - INFO - gendaymtx -of -m 4 /Users/taoning/Resources/USA_CA_Oakland.Intl.AP.724930_TMY3.wea
+   2021-04-20 22:10:46,711 - frads - INFO - Using two-phase method
+   2021-04-20 22:10:46,712 - frads.mtxmethod.Prepare - INFO - Computing for 2-phase sensor point matrices...
+   2021-04-20 22:10:46,778 - frads.mtxmethod.Prepare - INFO - Computing for image-based 2-phase matrices...
+   2021-04-20 22:10:46,778 - frads.mtxmethod.Prepare - INFO - Computing for 2-phase sensor grid results.
+   2021-04-20 22:10:50,708 - frads.mtxmethod.Prepare - INFO - Computing for 2-phase image-based results
+
+After the simulation had finished, the results are in the Results directory. In the case of workplane illuminance results::
+
+   0101_0830	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03	 2.702708389759064e+03
+   0101_0930	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03	 2.720932005119324e+03
+   ...
+
+
+
+
+
+
+
+
+
+
+
 genmtx
 ------
    genmtx
