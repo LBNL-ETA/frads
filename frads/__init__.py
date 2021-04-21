@@ -1,3 +1,7 @@
+"""Check for Radiance installation
+Does not raise exception when Radiance not installed properly, hence the print statement instaed of raise.
+also modify file limit on unix systems."""
+
 import shutil
 import subprocess as sp
 import sys
@@ -19,9 +23,14 @@ for prog in rad_progs:
 
 try:
     # Check Radiance version, need to be at least 5.X
-    rad_version = sp.run(["rtrace", "-version"], check=True, stdout=sp.PIPE).stdout.decode().split()[1]
-    if int(rad_version[0]) < 5:
-        print(f"Radiance version {rad_version} detected, please upgrade")
+    version_check = sp.run(["rtrace", "-version"], check=True, stdout=sp.PIPE).stdout.decode()
+    msg = "Please upgrade to Radiance version 5.3 or later"
+    try:
+        rad_version = float(version_check.split()[1][:3])
+        if rad_version < 5.3:
+            print(msg)
+    except ValueError:
+        print(msg)
 except FileNotFoundError as err:
     print(err)
 
@@ -31,4 +40,3 @@ if not sys.platform.startswith('win'):
     slimit, hlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
     if slimit < 10000 or hlimit < 10000:
         resource.setrlimit(resource.RLIMIT_NOFILE, (131072, 131072))
-
