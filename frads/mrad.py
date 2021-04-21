@@ -83,15 +83,16 @@ def run(args):
 def main():
     """Parse the configuration file and envoke to mtxmethod to do the actual work."""
     global logger
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        prog='mrad', description='Executive program for carry out Radiance matrix-based simulation')
     subparser = parser.add_subparsers()
     parser_init = subparser.add_parser('init')
     parser_init.set_defaults(func=initialize)
     parser_run = subparser.add_parser('run')
-    parser_run.add_argument('cfg', nargs='?', default='run.cfg')
+    parser_run.add_argument('cfg', default='run.cfg', help='configuration file path')
     parser.add_argument(
         '-v', '--verbose', action='count', default=0,
-        help='Verbose mode: 1=Debug; 2=Info; 3=Warning; 4=Error; 5=Critical. E.g. -vvv=Warning')
+        help='Verbose mode: 1=Debug; 2=Info; 3=Warning; 4=Error; 5=Critical. E.g. -vvv=Warning, default=%(default)s')
     parser_run.set_defaults(func=run)
     args = parser.parse_args()
     logger = logging.getLogger('frads')
