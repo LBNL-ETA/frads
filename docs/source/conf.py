@@ -33,7 +33,10 @@ master_doc = 'index'
 extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.autosummary',
               'sphinx.ext.coverage',
-              'sphinx.ext.napoleon'
+              'sphinx.ext.napoleon',
+              'sphinx.ext.intersphinx',
+              'sphinx.ext.mathjax',
+              'sphinx.ext.viewcode',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -60,7 +63,7 @@ napoleon_type_aliases = None
 
 
 # -- Options for HTML output -------------------------------------------------
-
+html_title = project
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
