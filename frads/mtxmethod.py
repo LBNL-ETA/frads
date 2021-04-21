@@ -213,7 +213,7 @@ class MTXMethod:
             self.wea_path = pjoin(self.resodir, self.config.wea_path)
             with open(self.wea_path) as rdr:
                 raw = rdr.read()
-            sec = raw.split(f'{os.linesep*2}')
+            sec = raw.split('\n\n')
             lines = [l.split() for l in sec[1].splitlines()]
             self.dts = [
                 f"{int(l[0]):02d}{int(l[1]):02d}_{int(float(l[2])):02d}30" for l in lines]
