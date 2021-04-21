@@ -8,11 +8,12 @@ import os
 import re
 import subprocess as sp
 import multiprocessing as mp
+logger = logging.getLogger("frads.radutil")
 try:
     import numpy as np
     numpy_installed = True
 except ModuleNotFoundError:
-    print("Numpy not available")
+    logger.info("Numpy not installed")
     numpy_installed = False
 import xml.etree.ElementTree as ET
 from frads import radgeom, radmtx
@@ -49,7 +50,6 @@ ABASE_LIST = {
                       (90., 0)]
 }
 
-logger = logging.getLogger("frads.radutil")
 
 
 def parse_decor(fpath):

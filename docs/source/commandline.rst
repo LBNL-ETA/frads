@@ -187,39 +187,8 @@ genmtx
 *genmtx* helps with matrix generation using rfluxmtx and rcontrib. It automatically wraps and decorates the primitive files. Help/instruction can be found by typing on command-line::
 
    $ genmtx -h
-   usage: genmtx [-h] -st {s,v,p} -s SENDER -r RECEIVER [RECEIVER ...]
-              [-i OCTREE] -o OUTPATH [OUTPATH ...] [-env ENV [ENV ...]] -rs
-              {r1,r2,r4,r6,kf,sc25} [-ss SENDER_BASIS] [-ro RECEIVER_OFFSET]
-              [-so SENDER_OFFSET] [-opt OPTION] [-rc RAY_COUNT]
-              [-res RESOLU RESOLU] [-smx SMX] [-wpths WPTHS [WPTHS ...]] [-v]
 
-   Generate flux transport matrix given a ray sender and receiver(s)
-
-   optional arguments:
-     -h, --help            show this help message and exit
-     -st {s,v,p}           Sender object type: (s)urface, (v)iew, (p)oint
-     -s SENDER             Sender object: can be a view file, a grid point file,
-                           a .rad file
-     -r RECEIVER [RECEIVER ...]
-                           Receiver objects, can be "sky", "sun", or .rad files
-     -i OCTREE             Scene octree file path (.oct)
-     -o OUTPATH [OUTPATH ...]
-                           Output file path | directory
-     -env ENV [ENV ...]    Environment file paths
-     -rs {r1,r2,r4,r6,kf,sc25}
-                           Receiver sampling basis, ....
-     -ss SENDER_BASIS      Sender sampling basis if sender type is (s)urface,
-                           kf|r1|r2|....
-     -ro RECEIVER_OFFSET   Move receiver surface in normal direction
-     -so SENDER_OFFSET     Move sender surface in normal direction
-     -opt OPTION           Simulation parameters enclosed in double quotation
-                           marks, e.g. "-ab 1 -ad 64"
-     -rc RAY_COUNT         Ray count
-     -res RESOLU RESOLU    X and Y resolution for the image, defeault=[800, 800]
-     -smx SMX              Sky matrix file path, used to cull redundant suns
-     -wpths WPTHS [WPTHS ...]
-                           window primitive paths, used to cull redundant suns
-     -v, --verbose         verbose mode
+.. program-output:: genmtx -h
 
 We can generate a simple daylight coefficient matrix using the example from mrad section::
 
@@ -235,25 +204,15 @@ genradroom
 *genradroom* can be used to generate a generic box side-lit room model::
 
    $ genradroom -h
-   usage: genradroom [-h] [-w start_x start_z width height] [-t Facade thickness] width depth height
 
-   Generate a generic room with window facing the -Y direction
-
-   positional arguments:
-     width                 room width along X axis, starting from x=0
-     depth                 room depth along Y axis, starting from y=0
-     height                room height along Z axis, starting from z=0
-
-   optional arguments:
-     -h, --help            show this help message and exit
-     -w start_x start_z width height
-                           Define a window from lower left corner
-     -t Facade thickness
+.. program-output:: genradroom -h
 
 
 gengrid
 -------
-*gengrid* can be used to generate a sensor grid given a surface, spacing, and height.
+*gengrid* can be used to generate a sensor grid given a surface, spacing, and height. Help and instruction can be found using -h flag::
+
+   $ gengrid -h
 
 .. program-output:: gengrid -h
 
