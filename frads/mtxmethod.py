@@ -55,7 +55,7 @@ def mtxmult(*mtx):
 def imgmult(*mtx, odir):
     """Image-based matrix multiplication using dctimestep."""
     radutil.mkdir_p(odir)
-    cmd = ['dctimestep', '-oc', '-o', pjoin(odir, '%04d.hdr')] + list(mtx)
+    cmd = ['dctimestep', '-o', pjoin(odir, '%04d.hdr')] + list(mtx)
     return cmd
 
 
