@@ -55,7 +55,7 @@ def mtxmult(*mtx):
 def imgmult(*mtx, odir):
     """Image-based matrix multiplication using dctimestep."""
     radutil.mkdir_p(odir)
-    cmd = ['dctimestep', '-o', pjoin(odir, '%04d.hdr')] + list(mtx)
+    cmd = ['dctimestep', '-oc', '-o', pjoin(odir, '%04d.hdr')] + list(mtx)
     return cmd
 
 
@@ -258,7 +258,7 @@ class MTXMethod:
         """Generate sky/sun matrix."""
         sun_only = ' -d' if direct else ''
         _five = ' -5 .533' if onesun else ''
-        oname = radutil.basename(wea_path))
+        oname = radutil.basename(wea_path)
         cmd = f"gendaymtx -of -m {mfactor[-1]}{sun_only}{_five}".split()
         cmd.append(wea_path)
         logger.info('Generating sku/sun matrix using command')
@@ -315,6 +315,8 @@ class MTXMethod:
         """."""
         self.logger.info("Computing for 2-phase image-based results")
         opath = pjoin(self.resdir, 'view2ph')
+        if os.path.isdir(opath):
+            shutil.rmtree(opath)
         for view in dsmx:
             radutil.sprun(
                 imgmult(pjoin(dsmx[view], '%04d.hdr'), smx, odir=opath))
@@ -373,7 +375,7 @@ class MTXMethod:
             window_prim = self.window_prims[wname]
             sndr_window = radmtx.Sender.as_surface(
                 prim_list=window_prim, basis=self.config.fmx_basis)
-            if not isfile(dmxs[wname]) or self.config.overwrite:
+            if not isfile(fmxs[wname]) or self.config.overwrite:
                 self.logger.info("Generating facade matrix for %s", _name)
                 fmx_res = radmtx.rfluxmtx(sender=sndr_window, receiver=port_rcvr,
                                           env=_env, out=None, opt=_opt)
