@@ -612,6 +612,7 @@ class MTXMethod:
         self.logger.info(f"Generating image-based direct sun matrix")
         rcvr_sun = radmtx.Receiver.as_sun(
             basis='r6', smx_path=smx_path, window_paths=self.windowpath)
+        mod_names = [str(int(l[3:])-1) for l in rcvr_sun.modifier.splitlines()]
         sun_oct = pjoin(self.resodir, 'sun.oct')
         cdsenv = [self.materialpath, self.blackenvpath] + self.windowpath
         radmtx.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
@@ -643,11 +644,19 @@ class MTXMethod:
                 radmtx.rcontrib(sender=sndr, modifier=rcvr_sun.modifier,
                                 octree=sun_oct, out=vcdrmx[view],
                                 opt=self.config.cdsmx_opt+' -i')
+                _files = [pjoin(vcdrmx[view], f) for f in sorted(os.listdir(vcdrmx[view]))
+                          if f.endswith('.hdr')]
+                for idx, val in enumerate(_files):
+                    os.rename(val, pjoin(vcdrmx[view], mod_names[idx]+'.hdr'))
             if not isdir(vcdfmx[view]) or self.config.overwrite:
                 self.logger.info(f"Using rcontrib to generat direct sun f matrix for {view}...")
                 radmtx.rcontrib(sender=sndr, modifier=rcvr_sun.modifier,
                                 octree=sun_oct, out=vcdfmx[view],
                                 opt=self.config.cdsmx_opt)
+                _files = [pjoin(vcdfmx[view], f) for f in sorted(os.listdir(vcdfmx[view]))
+                          if f.endswith('.hdr')]
+                for idx, val in enumerate(_files):
+                    os.rename(val, pjoin(vcdfmx[view], mod_names[idx]+'.hdr'))
         return vcdfmx, vcdrmx, vmap_paths, cdmap_paths
 
     def calc_5phase_pt(self, vmx, vmxd, dmx, dmxd, pcdsmx, smx, smxd, smx_sun):
