@@ -160,7 +160,7 @@ class Receiver:
         return self
 
     @classmethod
-    def as_sun(cls, *, basis, smx_path, window_paths) -> Receiver:
+    def as_sun(cls, *, basis, smx_path, window_paths, full_mod=False) -> Receiver:
         """Instantiate a sun receiver object.
         Args:
             basis: receiver sampling basis {kf | r1 | sc25...}
@@ -176,7 +176,10 @@ class Receiver:
             return cls(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
         else:
             str_repr, mod_str = gensun.gen_cull(smx_path=smx_path, window_paths=window_paths)
-            return cls(receiver=str_repr, basis=basis, modifier=mod_str)
+            if full_mod:
+                return cls(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
+            else:
+                return cls(receiver=str_repr, basis=basis, modifier=mod_str)
 
     @classmethod
     def as_sky(cls, basis) -> Receiver:

@@ -596,7 +596,7 @@ class MTXMethod:
         """."""
         self.logger.info(f"Direct sun matrix for sensor grid")
         rcvr_sun = radmtx.Receiver.as_sun(
-            basis='r6', smx_path=smx_path, window_paths=self.windowpath)
+            basis='r6', smx_path=smx_path, window_paths=self.windowpath, full_mod=True)
         sun_oct = pjoin(self.resodir, 'sun.oct')
         cdsenv = [self.materialpath, self.blackenvpath] + self.windowpath
         radmtx.rcvr_oct(rcvr_sun, cdsenv, sun_oct)

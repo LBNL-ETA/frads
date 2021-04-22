@@ -77,8 +77,11 @@ def main():
         if args.sender_type == 'v':
             radutil.mkdir_p(outpath)
     elif args.receiver[0] == 'sun':
+        full_modifier = False
+        if args.sender_type != 'v':
+            full_modifier = True
         receiver = rm.Receiver.as_sun(basis=args.rs, smx_path=args.smx,
-                                      window_paths=args.wpths)
+                                      window_paths=args.wpths, full_mod=full_modifier)
     else: # assuming multiple receivers
         rcvr_prims = []
         for path in args.receiver:
