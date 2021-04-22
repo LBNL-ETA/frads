@@ -5,12 +5,6 @@ the ray sender and receiver in the rfluxmtx operation. sender object is can
 be instantiated as a surface, a list of points, or a view, and these are
 typical forms of a sender. Similarly, a receiver object can be instantiated as
 a surface, sky, or suns.
-
-  Typical usage example:
-      For the generation of daylight matrix:
-      sender1 = Sender.as_surface(prim_list=[window_primitives], basis='kf')
-      receiver1=  Receiver.as_sky(basis='r4')
-      rfluxmtx(sender=sender1, receiver=receiver1, env=model)
 """
 
 from __future__ import annotations
@@ -151,8 +145,8 @@ class Receiver:
     def __init__(self, receiver: str, basis: str, modifier=None) -> None:
         """Instantiate the receiver object.
 
-        Parameters:
-            receiver(str): filepath {sky | sun | file_path};
+        Args:
+            receiver(str): receiver string which can be appended to one another
             basis(str): receiver basis, usually kf, r4, r6;
             modifier(str): modifiers to the receiver objects;
         """
@@ -167,21 +161,32 @@ class Receiver:
 
     @classmethod
     def as_sun(cls, *, basis, smx_path, window_paths) -> Receiver:
+        """Instantiate a sun receiver object.
+        Args:
+            basis: receiver sampling basis {kf | r1 | sc25...}
+            smx_path: sky/sun matrix file path
+            window_paths: window file paths
+        Returns:
+            A sun receiver object
         """
-        basis: receiver sampling basis {kf | r1 | sc25...}
-        """
+
         gensun = makesky.Gensun(int(basis[-1]))
         if (smx_path is None) and (window_paths is None):
             str_repr = gensun.gen_full()
+            return cls(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
         else:
-            str_repr = gensun.gen_cull(smx_path=smx_path, window_paths=window_paths)
-        return cls(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
+            str_repr, mod_str = gensun.gen_cull(smx_path=smx_path, window_paths=window_paths)
+            return cls(receiver=str_repr, basis=basis, modifier=mod_str)
 
     @classmethod
     def as_sky(cls, basis) -> Receiver:
+        """Instantiate a sky receiver object.
+        Args:
+            basis: receiver sampling basis {kf | r1 | sc25...}
+        Returns:
+            A sky receiver object
         """
-        basis: receiver sampling basis {kf | r1 | sc25...}
-        """
+
         assert basis.startswith('r'), 'Sky basis need to be Treganza/Reinhart'
         sky_str = makesky.basis_glow(basis)
         logger.debug(sky_str)
@@ -190,8 +195,16 @@ class Receiver:
     @classmethod
     def as_surface(cls, prim_list: list, basis: str, out: str,
                    offset=None, left=False, source='glow') -> Receiver:
-        """
-        basis: receiver sampling basis {kf | r1 | sc25...}
+        """Instantiate a surface receiver object.
+        Args:
+            prim_list: list of primitives(dict)
+            basis: receiver sampling basis {kf | r1 | sc25...}
+            out: output path
+            offset: offset the surface in its normal direction
+            left: use instead left-hand rule for matrix generation
+            source: light source for receiver object {glow|light}
+        Returns:
+            A surface receiver object
         """
         rcvr_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
                                    left=left, source=source, out=out)
@@ -199,7 +212,18 @@ class Receiver:
 
 
 def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
-    """Prepare the sender or receiver surface, adding appropriate tags."""
+    """Prepare the sender or receiver surface, adding appropriate tags.
+    Args:
+        prims(list): list of primitives
+        basis(str): sampling basis
+        left(bool): use instead the left-hand rule
+        offset(float): offset surface in its normal direction
+        source(str): surface light source for receiver
+        out: output path
+    Returns:
+        The receiver as string
+    """
+
     assert basis is not None, 'Sampling basis cannot be None'
     primscopy = copy.deepcopy(prims)
     upvector = str(radutil.up_vector(prims)).replace(' ', ',')
@@ -287,7 +311,13 @@ def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
 
 
 def rcvr_oct(receiver, env, oct_path):
-    """Generate an octree of the environment and the receiver."""
+    """Generate an octree of the environment and the receiver.
+    Args:
+        receiver: receiver object
+        env: environment file paths
+        oct_path: Path to write the octree to
+    """
+
     with tf.TemporaryDirectory() as tempd:
         receiver_path = os.path.join(tempd, 'rcvr_path')
         with open(receiver_path, 'w') as wtr:

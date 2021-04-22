@@ -75,7 +75,7 @@ class Gensun(object):
                 if p['type'] == 'polygon'
             ]
         else:
-            win_norm = [[0, 0, -1]]
+            win_norm = [[0, -1, 0]]
         if smx_path is not None:
             cmd = f"rmtxop -ff -c .3 .6 .1 -t {smx_path} "
             cmd += "| getinfo - | total -if5186 -t,"
@@ -84,20 +84,23 @@ class Gensun(object):
         else:
             dtot = [1] * self.runlen
         out_lines = []
+        mod_str = []
         for i in range(1, self.runlen):
             dirs = self.rsrc.dir_calc(i)
+            _mod = 'sol'+str(i)
             if dtot[i - 1] > 0:
                 for norm in win_norm:
                     v = 0
                     if sum([i * j for i, j in zip(norm, dirs)]) < 0:
                         v = 1
+                        mod_str.append(_mod)
                         break
             else:
                 v = 0
             line = f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} "
             line += "source sun 0 0 4 {:.6g} {:.6g} {:.6g} 0.533".format(*dirs)
             out_lines.append(line)
-        return LSEP.join(out_lines)
+        return LSEP.join(out_lines), LSEP.join(mod_str)
 
 
 def epw2sunmtx(epw_path):
@@ -404,8 +407,8 @@ class getEPW(object):
 
 def getwea():
     """Commandline program for generating a .wea file from downloaded EPW data."""
-    parser = argparse.ArgumentParser(description="Modified version of epw2wea with added\
-     capability of including only the daylight hours")
+    parser = argparse.ArgumentParser(
+        prog='getwea', description="Download the EPW files and convert it to a wea file")
     parser.add_argument('-a', help='latitude')
     parser.add_argument('-o', help='longitude')
     parser.add_argument('-z', help='zipcode (U.S. only)')
