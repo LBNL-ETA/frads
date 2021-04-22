@@ -639,24 +639,28 @@ class MTXMethod:
                 wtr.write(cdmap)
             vcdfmx[view] = pjoin(self.mtxdir, f'vcdfmx_{view}')
             vcdrmx[view] = pjoin(self.mtxdir, f'vcdrmx_{view}')
+            tempf = pjoin(self.mtxdir, 'vcdfmx')
+            tempr = pjoin(self.mtxdir, 'vcdrmx')
             if not isdir(vcdrmx[view]) or self.config.overwrite:
                 self.logger.info(f"Using rcontrib to generate direct sun r matrix for {view}...")
                 radmtx.rcontrib(sender=sndr, modifier=rcvr_sun.modifier,
-                                octree=sun_oct, out=vcdrmx[view],
+                                octree=sun_oct, out=tempr,
                                 opt=self.config.cdsmx_opt+' -i')
-                _files = [pjoin(vcdrmx[view], f) for f in sorted(os.listdir(vcdrmx[view]))
+                _files = [pjoin(tempr, f) for f in sorted(os.listdir(tempr))
                           if f.endswith('.hdr')]
                 for idx, val in enumerate(_files):
                     os.rename(val, pjoin(vcdrmx[view], mod_names[idx]+'.hdr'))
+                shutil.rmtree(tempr)
             if not isdir(vcdfmx[view]) or self.config.overwrite:
                 self.logger.info(f"Using rcontrib to generat direct sun f matrix for {view}...")
                 radmtx.rcontrib(sender=sndr, modifier=rcvr_sun.modifier,
-                                octree=sun_oct, out=vcdfmx[view],
+                                octree=sun_oct, out=tempf,
                                 opt=self.config.cdsmx_opt)
-                _files = [pjoin(vcdfmx[view], f) for f in sorted(os.listdir(vcdfmx[view]))
+                _files = [pjoin(tempf, f) for f in sorted(os.listdir(tempf))
                           if f.endswith('.hdr')]
                 for idx, val in enumerate(_files):
                     os.rename(val, pjoin(vcdfmx[view], mod_names[idx]+'.hdr'))
+                shutil.rmtree(tempf)
         return vcdfmx, vcdrmx, vmap_paths, cdmap_paths
 
     def calc_5phase_pt(self, vmx, vmxd, dmx, dmxd, pcdsmx, smx, smxd, smx_sun):
