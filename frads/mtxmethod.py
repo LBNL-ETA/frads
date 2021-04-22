@@ -280,6 +280,7 @@ class MTXMethod:
         self.logger.info('Computing for 2-phase sensor point matrices...')
         env = self.envpath + self.windowpath
         pdsmx = pjoin(self.mtxdir, 'pdsmx.mtx')
+        opt = self.config.dsmx_opt + ' -n ' + self.config.nprocess
         if not isfile(pdsmx) or self.config.overwrite:
             res = radmtx.rfluxmtx(sender=self.sndr_pts, receiver=self.rcvr_sky,
                                   env=env, opt=self.config.dsmx_opt)
@@ -723,18 +724,20 @@ class MTXMethod:
                 if len(self.window_prims) > 1:
                     [vresl.insert(i*2-1, '+') for i in range(1, len(vresl))]
                     [vdresl.insert(i*2-1, '+') for i in range(1, len(vdresl))]
-                    radutil.pcombop(vresl, res3)
-                    radutil.pcombop(vdresl, res3di)
+                    radutil.pcombop(vresl, res3, nproc=self.config.nprocess)
+                    radutil.pcombop(vdresl, res3di, nproc=self.config.nprocess)
                 else:
                     os.rename(vresl[0], res3)
                     os.rename(vdresl[0], res3di)
-                radutil.pcombop([res3di, '*', vmap_paths[view]], res3d)
-                radutil.pcombop(
-                    [vrescdr, '*', cdmap_paths[view], '+', vrescdf], vrescd)
+                radutil.pcombop([res3di, '*', vmap_paths[view]],
+                                res3d, nproc=self.config.nprocess)
+                radutil.pcombop([vrescdr, '*', cdmap_paths[view], '+', vrescdf],
+                                vrescd, nproc=self.config.nprocess)
                 opath = pjoin(self.resdir, f"{view}_5ph")
                 if os.path.isdir(opath):
                     shutil.rmtree(opath)
-                radutil.pcombop([res3, '-', res3d, '+', vrescd], opath)
+                radutil.pcombop([res3, '-', res3d, '+', vrescd],
+                                opath, nproc=self.config.nprocess)
                 ofiles = [pjoin(opath, f) for f in sorted(os.listdir(opath)) if
                           f.endswith('.hdr')]
                 [os.rename(ofiles[idx], pjoin(opath, self.datetime_stamps[idx]+'.hdr'))
