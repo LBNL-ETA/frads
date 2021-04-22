@@ -716,11 +716,13 @@ class MTXMethod:
                                         dmxd[wname], smxd, odir=_vdrespath))
                     vresl.append(_vrespath)
                     vdresl.append(_vdrespath)
+                self.logger.info("Multiplying matrices for images.")
                 process = mp.Pool(int(self.config.nprocess))
                 process.map(radutil.sprun, cmds)
                 res3 = tf.mkdtemp(dir=td)
                 res3di = tf.mkdtemp(dir=td)
                 res3d = tf.mkdtemp(dir=td)
+                self.logger.info("Combine results for each window groups.")
                 if len(self.window_prims) > 1:
                     [vresl.insert(i*2-1, '+') for i in range(1, len(vresl))]
                     [vdresl.insert(i*2-1, '+') for i in range(1, len(vdresl))]
@@ -729,6 +731,7 @@ class MTXMethod:
                 else:
                     os.rename(vresl[0], res3)
                     os.rename(vdresl[0], res3di)
+                self.logger.info("Applying mapterial reflectance map")
                 radutil.pcombop([res3di, '*', vmap_paths[view]],
                                 res3d, nproc=int(self.config.nprocess))
                 radutil.pcombop([vrescdr, '*', cdmap_paths[view], '+', vrescdf],
@@ -736,6 +739,7 @@ class MTXMethod:
                 opath = pjoin(self.resdir, f"{view}_5ph")
                 if os.path.isdir(opath):
                     shutil.rmtree(opath)
+                self.logger.info("Assemble all phase results.")
                 radutil.pcombop([res3, '-', res3d, '+', vrescd],
                                 opath, nproc=int(self.config.nprocess))
                 ofiles = [pjoin(opath, f) for f in sorted(os.listdir(opath)) if
