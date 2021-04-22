@@ -612,7 +612,7 @@ class MTXMethod:
         self.logger.info(f"Generating image-based direct sun matrix")
         rcvr_sun = radmtx.Receiver.as_sun(
             basis='r6', smx_path=smx_path, window_paths=self.windowpath)
-        mod_names = [str(int(l[3:])-1) for l in rcvr_sun.modifier.splitlines()]
+        mod_names = ["%04d"%(int(l[3:])-1) for l in rcvr_sun.modifier.splitlines()]
         sun_oct = pjoin(self.resodir, 'sun.oct')
         cdsenv = [self.materialpath, self.blackenvpath] + self.windowpath
         radmtx.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
