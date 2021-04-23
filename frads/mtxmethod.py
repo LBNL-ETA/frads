@@ -74,16 +74,19 @@ def three_phase(_setup, smx, direct=False):
     dmxs = _setup.daylight_matrix(_setup.window_prims)
     if direct:
         smxd = _setup.gen_smx(_setup.wea_path, _setup.config.smx_basis, _setup.mtxdir, direct=True)
-        smx_sun = _setup.gen_smx(_setup.wea_path, _setup.config.cdsmx_basis, _setup.mtxdir, onesun=True, direct=True)
+        smx_sun_img = _setup.gen_smx(
+            _setup.wea_path_d6, _setup.config.cdsmx_basis, _setup.mtxdir, onesun=True, direct=True)
+        smx_sun = _setup.gen_smx(
+            _setup.wea_path, _setup.config.cdsmx_basis, _setup.mtxdir, onesun=True, direct=True)
         _setup.blacken_env()
         pcdsmx = _setup.direct_sun_matrix_pt(smx_sun)
-        vcdfmx, vcdrmx, vmap_paths, cdmap_paths = _setup.direct_sun_matrix_vu(smx_sun)
+        vcdfmx, vcdrmx, vmap_paths, cdmap_paths = _setup.direct_sun_matrix_vu(smx_sun_img)
         dmxsd = _setup.daylight_matrix(_setup.window_prims, direct=True)
         pvmxsd = _setup.view_matrix_pt(direct=True)
         vvmxsd = _setup.view_matrix_vu(direct=True)
         _setup.calc_5phase_pt(pvmxs, pvmxsd, dmxs, dmxsd, pcdsmx, smx, smxd, smx_sun)
         _setup.calc_5phase_vu(vvmxs, vvmxsd, dmxs, dmxsd, vcdfmx,
-                              vcdrmx, vmap_paths, cdmap_paths, smx, smxd, smx_sun)
+                              vcdrmx, vmap_paths, cdmap_paths, smx, smxd, smx_sun_img)
     else:
         _setup.calc_3phase_pt(pvmxs, dmxs, smx)
         _setup.calc_3phase_vu(vvmxs, dmxs, smx)
@@ -180,11 +183,17 @@ class MTXMethod:
                     radutil.parse_primitive(rdr.readlines()))
         self.window_prims = {}
         self.bsdf = {}
+        self.window_normals = []
         for idx, windowpath in enumerate(self.windowpath):
             wname = radutil.basename(windowpath)
             with open(windowpath) as rdr:
-                self.window_prims[wname] = radutil.parse_primitive(
-                    rdr.readlines())
+                _prim = radutil.parse_primitive(rdr.readlines())
+                self.window_prims[wname] = _prim
+                _normal = _prim[0]['polygon'].normal()
+                if len(self.window_normals) == 0:
+                    self.window_normals.append(_normal)
+                elif _normal != self.window_normals[-1]:
+                    self.window_normals.append(_normal)
             if self.bsdfpath is not None:
                 self.bsdf[wname] = self.bsdfpath[idx]
         self.sndr_pts = None
@@ -252,6 +261,17 @@ class MTXMethod:
             with open(self.wea_path, 'w') as wtr:
                 wtr.write(wea.wea)
             self.datetime_stamps = wea.dt_string
+            if self.config.separate_direct:
+                wea_d6 = makesky.epw2wea(
+                    epw=epw_path, dh=self.config.daylight_hours_only,
+                    sh=self.config.start_hour, eh=self.config.end_hour,
+                    remove_zero=True, window_normals=[n.to_list() for n in self.window_normals]
+                )
+                self.wea_path_d6 = pjoin(
+                    self.resodir, radutil.basename(epw.fname) + '_d6.wea')
+                with open(self.wea_path_d6, 'w') as wtr:
+                    wtr.write(wea_d6.wea)
+                self.datetime_stamps_d6 = wea_d6.dt_string
 
     @staticmethod
     def gen_smx(wea_path, mfactor, outdir, onesun=False, direct=False):
@@ -280,10 +300,10 @@ class MTXMethod:
         self.logger.info('Computing for 2-phase sensor point matrices...')
         env = self.envpath + self.windowpath
         pdsmx = pjoin(self.mtxdir, 'pdsmx.mtx')
-        opt = self.config.dsmx_opt + ' -n ' + self.config.nprocess
+        opt = self.config.dsmx_opt + ' -n %s'%self.config.nprocess
         if not isfile(pdsmx) or self.config.overwrite:
             res = radmtx.rfluxmtx(sender=self.sndr_pts, receiver=self.rcvr_sky,
-                                  env=env, opt=self.config.dsmx_opt)
+                                  env=env, opt=opt)
             with open(pdsmx, 'wb') as wtr:
                 wtr.write(res)
         return pdsmx
@@ -740,10 +760,29 @@ class MTXMethod:
                 if os.path.isdir(opath):
                     shutil.rmtree(opath)
                 self.logger.info("Assemble all phase results.")
-                radutil.pcombop([res3, '-', res3d, '+', vrescd],
-                                opath, nproc=int(self.config.nprocess))
-                ofiles = [pjoin(opath, f) for f in sorted(os.listdir(opath)) if
-                          f.endswith('.hdr')]
-                [os.rename(ofiles[idx], pjoin(opath, self.datetime_stamps[idx]+'.hdr'))
-                 for idx in range(len(ofiles))]
+                res3_path = [pjoin(res3, f) for f in sorted(os.listdir(res3)) if f.endswith('.hdr')]
+                [os.rename(file, pjoin(res3, self.datetime_stamps[idx]+'.hdr'))
+                 for idx, file in enumerate(res3_path)]
+                res3d_path = [pjoin(res3d, f) for f in sorted(os.listdir(res3d)) if f.endswith('.hdr')]
+                [os.rename(file, pjoin(res3d, self.datetime_stamps[idx]+'.hdr'))
+                 for idx, file in enumerate(res3d_path)]
+                vrescd_path = [pjoin(vrescd, f) for f in sorted(os.listdir(vrescd)) if f.endswith('.hdr')]
+                [os.rename(file, pjoin(vrescd, self.datetime_stamps_d6[idx]+'.hdr'))
+                 for idx, file in enumerate(vrescd_path)]
+                radutil.mkdir_p(opath)
+                for hdr3 in os.listdir(res3):
+                    _hdr3 = pjoin(res3, hdr3)
+                    _hdr3d = pjoin(res3d, hdr3)
+                    cmd = f"pcomb -o {_hdr3} -s -1 -o {_hdr3d}"
+                    if hdr3 in os.listdir(vrescd):
+                        cmd += ' -o ' + pjoin(vrescd, hdr3)
+                    process = sp.run(cmd.split(), stdout=sp.PIPE)
+                    with open(pjoin(opath, hdr3), 'wb') as wtr:
+                        wtr.write(process.stdout)
+                # radutil.pcombop([res3, '-', res3d, '+', vrescd],
+                #                 opath, nproc=int(self.config.nprocess))
+                # ofiles = [pjoin(opath, f) for f in sorted(os.listdir(opath)) if
+                #           f.endswith('.hdr')]
+                # [os.rename(ofiles[idx], pjoin(opath, self.datetime_stamps[idx]+'.hdr'))
+                #  for idx in range(len(ofiles))]
                 self.logger.info(f"Done computing for {view}")

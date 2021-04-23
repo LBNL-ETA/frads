@@ -10,6 +10,18 @@ from frads import mtxmethod
 from frads import radutil
 
 
+def mkdirs(cfg):
+    """Make directories according to the configuration dict."""
+    base = cfg['base']
+    objdir = os.path.join(base, cfg['objects'])
+    mtxdir = os.path.join(base, cfg['matrices'])
+    resdir = os.path.join(base, cfg['results'])
+    resodir = os.path.join(base, cfg['resources'])
+    radutil.mkdir_p(objdir)
+    radutil.mkdir_p(mtxdir)
+    radutil.mkdir_p(resdir)
+    radutil.mkdir_p(resodir)
+
 def initialize(args):
     """Going through files in the standard file structure and generate a cfg file."""
     templ = mtxmethod.cfg_template
@@ -54,6 +66,7 @@ def run(args):
     with open(args.cfg) as rdr:
         cfg.read_string(rdr.read())
     cfg_dict = cfg2dict(cfg)
+    mkdirs(cfg_dict)
     msetup = mtxmethod.MTXMethod(cfg_dict)
     ncp_shade = msetup.config.ncp_shade
     smx = msetup.gen_smx(msetup.wea_path, msetup.config.smx_basis, msetup.mtxdir)

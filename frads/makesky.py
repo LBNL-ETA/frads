@@ -83,6 +83,7 @@ class Gensun(object):
                     for i in sp.check_output(cmd, shell=True).split(b',')]
         else:
             dtot = [1] * self.runlen
+
         out_lines = []
         mod_str = []
         for i in range(1, self.runlen):
@@ -100,6 +101,8 @@ class Gensun(object):
             line = f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} "
             line += "source sun 0 0 4 {:.6g} {:.6g} {:.6g} 0.533".format(*dirs)
             out_lines.append(line)
+        if mod_str[-1] != 'sol%s'%(self.runlen-1):
+            mod_str.append('sol%s'%(self.runlen-1))
         return LSEP.join(out_lines), LSEP.join(mod_str)
 
 
@@ -276,7 +279,7 @@ def solar_angle(*, lat, lon, mer, month, day, hour):
 class epw2wea(object):
     """."""
 
-    def __init__(self, *, epw, dh, sh, eh):
+    def __init__(self, *, epw, dh, sh, eh, remove_zero=False, window_normals=None):
         """."""
         self.epw = epw
         #self.wea = wea
@@ -291,6 +294,9 @@ class epw2wea(object):
         if dh:
             self.daylight()  # filter out non-daylight hours if asked
 
+        if remove_zero:
+            self.remove_entries(window_normals=window_normals)
+
         self.wea = self.header + '\n' + self.string
         self.dt_string = []
         for line in self.string.splitlines():
@@ -299,6 +305,34 @@ class epw2wea(object):
             da = int(entry[1])
             hr = int(float(entry[2]))
             self.dt_string.append(f"{mo:02d}{da:02d}_{hr:02d}30")
+
+    def remove_entries(self, window_normals=None):
+        """Remove data entries with zero solar luminance."""
+        check_window_normal = True if window_normals is not None else False
+        new_string = []
+        for line in self.string.splitlines():
+            items = line.split()
+            cmd = f'gendaylit {items[0]} {items[1]} {items[2]} '
+            cmd += f'-a {self.latitude} -o {self.longitude} '
+            cmd += f'-m {self.tz} -W {items[3]} {items[4]}'
+            process = sp.run(cmd.split(), stderr=sp.PIPE, stdout=sp.PIPE)
+            primitives = radutil.parse_primitive(process.stdout.decode().splitlines())
+            light = 0
+            if process.stderr == b'':
+                for prim in primitives:
+                    if prim['type'] == 'light':
+                        light = float(prim['real_args'].split()[2])
+                    if prim['type'] == 'source':
+                        dirs = list(map(float, prim['real_args'].split()[1:4]))
+                if light > 0:
+                    if check_window_normal:
+                        for normal in window_normals:
+                            if sum([i * j for i, j in zip(normal, dirs)]) < -0.035:
+                                new_string.append(line)
+                    else:
+                        new_string.append(line)
+        self.string = '\n'.join(new_string)
+
 
     def daylight(self):
         """."""
