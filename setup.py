@@ -31,6 +31,7 @@ setuptools.setup(
                             'rpxop=frads.radutil:rpxop',
                             'varays=frads.radutil:varays',
                             'genradroom=frads.room:genradroom',
+                            'geombsdf=frads.geombsdf:main',
                             ],
     }
 )

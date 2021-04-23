@@ -30,3 +30,9 @@ radgeom
 ---------
    radgeom
 
+ep2rad
+------
+One can use the library by importing neede function to facilitate a specific workflow::
+
+   import epjson2rad
+   radobj = epjson2rad.epJSON2Rad(epsj_path)
