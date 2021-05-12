@@ -3,10 +3,9 @@ Executive command-line program for Radiance matrix-based simulation.
 """
 
 from configparser import SafeConfigParser
-from dataclasses import asdict
 import argparse
-import logging
 import glob
+import logging
 import os
 from frads import mtxmethod
 from frads import util
@@ -15,17 +14,20 @@ logger = logging.getLogger('frads')
 
 
 def mkdirs(cfg):
-    """Make directories according to the configuration dict."""
+    """Silently make directories based on configuration."""
     util.mkdir_p(cfg.objdir)
     util.mkdir_p(cfg.mtxdir)
     util.mkdir_p(cfg.resdir)
     util.mkdir_p(cfg.rsodir)
 
 
-def initialize(args: argparse.Namespace):
+def initialize(args: argparse.Namespace) -> None:
     """Initiate mrad operation.
     Going through files in the standard file
-    structure and generate a cfg file."""
+    structure and generate a default.cfg file.
+    Args:
+        args: argparse.Namespace
+    """
     cwd = os.getcwd()
 
     file_struct = {'base': args.base, 'objects': args.objdir,
@@ -67,8 +69,13 @@ def initialize(args: argparse.Namespace):
         cfg.write(rdr)
 
 
-def cfg2dict(cfg: SafeConfigParser) -> util.MradConfig:
-    """Convert a configparser object into a dictionary."""
+def convert_config(cfg: SafeConfigParser) -> util.MradConfig:
+    """Convert a configparser object into a dictionary.
+    Args:
+        cfg: SafeConfigParser
+    Returns:
+        MradConfig object (dataclass)
+    """
     cfg_dict = {}
     sections = cfg.sections()
     for sec in sections:
@@ -84,25 +91,15 @@ def cfg2dict(cfg: SafeConfigParser) -> util.MradConfig:
     if cfg_dict['scene'] is None:
         raise ValueError("No scene description")
     return util.MradConfig(**cfg_dict)
-    # if cfg_dict['ncp_shade'] is not None:
-    #     ncp_groups = cfg_dict['ncp_shade'].split()
-    #     ncp_paths = [group.split(',')[0] for group in ncp_groups]
-    #     cfg_dict['ncp_window_idx'] = [map(int, group.split(',')[1:])
-    #                                   for group in ncp_groups]
-    #     if len(ncp_paths) > 1:
-    #         cfg_dict['ncppath'] = [os.path.join(cfg_dict['objdir'], path)
-    #                                for path in ncp_paths]
-    #     else:
-    #         cfg_dict['envpath'].extend(ncp_paths)
-    # cfg_named_tuple = namedtuple('config', cfg_dict.keys())(**cfg_dict)
 
 
-def run(args: argparse.Namespace):
+def run(args: argparse.Namespace) -> None:
     """Call mtxmethod to carry out the actual simulation."""
     cfg = SafeConfigParser(allow_no_value=True, inline_comment_prefixes='#')
     with open(args.cfg) as rdr:
         cfg.read_string(rdr.read())
-    config = cfg2dict(cfg)
+    config = convert_config(cfg)
+    config.name = util.basename(args.cfg)
     mkdirs(config)
     model = mtxmethod.assemble_model(config)
     if config.method != '':
@@ -129,7 +126,7 @@ def run(args: argparse.Namespace):
                     mtxmethod.three_phase(model, config)
 
 
-def main():
+def main() -> None:
     """Parse the configuration file and envoke to mtxmethod to do the actual work."""
     parser = argparse.ArgumentParser(
         prog='mrad', description='Executive program for Radiance matrix-based simulation')

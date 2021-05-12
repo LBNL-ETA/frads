@@ -12,6 +12,7 @@ logger = logging.getLogger("frads.util")
 
 @dataclass
 class MradConfig:
+    name: str = ''
     vmx_basis: str = 'kf'
     vmx_opt: str = '-ab 5 -ad 262144 -lw 1e-6'
     fmx_basis: str = 'kf'

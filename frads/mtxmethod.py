@@ -8,8 +8,7 @@ import os
 import shutil
 import subprocess as sp
 import tempfile as tf
-from dataclasses import asdict
-from typing import NamedTuple, List, Dict
+from typing import NamedTuple, List, Dict, Tuple
 from frads import radutil, radgeom, radmtx, makesky, mfacade, util
 
 
@@ -96,7 +95,7 @@ def gen_smx(wea_path, mfactor, outdir, onesun=False, direct=False):
         wtr.write(res)
     return smxpath
 
-def get_window_group(config):
+def get_window_group(config: util.MradConfig) -> Tuple[dict, list]:
     window_groups = {}
     window_normals: List[radgeom.Vector] = []
     for wname, windowpath in config.windows.items():
@@ -107,7 +106,7 @@ def get_window_group(config):
         window_normals.append(_normal)
     return window_groups, window_normals
 
-def get_sender_grid(config):
+def get_sender_grid(config: util.MradConfig) -> dict:
     """."""
     sender_grid = {}
     for name, surface_path in config.grid_surface_paths.items():
@@ -122,14 +121,13 @@ def get_sender_grid(config):
     return sender_grid
 
 
-def get_sender_view(config):
-    """."""
+def get_sender_view(config: util.MradConfig) -> Tuple[dict, dict]:
+    """Get views as senders.
+    Args:
+        config: MradConfig object"""
     sender_view = {}
     view_dicts = {}
-    # Sender view
     views = config.view.split(',')
-    # views = [key for key, val in asdict(config).items()
-             # if key.startswith('view') and val is not '']
     for idx, view in enumerate(views):
         vdict = util.parse_vu(view)
         view_name = f"view_{idx:02d}"
@@ -142,7 +140,7 @@ def get_sender_view(config):
             xres=vdict['x'], yres=vdict['y'])
     return sender_view, view_dicts
 
-def assemble_model(config: util.MradConfig):
+def assemble_model(config: util.MradConfig) -> Model:
     """Assemble all the pieces together."""
     material_primitives: List[radutil.Primitive]
     material_primitives = sum([radutil.unpack_primitives(path) for path in config.material_paths], [])
@@ -557,13 +555,10 @@ def direct_sun_matrix_vu(model, smx_path, vmap_oct, cdmap_oct, config):
 def calc_2phase_pt(datetime_stamps, dsmx, smx, config):
     """."""
     logger.info("Computing for 2-phase sensor grid results.")
-    opath = os.path.join(config.resdir, 'grid2ph')
-    if os.path.os.path.isdir(opath):
-        shutil.rmtree(opath)
     for grid_name in dsmx:
+        opath = os.path.join(config.resdir, f'grid_{config.name}_{grid_name}.txt')
         res = mtxmult(dsmx[grid_name], smx).splitlines()
-        respath = os.path.join(config.resdir, f'pdsmx_{grid_name}.txt')
-        with open(respath, 'w') as wtr:
+        with open(opath, 'w') as wtr:
             for idx, _ in enumerate(res):
                 wtr.write(datetime_stamps[idx] + '\t')
                 wtr.write(res[idx].decode() + '\n')
@@ -572,10 +567,10 @@ def calc_2phase_pt(datetime_stamps, dsmx, smx, config):
 def calc_2phase_vu(datetime_stamps, dsmx, smx, config):
     """."""
     logger.info("Computing for 3-phase image-based results")
-    opath = os.path.join(config.resdir, 'view2ph')
-    if os.path.os.path.isdir(opath):
-        shutil.rmtree(opath)
     for view in dsmx:
+        opath = os.path.join(config.resdir, f'view_{config.name}_{view}')
+        if os.path.os.path.isdir(opath):
+            shutil.rmtree(opath)
         util.sprun(
             imgmult(os.path.join(dsmx[view], '%04d.hdr'), smx, odir=opath))
         ofiles = [os.path.join(opath, f) for f in sorted(os.listdir(opath))
@@ -595,7 +590,7 @@ def calc_3phase_pt(model, datetime_stamps, vmx, dmx, smx, config):
             presl.append([map(float, line.decode().strip().split('\t'))
                           for line in _res])
         res = [[sum(tup) for tup in zip(*line)] for line in zip(*presl)]
-        respath = os.path.join(config.resdir, f'points3ph_{grid_name}.txt')
+        respath = os.path.join(config.resdir, f'grid_{config.name}_{grid_name}.txt')
         with open(respath, 'w') as wtr:
             for idx, val in enumerate(res):
                 wtr.write(datetime_stamps[idx] + ',')
@@ -606,31 +601,33 @@ def calc_3phase_vu(model, datetime_stamps, vmx, dmx, smx, config):
     """."""
     logger.info("Computing for 3-phase image-based results:")
     for view in model.sender_view:
-        opath = os.path.join(config.resdir, f'{view}_3phm')
-        if not os.path.isdir(opath) or config.overwrite:
-            logger.info("for %s", view)
-            vresl = []
-            for wname in model.window_groups:
-                _vrespath = os.path.join(config.resdir, f'{view}_{wname}')
-                util.mkdir_p(_vrespath)
-                cmd = imgmult(vmx[view+wname], config.klems_bsdfs[wname],
-                              dmx[wname], smx, odir=_vrespath)
-                util.sprun(cmd)
-                vresl.append(_vrespath)
-            if len(vresl) > 1:
-                for i in range(1, len(vresl)):
-                    vresl.insert(i*2-1, '+')
-                radutil.pcombop(vresl, opath)
-            else:
-                if os.path.os.path.isdir(opath):
-                    shutil.rmtree(opath)
-                os.rename(vresl[0], opath)
-            ofiles = [os.path.join(opath, f)
-                      for f in sorted(os.listdir(opath))
-                      if f.endswith('.hdr')]
-            for idx, ofile in enumerate(ofiles):
-                os.rename(ofile, os.path.join(
-                    opath, datetime_stamps[idx]+'.hdr'))
+        opath = os.path.join(config.resdir, f'view_{config.name}_{view}')
+        if os.path.isdir(opath):
+            shutil.rmtree(opath)
+        logger.info("for %s", view)
+        vresl = []
+        for wname in model.window_groups:
+            _vrespath = os.path.join(config.resdir, f'{view}_{wname}')
+            util.mkdir_p(_vrespath)
+            cmd = imgmult(vmx[view+wname], config.klems_bsdfs[wname],
+                          dmx[wname], smx, odir=_vrespath)
+            util.sprun(cmd)
+            vresl.append(_vrespath)
+        if len(vresl) > 1:
+            for i in range(1, len(vresl)):
+                vresl.insert(i*2-1, '+')
+            radutil.pcombop(vresl, opath)
+            for path in vresl:
+                if path != '+':
+                    shutil.rmtree(path)
+        else:
+            os.rename(vresl[0], opath)
+        ofiles = [os.path.join(opath, f)
+                  for f in sorted(os.listdir(opath))
+                  if f.endswith('.hdr')]
+        for idx, ofile in enumerate(ofiles):
+            os.rename(ofile, os.path.join(
+                opath, datetime_stamps[idx]+'.hdr'))
 
 
 def calc_5phase_pt(model, vmx, vmxd, dmx, dmxd, pcdsmx,
@@ -655,7 +652,7 @@ def calc_5phase_pt(model, vmx, vmxd, dmx, dmxd, pcdsmx,
         pres3d = [[sum(tup) for tup in zip(*line)] for line in zip(*pdresl)]
         res = [[x-y+z for x, y, z in zip(a, b, c)]
                for a, b, c in zip(pres3, pres3d, prescd)]
-        respath = os.path.join(config.resdir, f'points5ph_{grid_name}.txt')
+        respath = os.path.join(config.resdir, f'grid_{config.name}_{grid_name}.txt')
         with open(respath, 'w') as wtr:
             for idx in range(len(res)):
                 wtr.write(datetime_stamps[idx] + ',')
@@ -710,7 +707,7 @@ def calc_5phase_vu(model, vmx, vmxd, dmx, dmxd, vcdrmx, vcdfmx,
                             res3d, nproc=int(config.nprocess))
             radutil.pcombop([vrescdr, '*', cdmap_paths[view], '+', vrescdf],
                             vrescd, nproc=int(config.nprocess))
-            opath = os.path.join(config.resdir, f"{view}_5ph")
+            opath = os.path.join(config.resdir, f"view_{config.name}_{view}")
             if os.path.os.path.isdir(opath):
                 shutil.rmtree(opath)
             logger.info("Assemble all phase results.")

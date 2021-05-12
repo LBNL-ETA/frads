@@ -1,9 +1,4 @@
 ## materials.rad
-void plastic black
-0
-0
-5 0 0 0 0 0
-
 void plastic paint80
 0
 0
@@ -27,7 +22,7 @@ void plastic CubeFrame
 void plastic Desks
 0
 0
-5 .4 .4 .4 0 0
+5 0.6639 0.5280 0.3227 0.0178 0.1000
 
 void plastic DeskLeg
 0
@@ -69,7 +64,3 @@ void plastic concrete
 0
 5 .4 .4 .4 0 0
 
-void glow glowing        
-0
-0
-4 1 1 1 0
