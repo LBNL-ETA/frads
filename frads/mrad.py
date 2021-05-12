@@ -2,113 +2,160 @@
 Executive command-line program for Radiance matrix-based simulation.
 """
 
-from configparser import ConfigParser
+from configparser import SafeConfigParser
+from dataclasses import asdict
 import argparse
 import logging
+import glob
 import os
 from frads import mtxmethod
-from frads import radutil
+from frads import util
+
+logger = logging.getLogger('frads')
 
 
 def mkdirs(cfg):
     """Make directories according to the configuration dict."""
-    base = cfg['base']
-    objdir = os.path.join(base, cfg['objects'])
-    mtxdir = os.path.join(base, cfg['matrices'])
-    resdir = os.path.join(base, cfg['results'])
-    resodir = os.path.join(base, cfg['resources'])
-    radutil.mkdir_p(objdir)
-    radutil.mkdir_p(mtxdir)
-    radutil.mkdir_p(resdir)
-    radutil.mkdir_p(resodir)
+    util.mkdir_p(cfg.objdir)
+    util.mkdir_p(cfg.mtxdir)
+    util.mkdir_p(cfg.resdir)
+    util.mkdir_p(cfg.rsodir)
 
-def initialize(args):
-    """Going through files in the standard file structure and generate a cfg file."""
-    templ = mtxmethod.cfg_template
-    templ['base'] = os.getcwd()
-    if templ['objects'] in os.listdir(templ['base']):
-        files = os.listdir(os.path.join(templ['base'], templ['objects']))
-        objfiles = [f for f in files if f.endswith('.rad')]
-        matfiles = [f for f in files if f.endswith('.mat')]
-        templ['scene'] = ' '.join(objfiles)
-        templ['material'] = ' '.join(matfiles)
+
+def initialize(args: argparse.Namespace):
+    """Initiate mrad operation.
+    Going through files in the standard file
+    structure and generate a cfg file."""
+    cwd = os.getcwd()
+
+    file_struct = {'base': args.base, 'objects': args.objdir,
+                   'matrices': args.mtxdir, 'resources': args.rsodir,
+                   'results': args.resdir}
+    model = {'material': '', 'scene': '', 'window_paths': '',
+             'window_xml': '', 'window_cfs': ''}
+    raysender = {'grid_surface': args.grid[0], 'grid_spacing': args.grid[1],
+                 'grid_height': args.grid[2], 'view': ''}
+    if (args.latlon == ('','')) and (args.wea_path == '') and (args.zipcode == ''):
+        raise ValueError("Site not defined, use --wea_path | --latlon | --zipcode")
+    site = {'wea_path':args.wea_path, 'latitude': args.latlon[0],
+            'longitude':args.latlon[1], 'zipcode':args.zipcode}
+    object_pattern: str = args.object if args.object is not None else '.rad'
+    window_pattern: str = args.window if args.window is not None else 'window*.rad'
+    material_pattern: str = args.material if args.material is not None else '*.mat'
+    if args.objdir in os.listdir(args.base):
+        os.chdir(os.path.join(args.base, args.objdir))
+        window_files = sorted(glob.glob(window_pattern))
+        all_obj_files = glob.glob(object_pattern)
+        obj_files = [f for f in all_obj_files if f not in window_files]
+        material_files = glob.glob(material_pattern)
+        model['scene'] = ' '.join(obj_files)
+        model['material'] = ' '.join(material_files)
+        model['window_paths'] = ' '.join(window_files)
     else:
-        radutil.mkdir_p(templ['objects'])
-    radutil.mkdir_p(templ['matrices'])
-    radutil.mkdir_p(templ['results'])
-    radutil.mkdir_p(templ['resources'])
-    cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
-    templ = {"mrad configration":templ}
-    cfg.read_dict(templ)
-    with open("run.cfg", 'w') as rdr:
+        logger.warning("No %s directory found at %s, making so",
+                       args.obj, args.base)
+        util.mkdir_p(os.path.join(args.base, args.obj))
+    util.mkdir_p(os.path.join(args.base, args.mtxdir))
+    util.mkdir_p(os.path.join(args.base, args.resdir))
+    util.mkdir_p(os.path.join(args.base, args.rsodir))
+    cfg = SafeConfigParser(allow_no_value=True)
+    templ_config = {"File Structure": file_struct, "Site": site,
+                    "Model": model, "Ray Sender": raysender}
+    cfg.read_dict(templ_config)
+    os.chdir(cwd)
+    with open("default.cfg", 'w') as rdr:
         cfg.write(rdr)
 
 
-def cfg2dict(cfg):
+def cfg2dict(cfg: SafeConfigParser) -> util.MradConfig:
     """Convert a configparser object into a dictionary."""
     cfg_dict = {}
     sections = cfg.sections()
     for sec in sections:
         cfg_dict.update(dict(cfg[sec]))
-    for k,v in cfg_dict.items():
-        if v is not None:
-            if v.lower() == 'true':
-                cfg_dict[k] = True
-            elif v.lower() == 'false':
-                cfg_dict[k] = False
-            elif v == '':
-                cfg_dict[k] = None
-    return cfg_dict
+    for key, value in cfg_dict.items():
+        if value is not None:
+            if value.lower() == 'true':
+                cfg_dict[key] = True
+            elif value.lower() == 'false':
+                cfg_dict[key] = False
+        else:
+            cfg_dict[key] = ''
+    if cfg_dict['scene'] is None:
+        raise ValueError("No scene description")
+    return util.MradConfig(**cfg_dict)
+    # if cfg_dict['ncp_shade'] is not None:
+    #     ncp_groups = cfg_dict['ncp_shade'].split()
+    #     ncp_paths = [group.split(',')[0] for group in ncp_groups]
+    #     cfg_dict['ncp_window_idx'] = [map(int, group.split(',')[1:])
+    #                                   for group in ncp_groups]
+    #     if len(ncp_paths) > 1:
+    #         cfg_dict['ncppath'] = [os.path.join(cfg_dict['objdir'], path)
+    #                                for path in ncp_paths]
+    #     else:
+    #         cfg_dict['envpath'].extend(ncp_paths)
+    # cfg_named_tuple = namedtuple('config', cfg_dict.keys())(**cfg_dict)
 
-def run(args):
+
+def run(args: argparse.Namespace):
     """Call mtxmethod to carry out the actual simulation."""
-    cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
+    cfg = SafeConfigParser(allow_no_value=True, inline_comment_prefixes='#')
     with open(args.cfg) as rdr:
         cfg.read_string(rdr.read())
-    cfg_dict = cfg2dict(cfg)
-    mkdirs(cfg_dict)
-    msetup = mtxmethod.MTXMethod(cfg_dict)
-    ncp_shade = msetup.config.ncp_shade
-    smx = msetup.gen_smx(msetup.wea_path, msetup.config.smx_basis, msetup.mtxdir)
-    if msetup.config.method is not None:
-        _method = getattr(mtxmethod, msetup.config.method)
-        _method(msetup, smx, direct=msetup.config.separate_direct)
+    config = cfg2dict(cfg)
+    mkdirs(config)
+    model = mtxmethod.assemble_model(config)
+    if config.method != '':
+        _method = getattr(mtxmethod, config.method)
+        _method(model, config, direct=config.separate_direct)
     else:
-        if None in (msetup.config.bsdf, msetup.config.windows):
+        if '' in (config.window_xml, config.windows):
             logger.info("Using two-phase method")
-            mtxmethod.two_phase(msetup, smx)
+            mtxmethod.two_phase(model, config)
         else:
-            if ncp_shade is not None and len(ncp_shade.split()) > 1:
-                if msetup.config.separate_direct:
+            if config.ncp_shade != '' and len(config.ncp_shade.split()) > 1:
+                if config.separate_direct:
                     logger.info('Using six-phase simulation')
-                    mtxmethod.four_phase(msetup, smx, direct=True)
+                    mtxmethod.four_phase(model, config, direct=True)
                 else:
                     logger.info('Using four-phase simulation')
-                    mtxmethod.four_phase(msetup, smx)
+                    mtxmethod.four_phase(model, config)
             else:
-                if msetup.config.separate_direct:
+                if config.separate_direct:
                     logger.info('Using five-phase simulation')
-                    mtxmethod.three_phase(msetup, smx, direct=True)
+                    mtxmethod.three_phase(model, config, direct=True)
                 else:
                     logger.info('Using three-phase simulation')
-                    mtxmethod.three_phase(msetup, smx)
+                    mtxmethod.three_phase(model, config)
+
 
 def main():
     """Parse the configuration file and envoke to mtxmethod to do the actual work."""
-    global logger
     parser = argparse.ArgumentParser(
-        prog='mrad', description='Executive program for carry out Radiance matrix-based simulation')
+        prog='mrad', description='Executive program for Radiance matrix-based simulation')
     subparser = parser.add_subparsers()
     parser_init = subparser.add_parser('init')
     parser_init.set_defaults(func=initialize)
+    parser_init.add_argument("-B", "--base", default=os.getcwd())
+    parser_init.add_argument("-O", "--objdir", default='Objects')
+    parser_init.add_argument("-M", "--mtxdir", default='Matrices')
+    parser_init.add_argument("-S", "--rsodir", default='Resources')
+    parser_init.add_argument("-R", "--resdir", default='Results')
+    parser_init.add_argument("-W", "--wea_path", default='')
+    parser_init.add_argument("-Z", "--zipcode", default='')
+    parser_init.add_argument("-L", "--latlon", nargs=2, default=('',''))
+    parser_init.add_argument("-o", "--object")
+    parser_init.add_argument("-m", "--material")
+    parser_init.add_argument("-w", "--window")
+    parser_init.add_argument("-g", "--grid", nargs=3, default=('', 0, 0))
     parser_run = subparser.add_parser('run')
-    parser_run.add_argument('cfg', default='run.cfg', help='configuration file path')
+    parser_run.add_argument('cfg', help='configuration file path')
     parser.add_argument(
         '-v', '--verbose', action='count', default=0,
-        help='Verbose mode: 1=Debug; 2=Info; 3=Warning; 4=Error; 5=Critical. E.g. -vvv=Warning, default=%(default)s')
+        help='Verbose mode: 1=Debug; 2=Info; 3=Warning; 4=Error; 5=Critical. \
+        E.g. -vvv=Warning, default=%(default)s')
     parser_run.set_defaults(func=run)
     args = parser.parse_args()
-    logger = logging.getLogger('frads')
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler = logging.StreamHandler()
     _level = args.verbose * 10

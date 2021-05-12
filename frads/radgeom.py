@@ -16,7 +16,7 @@ class Vector:
         length: length of the vector
     """
 
-    def __init__(self, x=0, y=0, z=0):
+    def __init__(self, x:float=0, y:float=0, z:float=0):
         """Initialize vector."""
         errmsg = "float or integer required to define a vector"
         assert all([type(i) in [float, int] for i in [x, y, z]]), errmsg
@@ -25,7 +25,7 @@ class Vector:
         self.z: float = z
         self.length: float = math.sqrt(x**2 + y**2 + z**2)
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Class string representation.
 
         Returns:
@@ -34,7 +34,7 @@ class Vector:
         """
         return "{:02f} {:02f} {:02f}".format(self.x, self.y, self.z)
 
-    def __add__(self, other):
+    def __add__(self, other) -> Vector:
         """Add the two vectors.
         Args:
             other(Vector): vector to add
@@ -45,15 +45,18 @@ class Vector:
         """
         return Vector(self.x + other.x, self.y + other.y, self.z + other.z)
 
-    def __sub__(self, other):
+    def __sub__(self, other: Vector) -> Vector:
         return Vector(self.x - other.x, self.y - other.y, self.z - other.z)
 
-    def __mul__(self, other):
+    def __mul__(self, other: Vector) -> float:
         """Return the dot produce between two vectors."""
         return self.x * other.x + self.y * other.y + self.z * other.z
 
-    def __eq__(self, other):
-        return self.to_list() == other.to_list()
+    def __eq__(self, other: object) -> bool:
+        """Check if two vectors are the same."""
+        if not isinstance(other, Vector):
+            return NotImplemented
+        return (self.x, self.y, self.z) == (other.x, other.y, other.z)
 
     def cross(self, other: Vector) -> Vector:
         """Return the cross product of the two vectors.
@@ -70,34 +73,34 @@ class Vector:
         z_ = self.x * other.y - self.y * other.x
         return Vector(x_, y_, z_)
 
-    def distance_from(self, other):
+    def distance_from(self, other: Vector):
         """Calculate the distance between two points."""
         dx = math.fabs(self.x - other.x)
         dy = math.fabs(self.y - other.y)
         dz = math.fabs(self.z - other.z)
         return math.sqrt(dx**2 + dy**2 + dz**2)
 
-    def normalize(self):
+    def normalize(self) -> Vector:
         """Return the unit vector."""
         magnitude = math.sqrt(self.x**2 + self.y**2 + self.z**2)
         return Vector(self.x / magnitude, self.y / magnitude,
                       self.z / magnitude)
 
-    def reverse(self):
+    def reverse(self) -> Vector:
         """Return the reversed vector."""
         return Vector(self.x * -1, self.y * -1, self.z * -1)
 
-    def scale(self, factor):
+    def scale(self, factor) -> Vector:
         """Scale the vector by a scalar."""
         return Vector(self.x * factor, self.y * factor, self.z * factor)
 
-    def angle_from(self, other):
+    def angle_from(self, other) -> float:
         """."""
         dot_prod = self * other
         angle = math.acos(dot_prod / (self.length * other.length))
         return angle
 
-    def rotate3D(self, vector: Vector, theta: float) -> Vector:
+    def rotate_3d(self, vector: Vector, theta: float) -> Vector:
         """Rotate the point around the vector theta radians.
 
         Args:
@@ -153,11 +156,11 @@ class Vector:
         return (round(self.x,3), round(self.y, 3), round(self.z, 3))
 
     @classmethod
-    def spherical(cls, theta, phi, r):
+    def spherical(cls, theta, phi, r) -> Vector:
         """Construct a vector using spherical coordinates."""
         xcoord = math.sin(theta) * math.cos(phi) * r
         ycoord = math.sin(theta) * math.sin(phi) * r
-        zcoord = math.cos(phi) * r
+        zcoord = math.cos(theta) * r
         return cls(xcoord, ycoord, zcoord)
 
 
@@ -273,21 +276,18 @@ class Polygon:
                      polygon2.vertices[0], self.vertices[0]]))
         return polygons
 
-    def __add__(self, other):
+    def __add__(self, other: Polygon) -> Polygon:
         """Merge two polygons."""
         sp, index = self.shared_pts(other)
-        print(sp)
-        if sp == 2:
-            t1 = self.vertices[index[0]:] + self.vertices[:index[0]]
-            oid = other.vertices.index(self.vertices[index[0]])
-            t2 = other.vertices[oid:] + other.vertices[:oid]
-            if t1[-1] == t2[1]:
-                return Polygon(t1 + t2[2:])
-            else:
-                return Polygon(t2 + t1[2:])
-        else:
-            raise "{} and {} don't share a side".format(
-                self.vertices, other.vertices)
+        if sp != 2:
+            raise ValueError(
+                "Trying to merge two polygons without shared sides")
+        t1 = self.vertices[index[0]:] + self.vertices[:index[0]]
+        oid = other.vertices.index(self.vertices[index[0]])
+        t2 = other.vertices[oid:] + other.vertices[:oid]
+        if t1[-1] == t2[1]:
+            return Polygon(t1 + t2[2:])
+        return Polygon(t2 + t1[2:])
 
     def shared_pts(self, other):
         """Return the total number of share points between two polygons."""
@@ -301,7 +301,7 @@ class Polygon:
 
     def rotate(self, vector, angle):
         """."""
-        ro_pts = [v.rotate3D(vector, angle) for v in self.vertices]
+        ro_pts = [v.rotate_3d(vector, angle) for v in self.vertices]
         return Polygon(ro_pts)
 
     def move(self, vector):
@@ -322,8 +322,8 @@ class Polygon:
 
     def to_real(self):
         """Convert the vertices to real arg string format."""
-        real_str = "{}\n".format(3 * len(self.vertices))
-        vert_str = '\n'.join([str(i) for i in self.vertices])
+        real_str = "{} ".format(3 * len(self.vertices))
+        vert_str = ' '.join([str(i) for i in self.vertices])
         return real_str + vert_str
 
     @classmethod
@@ -349,7 +349,6 @@ class Convexhull:
             normal (Vector): plane's normal
         """
         self.normal = normal
-        vectors = [p.as_vector() for p in points]
         u = min(points, key=lambda p: p.x)
         v = max(points, key=lambda p: p.x)
         if u.__str__() == v.__str__():
@@ -387,11 +386,8 @@ def polygon_center(*polygons):
     return sum(vertices, Vector()).scale(1 / len(vertices))
 
 
-def getbbox(polygon_list, offset=0.0):
-    """
-    Return a list of polygon that is the
-    orthogonal bounding box of a list of polygon.
-    """
+def get_polygon_limits(polygon_list: list, offset=0.0):
+    """Get the x,y,z limits from a list of polygons."""
     extreme_list = [p.extreme() for p in polygon_list]
     lim = list(zip(*extreme_list))
     xmin = min(lim[0]) - offset
@@ -400,6 +396,15 @@ def getbbox(polygon_list, offset=0.0):
     ymax = max(lim[3]) + offset
     zmin = min(lim[4]) - offset
     zmax = max(lim[5]) + offset
+    return xmin, xmax, ymin, ymax, zmin, zmax
+
+def getbbox(polygon_list, offset=0.0):
+    """
+    Return a list of polygon that is the
+    orthogonal bounding box of a list of polygon.
+    """
+    xmin, xmax, ymin, ymax, zmin, zmax = get_polygon_limits(
+        polygon_list, offset=offset)
 
     fp1 = Vector(xmin, ymin, zmin)
     fp2 = Vector(xmax, ymin, zmin)

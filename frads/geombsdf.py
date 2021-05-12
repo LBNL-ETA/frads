@@ -6,7 +6,7 @@ import os
 import tempfile as tf
 import subprocess as sp
 import sys
-from frads import radutil, radgeom
+from frads import radutil, radgeom, util
 import math
 
 
@@ -34,17 +34,15 @@ def main():
         # Custom section drawing
         pass
     elif args.window:
-        with open(args.window) as rdr:
-            lines = rdr.readlines()
-        primitves = radutil.parse_primitive(lines)
-        with open(args.env) as rdr:
-            env_primitives = radutil.parse_primitive(rdr.readlines())
-        env_identifier = [prim['identifier'] for prim in env_primitive]
+        primitves = radutil.unpack_primitives(args.window)
+        env_primitives = radutil.unpack_primitives(args.env)
+        env_identifier = [prim['identifier'] for prim in env_primitives]
         windows = [p for p in primitves if p['identifier'].startswith('window')]
         window = windows[0] # only take the first window primitive
         depth, spacing, angle = args.blinds
         movedown = depth * math.cos(math.radians(float(angle)))
         window_movedown = 0 if args.ext else movedown + args.gap
+        # window_polygon = radutil.parse_polygon(window.real_args)
         height, width, angle2negY, translate = radutil.analyze_window(window, window_movedown)
         xform_cmd = f'!xform -rz {math.degrees(angle2negY)} -rx -90 -t {translate.x} {translate.y} {translate.z} {args.env}\n'
         xform_cmd += f'!xform -rz {math.degrees(angle2negY)} -rx -90 -t {translate.x} {translate.y} {translate.z} {args.window}\n'
@@ -75,8 +73,8 @@ def main():
         with open(args.o, 'w') as wtr:
             [wtr.write(radutil.put_primitive(prim)) for prim in result_primitives]
     else:
-        width = 10
-        height = 0.096
+        width = 10 # default blinds width
+        height = 0.096 # default blinds height
         depth, spacing, angle = args.blinds
         if args.ext:
             glass_z = 0
@@ -89,7 +87,7 @@ def main():
         pt1 = radgeom.Vector(-width/2, height/2, -glass_z)
         pt2 = radgeom.Vector(-width/2, -height/2, -glass_z)
         pt3 = radgeom.Vector(width/2, -height/2, -glass_z)
-        tmis = radutil.tmit2tmis(.38)
+        tmis = util.tmit2tmis(.38)
         glass_prim = radutil.glass_prim('void', 'glass1', tmis, tmis, tmis)
         glazing_polygon = radgeom.Polygon.rectangle3pts(pt1, pt2, pt3)
         glazing_prim_str = radutil.put_primitive(glass_prim)

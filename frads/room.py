@@ -3,7 +3,7 @@
 import argparse
 import os
 from frads import radgeom
-from frads import radutil
+from frads import radutil, util
 
 
 class Room(object):
@@ -19,68 +19,54 @@ class Room(object):
         self.floor = radgeom.Polygon.rectangle3pts(origin, flr_pt2, flr_pt3)
         extrusion = self.floor.extrude(radgeom.Vector(0, 0, height))
         self.clng = extrusion[1]
-        self.swall = Wall(extrusion[2], 'swall')
-        self.ewall = Wall(extrusion[3], 'ewall')
-        self.nwall = Wall(extrusion[4], 'nwall')
-        self.wwall = Wall(extrusion[5], 'wwall')
+        self.wall_south = Surface(extrusion[2], 'wall.south')
+        self.wall_east = Surface(extrusion[3], 'wall.east')
+        self.wall_north = Surface(extrusion[4], 'wall.north')
+        self.wall_west = Surface(extrusion[5], 'wall.west')
         self.surfaces = [
-            self.clng, self.floor, self.wwall, self.nwall, self.ewall,
-            self.swall
+            self.clng, self.floor, self.wall_west, self.wall_north, self.wall_east,
+            self.wall_south
         ]
 
     def surface_prim(self):
         self.srf_prims = []
-        _temp = {'type': 'polygon', 'str_args': '0', 'int_arg': '0'}
-
-        ceiling = {'modifier': 'white_paint_70', 'identifier': 'ceiling'}
-        ceiling['real_args'] = self.clng.to_real()
-        ceiling.update(_temp)
+        ceiling = radutil.Primitive(
+            'white_paint_70', 'polygon', 'ceiling', '0', self.clng.to_real())
         self.srf_prims.append(ceiling)
 
-        floor = {'modifier': 'carpet_20', 'identifier': 'floor'}
-        floor['real_args'] = self.floor.to_real()
-        floor.update(_temp)
+        floor = radutil.Primitive(
+            'carpet_20', 'polygon', 'floor', '0', self.floor.to_real())
         self.srf_prims.append(floor)
 
-        nwall = {'modifier': 'white_paint_50', 'identifier': 'wall.north'}
-        nwall['real_args'] = self.nwall.polygon.to_real()
-        nwall.update(_temp)
+        nwall = radutil.Primitive(
+            'white_paint_50', 'polygon', self.wall_north.name,
+            '0', self.wall_north.polygon.to_real())
         self.srf_prims.append(nwall)
 
-        ewall = {'modifier': 'white_paint_50', 'identifier': 'wall.east'}
-        ewall['real_args'] = self.ewall.polygon.to_real()
-        ewall.update(_temp)
+        ewall = radutil.Primitive('white_paint_50', 'polygon', self.wall_east.name,
+                                  '0', self.wall_east.polygon.to_real())
         self.srf_prims.append(ewall)
 
-        wwall = {'modifier': 'white_paint_50', 'identifier': 'wall.west'}
-        wwall['real_args'] = self.wwall.polygon.to_real()
-        wwall.update(_temp)
+        wwall = radutil.Primitive('white_paint_50', 'polygon', self.wall_west.name,
+                                  '0', self.wall_west.polygon.to_real())
         self.srf_prims.append(wwall)
 
         # Windows on south wall only, for now.
-        for idx in range(len(self.swall.facade)):
-            _id = {'modifier': 'white_paint_50'}
-            _id['identifier'] = 'wall.south.{:02d}'.format(idx)
-            _id['real_args'] = self.swall.facade[idx].to_real()
-            _id.update(_temp)
+        for idx, swall in enumerate(self.wall_south.facade):
+            _identifier = '{}.{:02d}'.format(self.wall_south.name, idx)
+            _id = radutil.Primitive(
+                'white_paint_50', 'polygon', _identifier, '0', swall.to_real())
             self.srf_prims.append(_id)
 
     def window_prim(self):
         self.wndw_prims = {}
-        for wpolygon in self.swall.windows:
-            win_prim = {
-                'modifier': 'glass_60',
-                'type': 'polygon',
-                'str_args': '0',
-                'int_arg': '0'
-            }
-            win_prim['identifier'] = wpolygon
-            win_prim['real_args'] = self.swall.windows[wpolygon].to_real()
-            win_prim['polygon'] = self.swall.windows[wpolygon]
+        for wpolygon in self.wall_south.windows:
+            _real_args = self.wall_south.windows[wpolygon].to_real()
+            win_prim = radutil.Primitive('glass_60', 'polygon', wpolygon, '0', _real_args)
             self.wndw_prims[wpolygon] = win_prim
 
 
-class Wall(object):
+class Surface(object):
     """Room wall object."""
 
     def __init__(self, polygon, name):
@@ -131,19 +117,20 @@ class Wall(object):
                 [v + direction for v in self.windows[wndw].vertices])
         self.windows = offset_wndw
 
-def make_room(dimension):
+def make_room(dimension: dict):
     """Make a side-lit shoebox room as a Room object."""
     theroom = Room(float(dimension['width']),
-                      float(dimension['depth']),
-                      float(dimension['height']))
+                   float(dimension['depth']),
+                   float(dimension['height']))
     wndw_names = [i for i in dimension if i.startswith('window')]
     for wd in wndw_names:
         wdim = map(float, dimension[wd].split())
-        theroom.swall.add_window(wd, theroom.swall.make_window(*wdim))
-    theroom.swall.facadize(float(dimension['facade_thickness']))
+        theroom.wall_south.add_window(wd, theroom.wall_south.make_window(*wdim))
+    theroom.wall_south.facadize(float(dimension['facade_thickness']))
     theroom.surface_prim()
     theroom.window_prim()
     return theroom
+
 
 def genradroom():
     """Commandline interface for generating a generic room.
@@ -151,36 +138,44 @@ def genradroom():
     Objects directory, which will be created if not existed before."""
 
     parser = argparse.ArgumentParser(
-        prog='genradroom', description='Generate a generic room with window facing the -Y direction')
-    parser.add_argument('width', type=float, help='room width along X axis, starting from x=0')
-    parser.add_argument('depth', type=float, help='room depth along Y axis, starting from y=0')
-    parser.add_argument('height', type=float, help='room height along Z axis, starting from z=0')
-    parser.add_argument('-w', metavar=('start_x', 'start_z', 'width', 'height'),
-                        nargs=4, action='append', type=float, help='Define a window from lower left corner')
-    parser.add_argument('-t', metavar='Facade thickness', type=float)
+        prog='genradroom', description='Generate a generic room')
+    parser.add_argument('width', type=float,
+                        help='room width along X axis, starting from x=0')
+    parser.add_argument('depth', type=float,
+                        help='room depth along Y axis, starting from y=0')
+    parser.add_argument('height', type=float,
+                        help='room height along Z axis, starting from z=0')
+    parser.add_argument('-w', dest='window',
+                        metavar=('start_x', 'start_z', 'width', 'height'),
+                        nargs=4, action='append', type=float,
+                        help='Define a window from lower left corner')
+    parser.add_argument('-n', dest='name', help='Model name', default='model')
+    parser.add_argument('-t', dest='facade_thickness',
+                        metavar='Facade thickness', type=float)
     args = parser.parse_args()
     dims = vars(args)
     for idx, window in enumerate(dims['window']):
-        dims['window%s'%idx] = ' '.join(map(str, window))
+        dims['window_%s' % idx] = ' '.join(map(str, window))
     dims.pop('window')
     room = make_room(dims)
+    name = args.name
     material_primitives = radutil.material_lib()
-    radutil.mkdir_p('Objects')
-    with open(os.path.join('Objects', 'materials.mat'), 'w') as wtr:
+    util.mkdir_p('Objects')
+    with open(os.path.join('Objects', f'materials_{name}.mat'), 'w') as wtr:
         for prim in material_primitives:
-            wtr.write(radutil.put_primitive(prim))
-    with open(os.path.join('Objects', 'ceiling.rad'), 'w') as wtr:
+            wtr.write(str(prim)+'\n')
+    with open(os.path.join('Objects', f'ceiling_{name}.rad'), 'w') as wtr:
         for prim in room.srf_prims:
-            if prim['identifier'].startswith('ceiling'):
-                wtr.write(radutil.put_primitive(prim))
-    with open(os.path.join('Objects', 'floor.rad'), 'w') as wtr:
+            if prim.identifier.startswith('ceiling'):
+                wtr.write(str(prim)+'\n')
+    with open(os.path.join('Objects', f'floor_{name}.rad'), 'w') as wtr:
         for prim in room.srf_prims:
-            if prim['identifier'].startswith('floor'):
-                wtr.write(radutil.put_primitive(prim))
-    with open(os.path.join('Objects', 'wall.rad'), 'w') as wtr:
+            if prim.identifier.startswith('floor'):
+                wtr.write(str(prim)+'\n')
+    with open(os.path.join('Objects', f'wall_{name}.rad'), 'w') as wtr:
         for prim in room.srf_prims:
-            if prim['identifier'].startswith('wall'):
-                wtr.write(radutil.put_primitive(prim))
+            if prim.identifier.startswith('wall'):
+                wtr.write(str(prim)+'\n')
     for key, prim in room.wndw_prims.items():
-        with open(os.path.join('Objects', '%s.rad'%key), 'w') as wtr:
-            wtr.write(radutil.put_primitive(prim))
+        with open(os.path.join('Objects', f'{key}_{name}.rad'), 'w') as wtr:
+            wtr.write(str(prim)+'\n')

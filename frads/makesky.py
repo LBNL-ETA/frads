@@ -9,21 +9,30 @@ import math
 import os
 import subprocess as sp
 import tempfile as tf
+import time
 import urllib.request
+import urllib.error
 import ssl
-from frads import radutil
-import pdb
+from frads import radutil, util, radgeom
+from typing import List
 
 LSEP = os.linesep
 
 
 def basis_glow(sky_basis):
+    """Sky and ground glow primitives.
+    Args:
+        sky_basis: sky sampling basis, e.g. r1, r4
+    Returns:
+        ground and sky glow string
+    """
+
     grnd_str = grndglow()
     sky_str = skyglow(sky_basis)
     return grnd_str + sky_str
 
 
-def skyglow(basis, upvect='+Y'):
+def skyglow(basis: str, upvect='+Y') -> str:
     sky_string = f"#@rfluxmtx u={upvect} h={basis}{LSEP*2}"
     sky_string += f"void glow skyglow{LSEP}"
     sky_string += f"0{LSEP}0{LSEP}4 1 1 1 0{LSEP*2}"
@@ -32,7 +41,7 @@ def skyglow(basis, upvect='+Y'):
     return sky_string
 
 
-def grndglow(basis='u'):
+def grndglow(basis='u') -> str:
     ground_string = f"#@rfluxmtx h={basis}{LSEP*2}"
     ground_string += f"void glow groundglow{LSEP}"
     ground_string += f"0{LSEP}0{LSEP}4 1 1 1 0{LSEP*2}"
@@ -47,7 +56,7 @@ class Gensun(object):
     def __init__(self, mf):
         """."""
         self.runlen = 144 * mf**2 + 3
-        self.rsrc = radutil.reinsrc(mf)
+        self.rsrc = radutil.Reinsrc(mf)
         self.mod_str = LSEP.join([f'sol{i}' for i in range(1, self.runlen)])
 
     def gen_full(self):
@@ -60,22 +69,22 @@ class Gensun(object):
             out_lines.append(line)
         return LSEP.join(out_lines)+LSEP
 
-    def gen_cull(self, smx_path=None, window_paths=None):
-        """Generate culled sun sources based on window orientation and climate based
-        sky matrix. The reduced sun sources will significantly speed up the matrix
-        generation."""
-        if window_paths is not None:
-            wprims = []
-            for wpath in window_paths:
-                with open(wpath) as rdr:
-                    wprims.append(radutil.parse_primitive(rdr.readlines()))
-            wprims = [i for g in wprims for i in g]
-            win_norm = [
-                p['polygon'].normal().to_list() for p in wprims
-                if p['type'] == 'polygon'
-            ]
+    def gen_cull(self, smx_path=None, window_normals=None):
+        """Generate culled sun sources based on window orientation and
+        climate based sky matrix. The reduced sun sources will significantly
+        speed up the matrix generation.
+        Args:
+            smx_path: sky matrix path, usually the output of gendaymtx
+            window_normals: window normals
+        Returns:
+            Sun receiver primitives strings
+            Corresponding modifier strings
+        """
+
+        if window_normals is not None:
+            win_norm = window_normals
         else:
-            win_norm = [[0, -1, 0]]
+            win_norm = [radgeom.Vector(0, -1, 0)]
         if smx_path is not None:
             cmd = f"rmtxop -ff -c .3 .6 .1 -t {smx_path} "
             cmd += "| getinfo - | total -if5186 -t,"
@@ -87,33 +96,31 @@ class Gensun(object):
         out_lines = []
         mod_str = []
         for i in range(1, self.runlen):
-            dirs = self.rsrc.dir_calc(i)
+            dirs = radgeom.Vector(*self.rsrc.dir_calc(i))
             _mod = 'sol'+str(i)
+            v = 0
             if dtot[i - 1] > 0:
                 for norm in win_norm:
-                    v = 0
-                    if sum([i * j for i, j in zip(norm, dirs)]) < 0:
+                    if norm * dirs < 0:
                         v = 1
                         mod_str.append(_mod)
                         break
-            else:
-                v = 0
             line = f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} "
-            line += "source sun 0 0 4 {:.6g} {:.6g} {:.6g} 0.533".format(*dirs)
+            line += f"source sun 0 0 4 {dirs.z:.6g} {dirs.x:.6g} {dirs.z:.6g} 0.533"
             out_lines.append(line)
-        if mod_str[-1] != 'sol%s'%(self.runlen-1):
-            mod_str.append('sol%s'%(self.runlen-1))
+        # if mod_str[-1] != 'sol%s'%(self.runlen-1):
+            # mod_str.append('sol%s'%(self.runlen-1))
         return LSEP.join(out_lines), LSEP.join(mod_str)
 
 
-def epw2sunmtx(epw_path):
+def epw2sunmtx(epw_path: str) -> str:
     """Generate reinhart 6 sun matrix file from a epw file."""
-    smx_path = radutil.basename(epw_path) + ".smx"
+    smx_path = util.basename(epw_path) + ".smx"
     with tf.NamedTemporaryFile() as wea:
         cmd = f"epw2wea {epw_path} {wea.name}"
         sp.call(cmd, shell=True)
         # large file
-        cmd = f"gendaymtx -od -m 6 -d -5 .533 {wea.name} > {smx_path}"
+        cmd = f"gendaymtx -od -u -m 6 -d -5 .533 {wea.name} > {smx_path}"
         sp.call(cmd, shell=True)
     return smx_path
 
@@ -139,25 +146,27 @@ def loc2sunmtx(basis, lat, lon, ele):
     with tf.NamedTemporaryFile() as wea:
         wea.write(header)
         wea.write(string)
-        cmd = f"gendaymtx -od -m 6 -d -5 .533 {wea.name} > {smx_path}"
+        cmd = f"gendaymtx -od -m 6 -u -d -5 .533 {wea.name} > {smx_path}"
         sp.call(cmd, shell=True)
     return smx_path
 
 
-def gendaymtx(data_entry, lat, lon, timezone, ele, mf=4, direct=False,
+def gendaymtx(data_entry: List[str], lat: str, lon: str,
+              timezone: str, ele: str, mf=4, direct=False,
               solar=False, onesun=False, rotate=0, binary=False):
     """."""
     sun_only = ' -d' if direct else ''
     spect = ' -O1' if solar else ' -O0'
     _five = ' -5 .533' if onesun else ''
-    bi = '' if binary == False or os.name == 'nt' else ' -o' + binary
+    bi = '' if binary is False or os.name == 'nt' else ' -o' + binary
     linesep = r'& echo' if os.name == 'nt' else LSEP
-    wea_head = f"place test{linesep}latitude {lat}{linesep}longitude {lon}{linesep}"
+    wea_head = f"place test{linesep}latitude {lat}{linesep}"
+    wea_head += f"longitude {lon}{linesep}"
     wea_head += f"time_zone {timezone}{linesep}site_elevation {ele}{linesep}"
     wea_head += f"weather_data_file_units 1{linesep}"
-    skv_cmd = f"gendaymtx -r {rotate} -m {mf}{sun_only}{_five}{spect}{bi}"
+    skv_cmd = f"gendaymtx -u -r {rotate} -m {mf}{sun_only}{_five}{spect}{bi}"
     if len(data_entry) > 1000:
-        _wea, _path = tf.mkstemp()
+        _, _path = tf.mkstemp()
         with open(_path, 'w') as wtr:
             wtr.write(wea_head.replace('\\n', '\n'))
             wtr.write('\n'.join(data_entry))
@@ -173,8 +182,9 @@ def gendaymtx(data_entry, lat, lon, timezone, ele, mf=4, direct=False,
         return cmd, None
 
 
-def parse_csv(csv_path, ftype='csv', dt_col="date_time", dt_format="%Y%m%d %H:%M:%S",
-              dni_col='DNI', dhi_col='DHI', stime=None, etime=None):
+def parse_csv(csv_path, ftype='csv', dt_col="date_time",
+              dt_format="%Y%m%d %H:%M:%S", dni_col='DNI',
+              dhi_col='DHI', stime=None, etime=None):
     """Parse a csv file containing direct normal
     and diffuse horizontal data, ignoring NULL
     and zero values.
@@ -237,7 +247,8 @@ def parse_csv(csv_path, ftype='csv', dt_col="date_time", dt_format="%Y%m%d %H:%M
     return data_entry
 
 
-def sky_cont(mon, day, hrs, lat, lon, mer, dni, dhi, year=None, grefl=.2, spect='0'):
+def sky_cont(mon, day, hrs, lat, lon, mer, dni, dhi,
+             year=None, grefl=.2, spect='0'):
     out_str = f'!gendaylit {mon} {day} {hrs} '
     out_str += f'-a {lat} -o {lon} -m {mer} '
     if year is not None:
@@ -250,7 +261,7 @@ def sky_cont(mon, day, hrs, lat, lon, mer, dni, dhi, year=None, grefl=.2, spect=
     return out_str
 
 
-def solar_angle(*, lat, lon, mer, month, day, hour):
+def solar_angle(lat, lon, mer, month, day, hour):
     """Simplified translation from the Radiance sun.c and gensky.c code.
 
     This function test if the solar altitude is greater than zero
@@ -262,34 +273,36 @@ def solar_angle(*, lat, lon, mer, month, day, hour):
 
     julian_date = mo_da[month - 1] + day
 
-    solar_decline = 0.4093 * math.sin((2 * math.pi / 368) * (julian_date - 81))
+    solar_decline = 0.4093 * math.sin((2 * math.pi / 365) * (julian_date - 81))
 
     solar_time = hour + (0.170 * math.sin((4 * math.pi / 373) * (julian_date - 80))
                          - 0.129 * math.sin((2 * math.pi / 355)
                                             * (julian_date - 8))
-                         + 12 * (s_meridian - longitude_r) / math.pi)
+                         + (12/math.pi) * (s_meridian - longitude_r))
 
     altitude = math.asin(math.sin(latitude_r) * math.sin(solar_decline)
                          - math.cos(latitude_r) * math.cos(solar_decline)
                          * math.cos(solar_time * (math.pi / 12)))
+    azimuth = -math.atan2(math.cos(solar_decline)*math.sin(solar_time*(math.pi/12.)),
+                          - math.cos(latitude_r)*math.sin(solar_time)
+                          - math.sin(latitude_r)*math.cos(solar_decline)
+                          *math.cos(solar_time*(math.pi/12)))
 
-    return altitude > 0
+    return altitude, azimuth
 
 
 class epw2wea(object):
     """."""
 
-    def __init__(self, *, epw, dh, sh, eh, remove_zero=False, window_normals=None):
+    def __init__(self, *, epw: str, dh: bool, sh: float, eh: float,
+                 remove_zero=False, window_normals=None):
         """."""
         self.epw = epw
-        #self.wea = wea
+        # self.wea = wea
         self.read_epw()  # read-in epw/tmy data
 
-        if sh is not None:
-            self.s_hour(float(sh))
-
-        if eh is not None:
-            self.e_hour(float(eh))
+        if sh > 0 and eh > 0:
+            self.start_end_hour(sh, eh)
 
         if dh:
             self.daylight()  # filter out non-daylight hours if asked
@@ -316,41 +329,39 @@ class epw2wea(object):
             cmd += f'-a {self.latitude} -o {self.longitude} '
             cmd += f'-m {self.tz} -W {items[3]} {items[4]}'
             process = sp.run(cmd.split(), stderr=sp.PIPE, stdout=sp.PIPE)
-            primitives = radutil.parse_primitive(process.stdout.decode().splitlines())
+            primitives = radutil.parse_primitive(
+                process.stdout.decode().splitlines())
             light = 0
             if process.stderr == b'':
-                for prim in primitives:
-                    if prim['type'] == 'light':
-                        light = float(prim['real_args'].split()[2])
-                    if prim['type'] == 'source':
-                        dirs = list(map(float, prim['real_args'].split()[1:4]))
+                light = float(primitives[0].real_arg.split()[2])
+                dirs = radgeom.Vector(*list(map(float, primitives[1].real_arg.split()[1:4])))
                 if light > 0:
                     if check_window_normal:
                         for normal in window_normals:
-                            if sum([i * j for i, j in zip(normal, dirs)]) < -0.035:
+                            if normal * dirs < -0.035:
                                 new_string.append(line)
                     else:
                         new_string.append(line)
         self.string = '\n'.join(new_string)
 
+    def solar_altitude_check(self, string_line: str):
+        mon, day, hours = string_line.split()[:3]
+        alt, _ = solar_angle(self.latitude, self.longitude, self.tz,
+                             int(mon), int(day), float(hours))
+        return alt > 0
 
     def daylight(self):
         """."""
         string_line = self.string.splitlines()
-        new_string = [li for li in string_line
-                      if (float(li.split()[3]) > 0) and (float(li.split()[4]) > 0)]
-        self.string = "\n".join(new_string)
+        new_string = filter(self.solar_altitude_check, string_line)
+        self.string = '\n'.join(new_string)
 
-    def s_hour(self, sh):
-        """."""
+    def start_end_hour(self, sh, eh):
         string_line = self.string.splitlines()
-        new_string = [li for li in string_line if float(li.split()[2]) >= sh]
-        self.string = "\n".join(new_string)
-
-    def e_hour(self, eh):
-        """."""
-        string_line = self.string.splitlines()
-        new_string = [li for li in string_line if float(li.split()[2]) <= eh]
+        def filter_hour(string_line):
+            hour = string_line.split()[2]
+            return sh <= float(hour) <= eh
+        new_string = filter(filter_hour, string_line)
         self.string = "\n".join(new_string)
 
     def read_epw(self):
@@ -391,12 +402,9 @@ class getEPW(object):
     epw_url = "epw_url.csv"
     zip2latlon = "zip_latlon.txt"
     epw_url_path = os.path.join(_file_path_, 'data', epw_url)
-    #assert os.path.isfile(epw_url_path), 'File not found: {}'.format(epw_url_path)
     zip2latlon_path = os.path.join(_file_path_, 'data', zip2latlon)
-    # assert os.path.isfile(zip2latlon_path),\
-    #        'File not found: {}'.format(zip2latlon_path)
 
-    def __init__(self, lat, lon):
+    def __init__(self, lat: str, lon: str):
         self.lat = float(lat)
         self.lon = float(lon)
         distances = []
@@ -410,16 +418,21 @@ class getEPW(object):
         min_idx = distances.index(min(distances))
         url = urls[min_idx]
         epw_fname = os.path.basename(url)
-        try:
-            user_agents = 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.3'
-            request = urllib.request.Request(
-                url, headers={'User-Agent': user_agents}
-            )
-            tempcontext = ssl.SSLContext()
-            with urllib.request.urlopen(request, context=tempcontext) as resp:
-                raw = resp.read().decode()
-        except OSError as e:
-            raise e
+        user_agents = 'Mozilla/5.0 (Windows NT 6.1) '
+        user_agents += 'AppleWebKit/537.36 (KHTML, like Gecko) '
+        user_agents += 'Chrome/41.0.2228.0 Safari/537.3'
+        request = urllib.request.Request(
+            url, headers={'User-Agent': user_agents}
+        )
+        tmpctx = ssl.SSLContext()
+        raw = ''
+        for _ in range(3):
+            try:
+                with urllib.request.urlopen(request, context=tmpctx) as resp:
+                    raw = resp.read().decode()
+                    break
+            except urllib.error.HTTPError:
+                time.sleep(1)
         assert not raw.startswith('404'), f'Bad URL:{url}'
         with open(epw_fname, 'w') as wtr:
             wtr.write(raw)
@@ -436,25 +449,27 @@ class getEPW(object):
                     lon = row['INTPTLONG']
                     break
             else:
-                raise 'zipcode not found in US'
+                raise ValueError('zipcode not found in US')
         return cls(lat, lon)
 
+
 def getwea():
-    """Commandline program for generating a .wea file from downloaded EPW data."""
+    """Commandline program for generating a .wea file
+    from downloaded EPW data."""
     parser = argparse.ArgumentParser(
-        prog='getwea', description="Download the EPW files and convert it to a wea file")
+        prog='getwea',
+        description="Download the EPW files and convert it to a wea file")
     parser.add_argument('-a', help='latitude')
     parser.add_argument('-o', help='longitude')
     parser.add_argument('-z', help='zipcode (U.S. only)')
-    parser.add_argument('-dh', action="store_true", help='output only for daylight hours')
-    parser.add_argument('-sh', type=float, help='start hour (float)')
-    parser.add_argument('-eh', type=float, help='end hour (float)')
+    parser.add_argument('-dh', action="store_true",
+                        help='output only for daylight hours')
+    parser.add_argument('-sh', type=float, default=0, help='start hour (float)')
+    parser.add_argument('-eh', type=float, default=0, help='end hour (float)')
     args = parser.parse_args()
-    if args.dh: print("Writing only daylight hours ...")
     if args.z is not None:
         epw = getEPW.from_zip(args.z)
     else:
         epw = getEPW(args.a, args.o)
     wea = epw2wea(epw=epw.fname, dh=args.dh, sh=args.sh, eh=args.eh)
     print(wea.wea)
-
