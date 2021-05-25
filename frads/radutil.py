@@ -61,7 +61,7 @@ class Primitive(NamedTuple):
 
     def __str__(self) -> str:
         output = f"{self.modifier} {self.ptype} {self.identifier} "
-        output += f"{self.str_arg} {self.int_arg} {self.real_arg}"
+        output += f"{self.str_arg} {self.int_arg} {self.real_arg} "
         return output
 
 

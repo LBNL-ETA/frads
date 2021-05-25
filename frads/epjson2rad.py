@@ -5,18 +5,22 @@ Todo:
     * Parse window data file for Construction:WindowDataFile
 
 """
+from collections import namedtuple
 import logging
 from frads import radutil as ru
 from frads import radgeom as rg
+from frads import util
 
 logger = logging.getLogger("frads.epjson2rad")
 
 PI = 3.14159265358579
+Primitive = ru.Primitive
 
 class epJSON2Rad:
     """
     Convert EnergyPlus JSON objects into Radiance primitives.
     """
+    material = namedtuple("material", ["primitive", "thickness"])
 
     def __init__(self, epjs):
         """Parse EPJSON object passed in as a dictionary."""
@@ -24,16 +28,6 @@ class epJSON2Rad:
         self.get_material_prims(epjs)
         self.zones = self.get_zones(epjs)
         self.site = self.get_site(epjs)
-
-    def get_thickness(self, layers):
-        """Get thickness from construction."""
-        thickness = 0
-        for layer in layers:
-            try:
-                thickness += self.mat_prims[layer]['thickness']
-            except KeyError:
-                thickness += 0
-        return thickness
 
     def thicken(self, surface, windows, thickness):
         """Thicken window-wall."""
@@ -47,60 +41,61 @@ class epJSON2Rad:
                     uniq.remove(rep)
         return uniq
 
-
     def _material(self, epjs_mat):
         """Parse EP Material"""
         mat_prims = {}
         for key, val in epjs_mat.items():
-            mat_prims[key] = {'modifier':'void', 'int_arg':'0',
-                              'str_args':'0', 'type':'plastic',
-                              'identifier':key.replace(' ','_')}
             try:
                 refl = 1 - val['visible_absorptance']
             except KeyError as ke:
                 logger.warning(ke)
                 logger.warning(f"No visible absorptance defined for {key}, assuming 50%")
                 refl = .5
-            mat_prims[key]['real_args'] = "5 {0:.2f} {0:.2f} {0:.2f} 0 0".format(refl)
+            _real_args = "5 {0:.2f} {0:.2f} {0:.2f} 0 0".format(refl)
             try:
-                mat_prims[key]['thickness'] = val['thickness']
+                _thickness = val['thickness']
             except KeyError as ke:
                 logger.info(f"{key} has zero thickness")
-                mat_prims[key]['thickness'] = 0
+                _thickness = 0
+            mat_prims[key] = self.material(
+                Primitive('void', 'plastic', key.replace(' ','_'), '0', _real_args),
+                _thickness)
         return mat_prims
 
     def _material_nomass(self, epjs_mat):
         """Parse EP Material:NoMass"""
         mat_prims = {}
         for key, val in epjs_mat.items():
-            mat_prims[key] = {'modifier':'void', 'int_arg':'0',
-                              'str_args':'0'}
+            _identifier = _modifier = _type = _real_arg = ''
             if 'visible_absorptance' in val:
+                _modifier = 'void'
                 refl = 1 - val['visible_absorptance']
-                mat_prims[key]['type'] = 'plastic'
-                mat_prims[key]['identifier'] = key.replace(' ','_')
-                mat_prims[key]['real_args'] = "5 {0:.2f} {0:.2f} {0:.2f} 0 0".format(refl)
-                mat_prims[key]['thickness'] = 0
-            else:
-                mat_prims[key]['identifier'] = ''
-                mat_prims[key]['modifier'] = ''
-                mat_prims[key]['type'] = ''
-                mat_prims[key]['int_arg'] = ''
-                mat_prims[key]['str_args'] = ''
-                mat_prims[key]['real_args'] = ''
+                _identifier = key.replace(' ','_')
+                _real_arg = "5 {0:.2f} {0:.2f} {0:.2f} 0 0".format(refl)
+                _thickness = 0
+            mat_prims[key] = self.material(
+                Primitive(_modifier, _type, _identifier, '0', _real_arg),
+                0) # zero thickness
         return mat_prims
+
+    def _windowmaterial_gap(self, epjs_wndw_mat):
+        return {}
+
+    def _windowmaterial_gas(self, epjs_wndw_mat):
+        return {}
+
 
     def _windowmaterial_simpleglazingsystem(self, epjs_wndw_mat):
         """Parse EP WindowMaterial:Simpleglazing"""
         wndw_mat_prims = {}
         for key, val in epjs_wndw_mat.items():
             try:
-                tvis = val['visible_transmittance']
+                tmis = util.tmit2tmis(val['visible_transmittance'])
             except KeyError as ke:
                 raise Exception(ke, "for", key)
-            wndw_mat_prims[key] = {'modifier':'void', 'type':'glass', 'int_arg':'0',
-                              'str_args':'0', 'identifier':key.replace(' ','_'),
-                              'real_args': "3 {0:.2f} {0:.2f} {0:.2f}".format(tvis)}
+            wndw_mat_prims[key] = Primitive(
+                'void', 'glass', key.replace(' ','_'), '0',
+                "3 {0:.2f} {0:.2f} {0:.2f}".format(tmis))
         return wndw_mat_prims
 
     def _windowmaterial_simpleglazing(self, epjs_wndw_mat):
@@ -108,27 +103,30 @@ class epJSON2Rad:
         wndw_mat_prims = {}
         for key, val in epjs_wndw_mat.items():
             try:
-                tvis = val['visible_transmittance']
+                tmis = util.tmit2tmis(val['visible_transmittance'])
             except KeyError as ke:
                 print(key)
                 raise ke
-            wndw_mat_prims[key] = {'modifier':'void', 'type':'glass', 'int_arg':'0',
-                              'str_args':'0', 'identifier':key.replace(' ','_'),
-                              'real_args': "3 {0:.2f} {0:.2f} {0:.2f}".format(tvis)}
+            wndw_mat_prims[key] = Primitive(
+                'void', 'glass', key.replace(' ','_'), '0',
+                "3 {0:.2f} {0:.2f} {0:.2f}".format(tmis))
         return wndw_mat_prims
 
     def _windowmaterial_glazing(self, epjs_wndw_mat):
         """Parse EP WindowMaterial:Glazing"""
         wndw_mat_prims = {}
         for key, val in epjs_wndw_mat.items():
-            tvis = val['visible_transmittance_at_normal_incidence']
-            tmis = ru.tmit2tmis(tvis)
-            wndw_mat_prims[key] = {'modifier':'void', 'type':'glass', 'int_arg':'0',
-                              'str_args':'0', 'identifier':key.replace(' ','_'),
-                              'real_args': "3 {0:.2f} {0:.2f} {0:.2f}".format(tmis)}
+            if val['optical_data_type'].lower() == 'bsdf':
+                wndw_mat_prims[key] = None
+            else:
+                tvis = val['visible_transmittance_at_normal_incidence']
+                tmis = util.tmit2tmis(tvis)
+                wndw_mat_prims[key] = Primitive(
+                    'void', 'glass', key.replace(' ','_'), '0',
+                    "3 {0:.2f} {0:.2f} {0:.2f}".format(tmis))
         return wndw_mat_prims
 
-    def _windowmaterial_blind(self, blind_dict):
+    def _windowmaterial_blind(self, blind_dict: dict) -> dict:
         """Parse EP WindowMaterial:Blind"""
         blind_prims = {}
         for key, val in blind_dict.items():
@@ -141,9 +139,9 @@ class epJSON2Rad:
             slat_thickness = val['slat_thickness']
             slat_separation = val['slat_separation']
             slat_angle = val['slat_angle']
-            blind_prims[key] = {'modifier':'void', 'type':'plastic', 'identifier':_id,
-                                'int_arg':'0','str_args':'0',
-                                'real_args':'5 {0:.2f} {0:.2f} {0:.2f} 0 0'.format(front_diff_vis_refl)}
+            blind_prims[key] = Primitive(
+                'void', 'plastic', _id, '0',
+                '5 {0:.2f} {0:.2f} {0:.2f} 0 0'.format(front_diff_vis_refl))
             genblinds_cmd = f"genblinds {_id} {_id} {slat_width} 3 {20*slat_separation} {slat_angle}"
         return blind_prims
 
@@ -183,7 +181,7 @@ class epJSON2Rad:
         layers.extend(sorted([l for l in cnstrct if l.startswith('layer_')]))
         inner_layer = cnstrct[layers[-1]]
         outer_layer = cnstrct[layers[0]].replace(' ','_')
-        cthick = sum([self.mat_prims[cnstrct[l]]['thickness'] for l in layers])
+        cthick = sum([self.mat_prims[cnstrct[l]].thickness for l in layers])
         return inner_layer, outer_layer, cthick
 
     def _construction_windowdatafile(self, construction):
@@ -240,7 +238,7 @@ class epJSON2Rad:
                     srf_type = surface['surface_type']
                     cnstrct = construction[surface['construction_name']]
                     inner_layer, outer_layer, cthick = self.parse_cnstrct(cnstrct)
-                    if self.mat_prims[inner_layer]['identifier'] == '':
+                    if self.mat_prims[inner_layer].primitive.identifier == '':
                         inner_layer = 'void'
                     else:
                         inner_layer = inner_layer.replace(' ','_')

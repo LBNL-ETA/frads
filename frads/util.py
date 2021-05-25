@@ -6,6 +6,7 @@ import os
 import subprocess as sp
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional
+from frads import radutil
 
 logger = logging.getLogger("frads.util")
 
@@ -204,6 +205,55 @@ def parse_idf(content: str) -> dict:
     for ssec in sub_sections:
         obj_dict[ssec[0].lower()].append(ssec[1:])
     return obj_dict
+
+
+def unpack_idf(path: str) -> dict:
+    """Read and parse and idf files."""
+    with open(path, 'r') as rdr:
+        return parse_idf(rdr.read())
+
+
+def idf2mtx(fname:str, section: list, out_dir: str=None) -> None:
+    """Converting bsdf data in idf format to Radiance format."""
+    out_dir = os.getcwd() if out_dir is None else out_dir
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+    for sec in section:
+        name = sec[0]
+        output_path = os.path.join(out_dir, "%s_%s.mtx" % (fname, name))
+        row_cnt = int(sec[1])
+        col_cnt = int(sec[2])
+        if sec[2] in radutil.BASIS_DICT:
+            _btdf_data = nest_list(list(map(float, sec[3:])), col_cnt)
+            lambdas = radutil.angle_basis_coeff(radutil.BASIS_DICT[sec[2]])
+            sdata = [list(map(lambda x, y: x * y, i, lambdas)) for i in _btdf_data]
+            with open(output_path, 'w') as wt:
+                header = '#?RADIANCE\nNCOMP=3\n'
+                header += 'NROWS=%d\nNCOLS=%d\n' % (row_cnt, col_cnt)
+                header += 'FORMAT=ascii\n\n'
+                wt.write(header)
+                for row in sdata:
+                    for val in row:
+                        string = '\t'.join(['%07.5f' % val] * 3)
+                        wt.write(string)
+                        wt.write('\t')
+                    wt.write('\n')
+
+
+def nest_list(inp: list, col_cnt: int) -> List[list]:
+    """Make a list of list give the column count."""
+    nested = []
+    if len(inp) % col_cnt != 0:
+        raise ValueError("Missing value in matrix data")
+    for i in range(0, len(inp), col_cnt):
+        sub_list = []
+        for n in range(col_cnt):
+            try:
+                sub_list.append(inp[i+n])
+            except IndexError:
+                break
+        nested.append(sub_list)
+    return nested
 
 
 def parse_bsdf_xml(path: str) -> Optional[dict]:

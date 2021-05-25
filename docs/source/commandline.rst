@@ -2,7 +2,7 @@ Command line interface
 ======================
 .. currentmodule:: frads
 
-Frads provide several high-level command-line tools to expedite standard workflow and minimize user errors. The command-line tools also serve as examples of how to integrate the frads library with other software packages or graphical user-interfaces.
+Frads provides several command-line tools to expedite standard workflow and minimize user errors. The command-line tools also serve as examples of how to integrate the frads library with other software packages or graphical user-interfaces.
 
 mrad
 ----
