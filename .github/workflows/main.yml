@@ -32,13 +32,13 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Download Radiance
-    - uses: i3h/download-release-asset@v1.2.0
-    - with:
+      uses: i3h/download-release-asset@v1.2.0
+      with:
         owner: LBNL-ETA
         repo: Radiance
         tag: latest
         file: Radiance_*_Linux.zip
-    - run: |
+      run: |
         unzip ${ file }
         
     - name: Install Radiance
