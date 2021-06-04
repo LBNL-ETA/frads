@@ -57,5 +57,7 @@ jobs:
     
     - name: Run tests
       run: |
+        ls
         cd test
+        ls
         python -m unittest -v
