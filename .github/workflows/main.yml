@@ -39,7 +39,7 @@ jobs:
         owner: LBNL-ETA
         repo: Radiance
         tag: latest
-        file: /Radiance_*_Linux.zip/
+        file: /Linux.zip$/
         
     - name: Install Radiance
       run: |
