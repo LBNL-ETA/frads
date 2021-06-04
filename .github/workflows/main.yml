@@ -38,11 +38,11 @@ jobs:
         repo: Radiance
         tag: latest
         file: Radiance_*_Linux.zip
-      run: |
-        unzip ${ file }
+
         
     - name: Install Radiance
       run: |
+        unzip ${ file }
         ls
         echo "========== Extracting tar.gz ==========="
         tar -xvf radiance-*-Linux.tar.gz
