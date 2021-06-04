@@ -31,14 +31,15 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Download Radiance
-      uses: i3h/download-release-asset@v1.2.0
+    - name: Download Release Asset
+      id: download_release_asset
+      uses: i3h/download-release-asset@v1
       with:
         owner: LBNL-ETA
         repo: Radiance
         tag: latest
         file: Radiance_*_Linux.zip
-
+        token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         
     - name: Install Radiance
       run: |
