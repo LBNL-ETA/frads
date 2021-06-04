@@ -43,16 +43,10 @@ jobs:
         
     - name: Install Radiance
       run: |
-        ls
         unzip Radiance_*_Linux.zip
-        ls
-        echo "========== Extracting tar.gz ==========="
         tar -xvf radiance-*-Linux.tar.gz
-        ls
-        echo "========== Extracting tar ==========="
         mkdir buildRad
         sudo cp -avr ./radiance-*-Linux/usr/local/radiance ./buildRad
-        ls -R
         export RAYPATH=.:${{ github.workspace }}/buildRad/radiance/lib
         export PATH=$PATH:${{ github.workspace }}/buildRad/radiance/bin
         rtrace -version
@@ -60,3 +54,7 @@ jobs:
     - name: Install frads
       run: |
         pip install --use-feature=in-tree-build .
+    
+    - name: Run tests
+      run: |
+        python -m unittests -v tests
