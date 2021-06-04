@@ -127,7 +127,7 @@ def get_sender_view(config: util.MradConfig) -> Tuple[dict, dict]:
         config: MradConfig object"""
     sender_view = {}
     view_dicts = {}
-    views = config.view.split(',')
+    views = config.view.split(',') if config.view != '' else []
     for idx, view in enumerate(views):
         vdict = util.parse_vu(view)
         view_name = f"view_{idx:02d}"

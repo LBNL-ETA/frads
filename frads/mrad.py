@@ -2,7 +2,7 @@
 Executive command-line program for Radiance matrix-based simulation.
 """
 
-from configparser import SafeConfigParser
+from configparser import ConfigParser
 import argparse
 import glob
 import logging
@@ -13,7 +13,7 @@ from frads import util
 logger = logging.getLogger('frads')
 
 
-def mkdirs(cfg):
+def mkdirs(cfg: util.MradConfig) -> None:
     """Silently make directories based on configuration."""
     util.mkdir_p(cfg.objdir)
     util.mkdir_p(cfg.mtxdir)
@@ -29,7 +29,6 @@ def initialize(args: argparse.Namespace) -> None:
         args: argparse.Namespace
     """
     cwd = os.getcwd()
-
     file_struct = {'base': args.base, 'objects': args.objdir,
                    'matrices': args.mtxdir, 'resources': args.rsodir,
                    'results': args.resdir}
@@ -60,7 +59,7 @@ def initialize(args: argparse.Namespace) -> None:
     util.mkdir_p(os.path.join(args.base, args.mtxdir))
     util.mkdir_p(os.path.join(args.base, args.resdir))
     util.mkdir_p(os.path.join(args.base, args.rsodir))
-    cfg = SafeConfigParser(allow_no_value=True)
+    cfg = ConfigParser(allow_no_value=True)
     templ_config = {"File Structure": file_struct, "Site": site,
                     "Model": model, "Ray Sender": raysender}
     cfg.read_dict(templ_config)
@@ -69,7 +68,7 @@ def initialize(args: argparse.Namespace) -> None:
         cfg.write(rdr)
 
 
-def convert_config(cfg: SafeConfigParser) -> util.MradConfig:
+def convert_config(cfg: ConfigParser) -> util.MradConfig:
     """Convert a configparser object into a dictionary.
     Args:
         cfg: SafeConfigParser
@@ -95,7 +94,7 @@ def convert_config(cfg: SafeConfigParser) -> util.MradConfig:
 
 def run(args: argparse.Namespace) -> None:
     """Call mtxmethod to carry out the actual simulation."""
-    cfg = SafeConfigParser(allow_no_value=True, inline_comment_prefixes='#')
+    cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes='#')
     with open(args.cfg) as rdr:
         cfg.read_string(rdr.read())
     config = convert_config(cfg)

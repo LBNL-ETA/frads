@@ -256,6 +256,23 @@ def nest_list(inp: list, col_cnt: int) -> List[list]:
     return nested
 
 
+def write_square_matrix(opath, sdata):
+    nrow = len(sdata)
+    ncol = len(sdata[0])
+    with open(opath, 'w') as wt:
+        header = '#?RADIANCE\nNCOMP=3\n'
+        header += 'NROWS=%d\nNCOLS=%d\n' % (nrow, ncol)
+        header += 'FORMAT=ascii\n\n'
+        wt.write(header)
+        for row in sdata:
+            for val in row:
+                string = '\t'.join(['%07.5f' % val] * 3)
+                wt.write(string)
+                wt.write('\t')
+            wt.write('\n')
+
+
+
 def parse_bsdf_xml(path: str) -> Optional[dict]:
     """Parse BSDF file in XML format.
     TODO: validate xml first before parsing

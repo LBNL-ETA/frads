@@ -19,11 +19,11 @@ setuptools.setup(
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.8',
     entry_points={
         'console_scripts': ['mrad=frads.mrad:main',
                             'genmtx=frads.genmtx:main',
-                            'ep2rad=frads.ep2rad:main',
+                            'ep2rad=frads.epjson2rad:main',
                             'eprad=frads.eprad:main',
                             'genfmtx=frads.genfmtx:main',
                             'gengrid=frads.radutil:gengrid',

@@ -11,7 +11,7 @@ from frads import mfacade as fcd
 from frads import radutil, util
 
 def genfmtx_args(parser):
-    parser.add_argument('-w', required=True, help='Window files')
+    parser.add_argument('-w', '--window', required=True, help='Window files')
     parser.add_argument('-ncp')
     parser.add_argument('-opt', type=str, default='-ab 1', help='Simulation parameters')
     parser.add_argument('-o', required=True, help='Output file path | directory')
@@ -20,7 +20,7 @@ def genfmtx_args(parser):
     parser.add_argument('-forw', action='store_true', help='Crop to circle?')
     parser.add_argument('-refl', action='store_true', help='Crop to circle?')
     parser.add_argument('-wrap', action='store_true', help='Crop to circle?')
-    parser.add_argument('-s', action='store_true', help='Do solar calc')
+    parser.add_argument('-s', '--solar', action='store_true', help='Do solar calc')
     parser.add_argument('-env', nargs='+', default=[], help='Environment file paths')
     return parser
 
@@ -41,7 +41,6 @@ def main():
     genfmtx_parser = genfmtx_args(parser)
     genfmtx_parser.add_argument('-v', '--verbose', action='count', default=0, help='verbose mode')
     args = genfmtx_parser.parse_args()
-    argmap = vars(args)
     logger = logging.getLogger('frads')
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler = logging.StreamHandler()
@@ -50,33 +49,33 @@ def main():
     console_handler.setLevel(_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-    kwargs = argmap
-    with open(kwargs['w']) as rdr:
-        raw_wndw_prims = radutil.parse_primitive(rdr.readlines())
-    with open(kwargs['ncp']) as rdr:
-        ncp_prims = radutil.parse_primitive(rdr.readlines())
-    wndw_prims = [p for p in raw_wndw_prims if p['type']=='polygon']
+    raw_wndw_prims = radutil.unpack_primitives(args.window)
+    ncp_prims = radutil.unpack_primitives(args.ncp)
+    wndw_prims = [p for p in raw_wndw_prims if p.ptype=='polygon']
     port_prims = fcd.genport(wpolys=wndw_prims, npolys=ncp_prims,
                              depth=None, scale=None)
-    wndw_polygon = [p['polygon'] for p in wndw_prims if p['type']=='polygon']
-    kwargs['env'].append(kwargs['ncp'])
+    wndw_polygon = [radutil.parse_polygon(p.real_arg) for p in wndw_prims if p.ptype=='polygon']
+    args.env.append(args.ncp)
     all_prims = []
-    for env in kwargs['env']:
-        with open(env) as rdr:
-            all_prims.extend(radutil.parse_primitive(rdr.readlines()))
-    ncp_mod = [prim['modifier'] for prim in ncp_prims if prim['type']=='polygon'][0]
+    for env in args.env:
+        all_prims.extend(radutil.unpack_primitives(env))
+    ncp_mod = [prim.modifier for prim in ncp_prims if prim.ptype=='polygon'][0]
+    ncp_mat: radutil.Primitive
+    ncp_type: str = ''
     for prim in all_prims:
-        if prim['identifier'] == ncp_mod:
+        if prim.identifier == ncp_mod:
             ncp_mat = prim
-            ncp_type = prim['type']
+            ncp_type = prim.ptype
             break
-    wrap2xml = kwargs['wrap']
-    dirname = os.path.dirname(kwargs['o'])
+    if ncp_type == '':
+        raise ValueError("Unknown NCP material")
+    wrap2xml = args.wrap
+    dirname = os.path.dirname(args.o)
     dirname = '.' if dirname=='' else dirname
-    if kwargs['s'] and ncp_type=='BSDF':
+    if args.solar and ncp_type=='BSDF':
         logger.info('Computing for solar and visible spectrum...')
         wrap2xml = False
-        xmlpath = ncp_mat['str_args'].split()[2]
+        xmlpath = ncp_mat.str_arg.split()[2]
         td = tf.mkdtemp()
         with open(xmlpath) as rdr:
             raw = rdr.read()
@@ -89,35 +88,35 @@ def main():
         solar_xml_path = os.path.join(td, 'solar.xml')
         with open(solar_xml_path, 'w') as wtr:
             wtr.write(raw)
-        _strarg = ncp_mat['str_args'].split()
+        _strarg = ncp_mat.str_arg.split()
         _strarg[2] = solar_xml_path
-        ncp_mat['str_args'] = ' '.join(_strarg)
+        solar_ncp_mat = radutil.Primitive(ncp_mat.modifier, ncp_mat.ptype, ncp_mat.identifier+".solar", ' '.join(_strarg), '0')
+
         _env_path = os.path.join(td, 'env_solar.rad')
         with open(_env_path, 'w') as wtr:
             for prim in all_prims:
-                wtr.write(radutil.put_primitive(prim))
-        outsolar = os.path.join(dirname, '_solar_' + util.basename(kwargs['o']))
+                wtr.write(str(prim))
+        outsolar = os.path.join(dirname, '_solar_' + util.basename(args.o))
         process_thread = Thread(target=fcd.Genfmtx,
                                 kwargs={'win_polygons':wndw_polygon,
                                        'port_prim':port_prims, 'out':outsolar,
-                                       'env':[_env_path], 'sbasis':kwargs['ss'],
-                                       'rbasis':kwargs['rs'], 'opt':kwargs['opt'],
-                                       'refl':kwargs['refl'], 'forw':kwargs['forw'],
+                                       'env':[_env_path], 'sbasis':args.ss,
+                                       'rbasis':args.rs, 'opt':args.opt,
+                                       'refl':args.refl, 'forw':args.forw,
                                        'wrap':wrap2xml})
         process_thread.start()
         #fcd.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims, out=outsolar,
-        #            env=[_env_path], sbasis=kwargs['ss'], rbasis=kwargs['rs'],
-        #            opt=kwargs['opt'], refl=kwargs['refl'], forw=kwargs['forw'], wrap=wrap2xml)
+        #            env=[_env_path], sbasis=args['ss'], rbasis=args['rs'],
+        #            opt=args['opt'], refl=args['refl'], forw=args['forw'], wrap=wrap2xml)
 
-    fcd.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims, out=kwargs['o'],
-                env=kwargs['env'], sbasis=kwargs['ss'], rbasis=kwargs['rs'],
-                opt=kwargs['opt'], refl=kwargs['refl'],
-                forw=kwargs['forw'], wrap=wrap2xml)
-    if kwargs['s'] and ncp_type == 'BSDF':
+    fcd.Genfmtx(win_polygons=wndw_polygon, port_prim=port_prims, out=args.o,
+                env=args.env, sbasis=args.ss, rbasis=args.rs, opt=args.opt,
+                refl=args.refl, forw=args.forw, wrap=wrap2xml)
+    if args.solar and ncp_type == 'BSDF':
         process_thread.join()
         vis_dict = {}
         sol_dict = {}
-        oname = util.basename(kwargs['o'])
+        oname = util.basename(args['o'])
         mtxs = [os.path.join(dirname, mtx) for mtx in os.listdir(dirname) if mtx.endswith('.mtx')]
         for mtx in mtxs:
             _direc = util.basename(mtx).split('_')[-1][:2]
@@ -126,12 +125,12 @@ def main():
                 #vis_dict[_direc] = os.path.join(dirname, f"_vis_{_direc}")
                 vis_dict[_direc] = os.path.join(td, f"vis_{_direc}")
                 out2 = os.path.join(dirname, f"vis_{_direc}")
-                klems_wrap(vis_dict[_direc], out2, mtx, kwargs['ss'])
+                klems_wrap(vis_dict[_direc], out2, mtx, args.ss)
             if mtxname.startswith('_solar_'):
                 sol_dict[_direc] = os.path.join(td, f"sol_{_direc}")
                 out2 = os.path.join(dirname, f"sol_{_direc}")
-                klems_wrap(sol_dict[_direc], out2, mtx, kwargs['ss'])
-        cmd = f"wrapBSDF -a {kwargs['ss']} -c -s Visible "
+                klems_wrap(sol_dict[_direc], out2, mtx, args.ss)
+        cmd = f"wrapBSDF -a {args.ss} -c -s Visible "
         cmd += ' '.join([f"-{key} {vis_dict[key]}" for key in vis_dict])
         cmd += ' -s Solar '
         cmd += ' '.join([f"-{key} {sol_dict[key]}" for key in sol_dict])

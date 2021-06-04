@@ -3,9 +3,13 @@ Utilities for handling geometries.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 import math
+from typing import List
 
 
+@dataclass(frozen=True)
 class Vector:
     """3D vector class.
 
@@ -15,15 +19,12 @@ class Vector:
         z: z coordinate
         length: length of the vector
     """
+    x: float = 0
+    y: float = 0
+    z: float = 0
 
-    def __init__(self, x:float=0, y:float=0, z:float=0):
+    def __post_init__(self):
         """Initialize vector."""
-        errmsg = "float or integer required to define a vector"
-        assert all([type(i) in [float, int] for i in [x, y, z]]), errmsg
-        self.x: float = x
-        self.y: float = y
-        self.z: float = z
-        self.length: float = math.sqrt(x**2 + y**2 + z**2)
 
     def __str__(self) -> str:
         """Class string representation.
@@ -57,6 +58,12 @@ class Vector:
         if not isinstance(other, Vector):
             return NotImplemented
         return (self.x, self.y, self.z) == (other.x, other.y, other.z)
+
+    def __hash__(self):
+        return hash((self.x, self.y, self.z))
+
+    def length(self):
+        return math.sqrt(self.x**2 + self.y**2 + self.z**2)
 
     def cross(self, other: Vector) -> Vector:
         """Return the cross product of the two vectors.
@@ -97,7 +104,7 @@ class Vector:
     def angle_from(self, other) -> float:
         """."""
         dot_prod = self * other
-        angle = math.acos(dot_prod / (self.length * other.length))
+        angle = math.acos(dot_prod / (self.length() * other.length()))
         return angle
 
     def rotate_3d(self, vector: Vector, theta: float) -> Vector:
@@ -341,7 +348,7 @@ class Polygon:
 class Convexhull:
     """Convex hull on coplanar points."""
 
-    def __init__(self, points, normal):
+    def __init__(self, points: List[Vector], normal: Vector):
         """Convex hull on coplanar points.
 
         Parameters:
