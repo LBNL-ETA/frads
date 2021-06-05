@@ -57,7 +57,6 @@ jobs:
     
     - name: Run tests
       run: |
-        ls
+        rtrace -version
         cd test
-        ls
         python -m unittest -v
