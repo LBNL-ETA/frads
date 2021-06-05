@@ -1,3 +1,4 @@
+![Install + Test](https://github.com/LBNL-ETA/frads/actions/workflows/main.yaml/badge.svg) 
 # Radiance matrix-based simulation control (WIP)
 
 _frads_ is a open-source python-based high-level abstraction of Radiance command-line workflow for multi-phase matrix-based simulation and beyond. It consists of
