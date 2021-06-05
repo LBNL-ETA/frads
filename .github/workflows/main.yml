@@ -91,7 +91,7 @@ jobs:
     - name: Install Radiance
       run: |
         unzip Radiance_*_OSX.zip
-        unzip OSXBuild/Radiance_OSX.zip
+        ls
         export RAYPATH=.:${{ github.workspace }}/radiance/lib
         export PATH=$PATH:${{ github.workspace }}/radiance/bin
         rtrace -version
@@ -136,7 +136,6 @@ jobs:
     - name: Install Radiance
       run: |
         unzip Radiance_*_Windows.zip
-        unzip WindowsBuild/Radiance_Windows.zip
         ls
         set RAYPATH=.;${{ github.workspace }}\lib
         set PATH=%PATH%;${{ github.workspace }}\bin
