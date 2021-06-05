@@ -16,7 +16,7 @@ on:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "build"
-  build:
+  test_ubuntu:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
     strategy:
@@ -59,6 +59,97 @@ jobs:
       run: |
         export RAYPATH=.:${{ github.workspace }}/buildRad/radiance/lib
         export PATH=$PATH:${{ github.workspace }}/buildRad/radiance/bin
+        rtrace -version
+        cd test
+        python -m unittest -v
+
+  test_osx:
+    # The type of runner that the job will run on
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.8, 3.9]
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Download Release Asset
+      id: download_release_asset
+      uses: i3h/download-release-asset@v1
+      with:
+        owner: LBNL-ETA
+        repo: Radiance
+        tag: latest
+        file: /OSX.zip$/
+
+    - name: Install Radiance
+      run: |
+        unzip Radiance_*_OSX.zip
+        unzip OSXBuild/Radiance_OSX.zip
+        export RAYPATH=.:${{ github.workspace }}/radiance/lib
+        export PATH=$PATH:${{ github.workspace }}/radiance/bin
+        rtrace -version
+
+    - name: Install frads
+      run: |
+        pip install --use-feature=in-tree-build .
+
+    - name: Run tests
+      run: |
+        export RAYPATH=.:${{ github.workspace }}/radiance/lib
+        export PATH=$PATH:${{ github.workspace }}/radiance/bin
+        rtrace -version
+        cd test
+        python -m unittest -v
+
+  test_windows:
+    # The type of runner that the job will run on
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.8, 3.9]
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Download Release Asset
+      id: download_release_asset
+      uses: i3h/download-release-asset@v1
+      with:
+        owner: LBNL-ETA
+        repo: Radiance
+        tag: latest
+        file: /Windows.zip$/
+
+    - name: Install Radiance
+      run: |
+        unzip Radiance_*_Windows.zip
+        unzip WindowsBuild/Radiance_Windows.zip
+        ls
+        set RAYPATH=.;${{ github.workspace }}\lib
+        set PATH=%PATH%;${{ github.workspace }}\bin
+        rtrace -version
+
+    - name: Install frads
+      run: |
+        pip install --use-feature=in-tree-build .
+
+    - name: Run tests
+      run: |
+        set RAYPATH=.;${{ github.workspace }}\lib
+        set PATH=%PATH%;${{ github.workspace }}\bin
         rtrace -version
         cd test
         python -m unittest -v
