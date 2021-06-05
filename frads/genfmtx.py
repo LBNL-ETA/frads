@@ -8,7 +8,7 @@ import shutil
 import subprocess as sp
 import tempfile as tf
 from frads import mfacade as fcd
-from frads import radutil
+from frads import radutil, util
 
 def genfmtx_args(parser):
     parser.add_argument('-w', required=True, help='Window files')
@@ -96,7 +96,7 @@ def main():
         with open(_env_path, 'w') as wtr:
             for prim in all_prims:
                 wtr.write(radutil.put_primitive(prim))
-        outsolar = os.path.join(dirname, '_solar_' + radutil.basename(kwargs['o']))
+        outsolar = os.path.join(dirname, '_solar_' + util.basename(kwargs['o']))
         process_thread = Thread(target=fcd.Genfmtx,
                                 kwargs={'win_polygons':wndw_polygon,
                                        'port_prim':port_prims, 'out':outsolar,
@@ -117,11 +117,11 @@ def main():
         process_thread.join()
         vis_dict = {}
         sol_dict = {}
-        oname = radutil.basename(kwargs['o'])
+        oname = util.basename(kwargs['o'])
         mtxs = [os.path.join(dirname, mtx) for mtx in os.listdir(dirname) if mtx.endswith('.mtx')]
         for mtx in mtxs:
-            _direc = radutil.basename(mtx).split('_')[-1][:2]
-            mtxname = radutil.basename(mtx)
+            _direc = util.basename(mtx).split('_')[-1][:2]
+            mtxname = util.basename(mtx)
             if mtxname.startswith(oname):
                 #vis_dict[_direc] = os.path.join(dirname, f"_vis_{_direc}")
                 vis_dict[_direc] = os.path.join(td, f"vis_{_direc}")

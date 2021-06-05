@@ -1,6 +1,7 @@
 """Utility functions."""
 
 import argparse
+from typing import NamedTuple, List
 import glob
 import logging
 import math
@@ -8,6 +9,7 @@ import os
 import re
 import subprocess as sp
 import multiprocessing as mp
+from frads import radgeom, radmtx, util
 logger = logging.getLogger("frads.radutil")
 try:
     import numpy as np
@@ -15,8 +17,6 @@ try:
 except ModuleNotFoundError:
     logger.info("Numpy not installed")
     numpy_installed = False
-import xml.etree.ElementTree as ET
-from frads import radgeom, radmtx
 
 
 GEOM_TYPE = ['polygon', 'ring', 'tube', 'cone']
@@ -51,208 +51,109 @@ ABASE_LIST = {
 }
 
 
+class Primitive(NamedTuple):
+    modifier: str
+    ptype: str
+    identifier: str
+    str_arg: str
+    real_arg: str
+    int_arg: str = '0'
 
-def parse_decor(fpath):
-    """Get all commands and decorations."""
-    with open(fpath, 'r') as rdr:
-        content = rdr.readlines()
-    decor = [l for l in content if l.startswith('#@')]
-    cmd = [l for l in content if l.startswith('!')]
-    return decor, cmd
+    def __str__(self) -> str:
+        output = f"{self.modifier} {self.ptype} {self.identifier} "
+        output += f"{self.str_arg} {self.int_arg} {self.real_arg} "
+        return output
 
 
 def parse_primitive(lines: list) -> list:
     """Parse Radiance primitives inside a file path into a list of dictionary.
-
     Args:
-        lines: list of strings
+        lines: list of lines as strings
 
     Returns:
         list of primitives as dictionaries
-
     """
+    # Expand in-line commands
+    cmd_lines = [(idx, line) for idx, line in enumerate(lines)
+                 if line.startswith('!')]
+    cmd_results = []
+    for cmd in cmd_lines:
+        cmd_results.append(
+            sp.run(cmd[1][1:], shell=True, stdout=sp.PIPE)
+            .stdout.decode().splitlines())
+    counter = 0
+    for idx, item in enumerate(cmd_lines):
+        counter += item[0]
+        lines[counter:counter+1] = cmd_results[idx]
+        counter += len(cmd_results[idx]) - 1 - item[0]
+
     content = ' '.join([i.strip() for i in lines
-                        if i.strip() != '' and i[0] != '#' and i[0] != '!']).split()
-    primitives = []
+                        if i.strip() != '' and i[0] != '#']).split()
+    primitives: List[Primitive] = []
     idx = 0
     while idx < len(content):
-        primitive = {}
-        primitive['modifier'] = content[idx]
-        primitive['type'] = content[idx + 1]
-        if primitive['type'] == 'alias':
-            primitive['name_to'] = content[idx + 1]
-            primitive['name_from'] = content[idx + 2]
-            primitives.append(primitive)
+        _modifier = content[idx]
+        _type = content[idx + 1]
+        if _type == 'alias':
+            _name_to = content[idx + 2]
+            _name_from = content[idx + 3]
+            primitives.append(Primitive(_modifier, _type, _name_to, _name_from, '', int_arg=''))
+            idx += 4
             continue
-        primitive['identifier'] = content[idx + 2]
+        _identifier = content[idx + 2]
         str_arg_cnt = int(content[idx + 3])
-        primitive['str_args'] = ' '.join(content[idx + 3:idx + 4 +
-                                                 str_arg_cnt])
-        primitive['int_arg'] = content[idx + 4 + str_arg_cnt]
+        _str_args = ' '.join(content[idx + 3:idx + 4 + str_arg_cnt])
         idx += 5 + str_arg_cnt
         real_arg_cnt = int(content[idx])
-        primitive['real_args'] = ' '.join(content[idx:idx + 1 + real_arg_cnt])
+        _real_args = ' '.join(content[idx:idx + 1 + real_arg_cnt])
         idx += real_arg_cnt + 1
-        if primitive['type'] == 'polygon':
-            primitive = parse_polygon(primitive)
-        primitives.append(primitive)
+        primitives.append(Primitive(
+            _modifier, _type, _identifier, _str_args, _real_args))
     return primitives
 
 
-def parse_polygon(primitive: dict) -> dict:
-    """Parse real arguments to polygon.
+def unpack_primitives(fpath: str) -> List[Primitive]:
+    """Open a file a to parse primitive."""
+    with open(fpath, 'r') as rdr:
+        return parse_primitive(rdr.readlines())
 
+
+def parse_polygon(real_arg: str) -> radgeom.Polygon:
+    """Parse real arguments to polygon.
     Args:
         primitive: a dictionary object containing a primitive
 
     Returns:
         modified primitive
-
     """
-    real_args = primitive['real_args'].split()
+    real_args = real_arg.split()
     coords = [float(i) for i in real_args[1:]]
     arg_cnt = int(real_args[0])
     vertices = [radgeom.Vector(*coords[i:i + 3]) for i in range(0, arg_cnt, 3)]
-    primitive['polygon'] = radgeom.Polygon(vertices)
-    return primitive
+    return radgeom.Polygon(vertices)
 
 
-def parse_vu(vu_str: str) -> dict:
-    """Parse view string into a dictionary.
-
-    Args:
-        vu_str: view parameters as a string
-
-    Returns:
-        A view dictionary
-    """
-
-    args_list = vu_str.strip().split()
-    vparser = argparse.ArgumentParser()
-    vparser.add_argument('-v', action='store', dest='vt')
-    vparser.add_argument('-vp', nargs=3, type=float)
-    vparser.add_argument('-vd', nargs=3, type=float)
-    vparser.add_argument('-vu', nargs=3, type=float)
-    vparser.add_argument('-vv', type=float)
-    vparser.add_argument('-vh', type=float)
-    vparser.add_argument('-vo', type=float)
-    vparser.add_argument('-va', type=float)
-    vparser.add_argument('-vs', type=float)
-    vparser.add_argument('-vl', type=float)
-    vparser.add_argument('-x', type=int, default=500)
-    vparser.add_argument('-y', type=int, default=500)
-    vparser.add_argument('-vf', type=str)
-    args, _ = vparser.parse_known_args(args_list)
-    view_dict = vars(args)
-    view_dict['vt'] = view_dict['vt'][-1] if view_dict['vt'] is not None else None
-    view_dict = {k: v for (k, v) in view_dict.items() if v is not None}
-    return view_dict
-
-
-def parse_opt(opt_str: str) -> dict:
-    """Parsing option string into a dictionary.
-
-    Args:
-        opt_str: rtrace option parameters as a string
-
-    Returns:
-        An option dictionary
-    """
-
-    args_list = opt_str.strip().split()
-    oparser = argparse.ArgumentParser()
-    oparser.add_argument('-I', action='store_const', const='', default=None)
-    oparser.add_argument('-V', action='store_const', const='', default=None)
-    oparser.add_argument('-aa', type=float)
-    oparser.add_argument('-ab', type=int)
-    oparser.add_argument('-ad', type=int)
-    oparser.add_argument('-ar', type=int)
-    oparser.add_argument('-as', type=int)
-    oparser.add_argument('-c', type=int, default=1)
-    oparser.add_argument('-dc', type=int)
-    oparser.add_argument('-dj', type=float)
-    oparser.add_argument('-dp', type=int)
-    oparser.add_argument('-dr', type=int)
-    oparser.add_argument('-ds', type=int)
-    oparser.add_argument('-dt', type=int)
-    oparser.add_argument('-f', action='store')
-    oparser.add_argument('-hd', action='store_const', const='', default=None)
-    oparser.add_argument('-i', action='store_const', const='', default=None)
-    oparser.add_argument('-lr', type=int)
-    oparser.add_argument('-lw', type=float)
-    oparser.add_argument('-n', type=int)
-    oparser.add_argument('-ss', type=int)
-    oparser.add_argument('-st', type=int)
-    oparser.add_argument('-u', action='store_const', const='', default=None)
-    args, _ = oparser.parse_known_args(args_list)
-    opt_dict = vars(args)
-    opt_dict = {k: v for (k, v) in opt_dict.items() if v is not None}
-    return opt_dict
-
-
-def parse_bsdf_xml(path):
-    """Parse BSDF file in XML format."""
-    tree = ET.parse(path)
-    root = tree.getroot()
-    tag = root.tag.rstrip('WindowElement')
-    layer = root.find(tag+'Optical').find(tag+'Layer')
-    datadef = layer.find(tag+'DataDefinition').find(tag+'IncidentDataStructure')
-    dblocks = layer.findall(tag+'WavelengthData')
-    data_dict = {'def':datadef.text.strip(), 'Solar':{}, 'Visible':{}}
-    for block in dblocks:
-        wavelength = block.find(tag+'Wavelength').text
-        dblock = block.find(tag+'WavelengthDataBlock')
-        direction = dblock.find(tag+'WavelengthDataDirection').text
-        scattering_data = dblock.find(tag+'ScatteringData').text.strip()
-        if scattering_data.count('\n') == 21168:
-            data_string = scattering_data.replace('\n\t', ' ')
-        else:
-            data_string = scattering_data
-        data_dict[wavelength][direction] = data_string
-    return data_dict
-
-
-def polygon2prim(polygon, modifier, identifier):
+def polygon2prim(polygon: radgeom.Polygon,
+                 modifier: str, identifier: str) -> Primitive:
     """Generate a primitive from a polygon."""
-    return {'modifier':modifier, 'type':'polygon',
-            'identifier':identifier, 'int_arg':'0',
-            'polygon':polygon,
-            'str_args':'0', 'real_args':polygon.to_real()}
+    return Primitive(modifier, 'polygon', identifier, '0', polygon.to_real())
 
-def put_primitive(prim) -> str:
-    """Convert a primitive into a string for writing.
-
-    Args:
-        prim: A primitive as a dictionary
-
-    Returns:
-        A formated primitive string
-    """
-
-    if isinstance(prim, str):
-        ostring = prim + os.linesep
-    else:
-        if prim['modifier'] == 'alias':
-            ostring = '\n{modifier} {name_from} {name_to}'.format(**prim)
-        else:
-            ostring = "\n{modifier} {type} {identifier}\
-        \n{str_args}\n{int_arg}\n{real_args}\n".format(**prim)
-    return ostring
 
 def samp_dir(primlist: list) -> radgeom.Vector:
-    """Calculate the primitives' average sampling direction weighted by area."""
-    primlist = [p for p in primlist if p['type'] == 'polygon' or p['type'] == 'ring']
+    """Calculate the primitives' average sampling
+    direction weighted by area."""
+    primlist = [p for p in primlist
+                if p.ptype == 'polygon' or p.ptype == 'ring']
     normal_area = radgeom.Vector()
     for prim in primlist:
-        normal = prim['polygon'].normal()
-        area = prim['polygon'].area()
-        normal_area += normal.scale(area)
+        polygon = parse_polygon(prim.real_arg)
+        normal_area += polygon.normal().scale(polygon.area())
     sdir = normal_area.scale(1.0 / len(primlist))
     sdir = sdir.normalize()
     return sdir
 
 
-def up_vector(primitives: list) -> str:
+def up_vector(primitives: list) -> radgeom.Vector:
     """Define the up vector given primitives.
 
     Args:
@@ -272,9 +173,9 @@ def up_vector(primitives: list) -> str:
     return upvect
 
 
-def neutral_plastic_prim(mod, ident, refl, spec, rough):
+def neutral_plastic_prim(mod: str, ident: str, refl: float,
+                         spec: float, rough: float) -> Primitive:
     """Generate a neutral color plastic material.
-
     Args:
         mod(str): modifier to the primitive
         ident(str): identifier to the primitive
@@ -285,20 +186,14 @@ def neutral_plastic_prim(mod, ident, refl, spec, rough):
     Returns:
         A material primtive
     """
-
     err_msg = 'reflectance, speculariy, and roughness have to be 0-1'
     assert all(0 <= i <= 1 for i in [spec, refl, rough]), err_msg
-    prim = {'type': 'plastic', 'int_arg': '0', 'str_args': '0'}
-    prim['modifier'] = mod
-    prim['identifier'] = ident
     real_args = '5 {0} {0} {0} {1} {2} \n'.format(refl, spec, rough)
-    prim['real_args'] = real_args
-    return prim
+    return Primitive(mod, 'plastic', ident, '0', real_args)
 
 
 def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough):
     """Generate a colored plastic material.
-
     Args:
         mod(str): modifier to the primitive
         ident(str): identifier to the primitive
@@ -309,11 +204,9 @@ def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough):
 
     Returns:
         A material primtive
-
     """
     err_msg = 'reflectance, speculariy, and roughness have to be 0-1'
     assert all(0 <= i <= 1 for i in [specu, refl, rough]), err_msg
-    prim = {'type': 'plastic', 'int_arg': '0', 'str_args': '0'}
     red_eff = 0.3
     green_eff = 0.59
     blue_eff = 0.11
@@ -321,17 +214,9 @@ def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough):
     matr = round(red / weighted * refl, 3)
     matg = round(green / weighted * refl, 3)
     matb = round(blue / weighted * refl, 3)
-    prim['modifier'] = mod
-    prim['identifier'] = ident
     real_args = '5 %s %s %s %s %s\n' % (matr, matg, matb, specu, rough)
-    prim['real_args'] = real_args
+    return Primitive(mod, 'plastic', ident, '0', real_args)
 
-    return prim
-
-def tmit2tmis(tmit):
-    return round(
-        (math.sqrt(0.8402528435 + 0.0072522239 * tmit**2) - 0.9166530661) /
-        0.0036261119 / tmit, 3)
 
 def glass_prim(mod, ident, tr, tg, tb, refrac=1.52):
     """Generate a glass material.
@@ -345,62 +230,31 @@ def glass_prim(mod, ident, tr, tg, tb, refrac=1.52):
         material primtive (dict)
 
     """
-    prim = {'type': 'glass', 'int_arg': '0', 'str_args': '0'}
-    tmsv_red = tmit2tmis(tr)
-    tmsv_green = tmit2tmis(tg)
-    tmsv_blue = tmit2tmis(tb)
-    prim['modifier'] = mod
-    prim['identifier'] = ident
+    tmsv_red = util.tmit2tmis(tr)
+    tmsv_green = util.tmit2tmis(tg)
+    tmsv_blue = util.tmit2tmis(tb)
     real_args = '4 %s %s %s %s' % (tmsv_red, tmsv_green, tmsv_blue, refrac)
-    prim['real_args'] = real_args
-    return prim
+    return Primitive(mod, 'glass', ident, '0', real_args)
 
 
 def bsdf_prim(mod, ident, xmlpath, upvec,
               pe=False, thickness=0.0, xform=None, real_args='0'):
     """Create a BSDF primtive."""
-    prim = {
-        'modifier': mod,
-        'identifier': ident,
-        'int_arg': '0',
-        'real_args': real_args
-    }
-    prim['str_args'] = '{} {} '.format(xmlpath, str(upvec))
-    if xform is not None:
-        prim['str_args'] += xform
-    else:
-        prim['str_args'] += '.'
+    str_args = '{} {} '.format(xmlpath, str(upvec))
+    str_args_count = 5
     if pe:
-        prim['str_args'] = '5 ' + prim['str_args']
-        prim['type'] = 'aBSDF'
+        _type = 'aBSDF'
     else:
-        prim['str_args'] = '6 %s '%thickness + prim['str_args']
-        prim['type'] = 'BSDF'
-    return prim
-
-
-def parse_idf(content):
-    """Parse an IDF file into a dictionary."""
-    sections = content.rstrip().split(';')
-    sub_sections = []
-    for sec in sections:
-        sec_lines = sec.splitlines()
-        _lines = []
-        for sl in sec_lines:
-            content = sl.split('!')[0]
-            if content != '':
-                _lines.append(content)
-        _lines = ' '.join(_lines).split(',')
-        clean_lines = [i.strip() for i in _lines]
-        sub_sections.append(clean_lines)
-
-    obj_dict = {}
-    for sec in sub_sections:
-        obj_dict[sec[0].lower()] = []
-    for sec in sub_sections:
-        obj_dict[sec[0].lower()].append(sec[1:])
-
-    return obj_dict
+        str_args_count += 1
+        str_args = '%s ' % thickness + str_args
+        _type = 'BSDF'
+    if xform is not None:
+        str_args_count += len(xform.split())
+        str_args += xform
+    else:
+        str_args += '.'
+    str_args = '%s ' % str_args_count + str_args
+    return Primitive(mod, _type, ident, str_args, real_args)
 
 
 def lambda_calc(theta_lr, theta_up, nphi):
@@ -409,7 +263,7 @@ def lambda_calc(theta_lr, theta_up, nphi):
              math.cos(math.pi / 180 * theta_up)**2) * math.pi / nphi)
 
 
-def angle_basis_coeff(basis):
+def angle_basis_coeff(basis: str) -> List[float]:
     '''Calculate klems basis coefficient'''
     ablist = ABASE_LIST[basis]
     lambdas = []
@@ -417,57 +271,11 @@ def angle_basis_coeff(basis):
         tu = ablist[i + 1][0]
         tl = ablist[i][0]
         np = ablist[i][1]
-        lambdas.extend([lambda_calc(tl, tu, np) for n in range(np)])
+        lambdas.extend([lambda_calc(tl, tu, np) for _ in range(np)])
     return lambdas
 
 
-def dhi2dni(GHI, DHI, alti):
-    """Calculate direct normal from global horizontal and diffuse horizontal."""
-    return (GHI - DHI) / math.cos(math.radians(90 - alti))
-
-
-def frange_inc(start, stop, step):
-    """Generate increasing non-integer range."""
-    r = start
-    while r < stop:
-        yield r
-        r += step
-
-
-def frange_des(start, stop, step):
-    """Generate descending non-integer range."""
-    r = start
-    while r > stop:
-        yield r
-        r -= step
-
-
-def basename(fpath, keep_ext=False):
-    """."""
-    name = os.path.basename(fpath)
-    if not keep_ext:
-        name =  os.path.splitext(name)[0]
-    return name
-
-
-def is_number(string):
-    try:
-        float(string)
-        return True
-    except ValueError:
-        return False
-
-
-def silent_remove(path):
-    try:
-        os.remove(path)
-    except FileNotFoundError as e:
-        logger.error(e)
-        pass
-
-
-def opt2str(opt):
-    assert isinstance(opt, dict)
+def opt2str(opt: dict) -> str:
     out_str = ""
     for k, v in opt.items():
         if isinstance(v, list):
@@ -483,7 +291,7 @@ def opt2str(opt):
     return out_str
 
 
-class reinsrc(object):
+class Reinsrc:
     """Calculate Reinhart/Treganza sampling directions.
 
     Direct translation of Radiance reinsrc.cal file.
@@ -491,14 +299,14 @@ class reinsrc(object):
 
     TNAZ = [30, 30, 24, 24, 18, 12, 6]
 
-    def __init__(self, mf):
+    def __init__(self, mf: int):
         """Initialize with multiplication factor."""
         self.mf = mf
         self.rowMax = 7 * mf + 1
         self.rmax = self.raccum(self.rowMax)
         self.alpha = 90 / (mf * 7 + 0.5)
 
-    def dir_calc(self, rbin, x1=0.5, x2=0.5):
+    def dir_calc(self, rbin: int, x1=0.5, x2=0.5) -> tuple:
         """Calculate the ray direction.
 
         Parameter:
@@ -543,23 +351,9 @@ class reinsrc(object):
             return r
 
 
-def mkdir_p(path):
-    try:
-        os.makedirs(path)
-    except OSError as e:
-        logger.debug(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
-    except TypeError as e:
-        logger.debug(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
-
-
-def check_fresh(path1, path2):
-    time1 = os.path.getmtime(path1)
-    time2 = os.path.getmtime(path2)
-    return time1 > time2
-
-
 class pt_inclusion(object):
-    """testing whether a point is inside a polygon using winding number algorithm."""
+    """Test whether a point is inside a polygon
+    using winding number algorithm."""
 
     def __init__(self, polygon_pts):
         """Initialize the polygon."""
@@ -601,20 +395,24 @@ def gen_grid(polygon: radgeom.Polygon, height: float, spacing: float) -> list:
     """
     vertices = polygon.vertices
     plane_height = sum([i.z for i in vertices]) / len(vertices)
-    imin, imax, jmin, jmax, zmin, zmax = polygon.extreme()
+    imin, imax, jmin, jmax, _, _ = polygon.extreme()
     xlen_spc = ((imax - imin) / spacing)
     ylen_spc = ((jmax - jmin) / spacing)
     xstart = ((xlen_spc - int(xlen_spc) + 1)) * spacing / 2
     ystart = ((ylen_spc - int(ylen_spc) + 1)) * spacing / 2
-    x0 = [x + xstart for x in frange_inc(imin, imax, spacing)]
-    y0 = [x + ystart for x in frange_inc(jmin, jmax, spacing)]
+    x0 = [x + xstart for x in util.frange_inc(imin, imax, spacing)]
+    y0 = [x + ystart for x in util.frange_inc(jmin, jmax, spacing)]
     grid_dir = polygon.normal().reverse()
     grid_hgt = radgeom.Vector(0, 0, plane_height) + grid_dir.scale(height)
-    raw_pts = [radgeom.Vector(i, j, grid_hgt.z) for i in x0 for j in y0]
+    raw_pts = [radgeom.Vector(round(i, 3), round(j, 3), round(grid_hgt.z, 3))
+               for i in x0 for j in y0]
+    scale_factor = 1 - 0.3/(imax- imin) # scale boundary down .3 meter
+    _polygon = polygon.scale(radgeom.Vector(scale_factor, scale_factor, 0), polygon.centroid())
+    _vertices = _polygon.vertices
     if polygon.normal() == radgeom.Vector(0, 0, 1):
-        pt_incls = pt_inclusion(vertices)
+        pt_incls = pt_inclusion(_vertices)
     else:
-        pt_incls = pt_inclusion(vertices[::-1])
+        pt_incls = pt_inclusion(_vertices[::-1])
     _grid = [p for p in raw_pts if pt_incls.test_inside(p) > 0]
     grid = [p.to_list() + grid_dir.to_list() for p in _grid]
     return grid
@@ -623,15 +421,16 @@ def gen_grid(polygon: radgeom.Polygon, height: float, spacing: float) -> list:
 def gengrid():
     """Commandline program for generating a grid of sensor points."""
     parser = argparse.ArgumentParser(
-        prog='gengrid', description='Generate an equal-spaced sensor grid based on a surface.')
+        prog='gengrid',
+        description='Generate an equal-spaced sensor grid based on a surface.')
     parser.add_argument('surface', help='surface file path')
     parser.add_argument('spacing', type=float)
     parser.add_argument('height', type=float)
     parser.add_argument('-op', action='store_const', const='', default=True)
     args = parser.parse_args()
-    with open(args.surface) as rdr:
-        prim = parse_primitive(rdr.readlines())
-    polygon = prim[0]['polygon']
+    prims = unpack_primitives(args.surface)
+    polygon_prims = [prim for prim in prims if prim.ptype=='polygon']
+    polygon = parse_polygon(polygon_prims[0].real_arg)
     if args.op:
         polygon = polygon.flip()
     grid_list = gen_grid(polygon, args.height, args.spacing)
@@ -641,16 +440,17 @@ def gengrid():
 
 def material_lib():
     mlib = []
-    #carpet .2
+    # carpet .2
     mlib.append(neutral_plastic_prim('void', 'carpet_20', .2, 0, 0))
     # Paint .5
     mlib.append(neutral_plastic_prim('void', 'white_paint_50', .5, 0, 0))
     # Paint .7
     mlib.append(neutral_plastic_prim('void', 'white_paint_70', .7, 0, 0))
     # Glass .6
-    tmis = tmit2tmis(.6)
+    tmis = util.tmit2tmis(.6)
     mlib.append(glass_prim('void', 'glass_60', tmis, tmis, tmis))
     return mlib
+
 
 def pcomb(inputs):
     """Image operations with pcomb.
@@ -666,17 +466,18 @@ def pcomb(inputs):
         color_op = input_list[:]
         for i in component_idx:
             color_op[i] = '%si(%d)' % (c, i/2+1)
-            cstr = '%so=%s' % (c, ''.join(color_op))
+        cstr = '%so=%s' % (c, ''.join(color_op))
         color_op_list.append(cstr)
     rgb_str = ';'.join(color_op_list)
     cmd = ['pcomb', '-e', '%s' % rgb_str]
-    img_name = basename(input_list[0], keep_ext=True)
+    img_name = util.basename(input_list[0], keep_ext=True)
     for c in components:
         cmd.append('-o')
         cmd.append(c)
-    res = spcheckout(cmd)
+    res = util.spcheckout(cmd)
     with open(os.path.join(out_dir, img_name), 'wb') as wtr:
         wtr.write(res)
+
 
 def dctsop(inputs, out_dir, nproc=1):
     if not os.path.isdir(out_dir):
@@ -690,6 +491,7 @@ def dctsop(inputs, out_dir, nproc=1):
     grouped = [mtx_inp+[skv] for skv in sky_files]
     [sub.append(out_dir) for sub in grouped]
     process.map(dctimestep, grouped)
+
 
 def pcombop(inputs, out_dir, nproc=1):
     """
@@ -737,7 +539,7 @@ def dctimestep(input_list):
     out_dir = input_list[-1]
     inp_dir_count = len(inputs)
     sky = input_list[-2]
-    img_name = basename(sky)
+    img_name = util.basename(sky)
     out_path = os.path.join(out_dir, img_name)
 
     if inputs[1].endswith('.xml') is False\
@@ -785,23 +587,17 @@ def dctimestep(input_list):
         cmd = "dctimestep %s %s > %s" % (input_string, sky, out_path)
     sp.call(cmd, shell=True)
 
+
 def rpxop():
-    """Operate on input directories given a operation type.
-
-    Parameters:
-    op(str), operation type, choose either dcts or pcomb
-    inputs(list), input directories/file.
-                    For pcomb operations: include symbols like '+,'-','*' in-between;
-                    For dcts, operation defaults matrix multiplications
-    out_dir(str), path to store your output
-    nproc(int), number of processors to use, default: total available
-
-    """
+    """Operate on input directories given a operation type."""
     PROGRAM_SCRIPTION = "Image operations with parallel processing"
-    parser = argparse.ArgumentParser(prog='imgop', description=PROGRAM_SCRIPTION)
-    parser.add_argument('-t', type=str, required=True, choices=['dcts', 'pcomb'],
+    parser = argparse.ArgumentParser(
+        prog='imgop', description=PROGRAM_SCRIPTION)
+    parser.add_argument('-t', type=str, required=True,
+                        choices=['dcts', 'pcomb'],
                         help='operation types: {pcomb|dcts}')
-    parser.add_argument('-i', type=str, required=True, nargs="+", help='list of inputs')
+    parser.add_argument('-i', type=str, required=True,
+                        nargs="+", help='list of inputs')
     parser.add_argument('-o', type=str, required=True, help="output directory")
     parser.add_argument('-n', type=int, help='number of processors to use')
     args = parser.parse_args()
@@ -810,19 +606,23 @@ def rpxop():
     elif args.t == 'dcts':
         dctsop(args.i, args.o, nproc=args.n)
 
+
 def combine_mtx(mtxs, out_dir):
     """."""
     cmd = "rmtxop"
     args = " -ff %s > %s" % (" ".join(mtxs), out_dir)
     process = sp.Popen(cmd + args, stdout=sp.PIPE, stderr=sp.PIPE, shell=True)
-    stdout, stderr = process.communicate()
+    _, stderr = process.communicate()
     return stderr
 
+
 def header_parser(header):
+    """Parse for a matrix file header."""
     nrow = int(re.search('NROWS=(.*)\n', header).group(1))
     ncol = int(re.search('NCOLS=(.*)\n', header).group(1))
     ncomp = int(re.search('NCOMP=(.*)\n', header).group(1))
     return nrow, ncol, ncomp
+
 
 def mtx2nparray(datastr):
     """Convert Radiance 3-channel matrix file to numpy array."""
@@ -849,19 +649,24 @@ def smx2nparray(datastr):
                      dtype=float)
     bdata = np.array([[i.split()[2::ncomp][0] for i in row] for row in data],
                      dtype=float)
-    assert np.size(bdata,1) == nrow
-    assert np.size(bdata,0) == ncol
-    if ncol ==1 :
+    if ncol == 1:
+        assert np.size(bdata, 1) == nrow
+        assert np.size(bdata, 0) == ncol
         rdata = rdata.flatten()
         gdata = gdata.flatten()
         bdata = bdata.flatten()
+    else:
+        assert np.size(bdata, 0) == nrow
+        assert np.size(bdata, 1) == ncol
     return rdata, gdata, bdata
+
 
 def mtxmult(mtxs):
     if numpy_installed:
         return numpy_mtxmult(mtxs)
     else:
         return rmtxop(mtxs)
+
 
 def numpy_mtxmult(mtxs):
     """Matrix multiplication with Numpy."""
@@ -870,25 +675,22 @@ def numpy_mtxmult(mtxs):
     resb = np.linalg.multi_dot([mat[2] for mat in mtxs]) * .065
     return resr + resg + resb
 
-def sprun(cmd):
-    logger.debug(cmd)
-    sp.run(cmd, check=True)
-
-def spcheckout(cmd, inp=None):
-    logger.debug(cmd)
-    return sp.run(cmd, input=inp, check=True, stdout=sp.PIPE).stdout
 
 def rmtxop(*mtxs):
     cmd = ["rmtxop", *mtxs]
-    return spcheckout(cmd)
+    return util.spcheckout(cmd)
+
 
 def gen_blinds(depth, width, height, spacing, angle, curve, movedown):
     """Generate genblinds command for genBSDF."""
     nslats = int(round(height / spacing, 0))
     slat_cmd = "!genblinds blindmaterial blinds "
-    slat_cmd += "{} {} {} {} {} {}".format(depth, width, height, nslats, angle, curve)
-    slat_cmd += f"| xform -rz -90 -rx -90 -t {-width/2} {-height/2} {-movedown}\n"
+    slat_cmd += "{} {} {} {} {} {}".format(
+        depth, width, height, nslats, angle, curve)
+    slat_cmd += "| xform -rz -90 -rx -90 -t "
+    slat_cmd += f"{-width/2} {-height/2} {-movedown}\n"
     return slat_cmd
+
 
 def analyze_window(window_prim, movedown):
     """Parse window primitive and prepare for genBSDF."""
@@ -908,21 +710,26 @@ def analyze_window(window_prim, movedown):
         width = dim1.length
     _south = radgeom.Vector(0, -1, 0)
     angle2negY = window_normal.angle_from(_south)
-    rotate_window = window_center.rotate3D(
-        radgeom.Vector(0,0,1), angle2negY).rotate3D(
+    rotate_window = window_center.rotate_3d(
+        radgeom.Vector(0, 0, 1), angle2negY).rotate_3d(
             radgeom.Vector(1, 0, 0), math.pi/2)
     translate = radgeom.Vector(0, 0, -movedown) - rotate_window
     return height, width, angle2negY, translate
 
+
 def varays():
     """Commandline utility program for generating circular fisheye rays."""
     aparser = argparse.ArgumentParser(
-        prog='varays', description='Generate a fisheye view rays with blackedout corners')
-    aparser.add_argument('-x', required=True, help='square image resolution')
+        prog='varays',
+        description='Generate a fisheye view rays with blackedout corners')
+    aparser.add_argument(
+        '-x', required=True, help='square image resolution')
     aparser.add_argument('-c', default='1', help='Ray count')
-    aparser.add_argument('-vf', required=True, help='View file path, -vta only')
+    aparser.add_argument('-vf', required=True, help='View file path')
     args = aparser.parse_args()
-    cmd = "vwrays -ff -vf {} -x {} -y {} ".format(args.vf, args.x, args.x)
-    cmd += '-c {} -pj 0.7 '.format(args.c)
+    cmd = "vwrays -ff -x {0} -y {0} ".format(args.x)
+    if args.c != '1':
+        cmd += '-c {} -pj 0.7 '.format(args.c)
+    cmd += f"-vf {args.vf} | "
     cmd += radmtx.Sender.crop2circle(args.c, args.x)
     sp.run(cmd, shell=True)

@@ -7,10 +7,8 @@ import logging
 import os
 import subprocess as sp
 import sys
-from frads import epjson2rad
-from frads import makesky
+from frads import epjson2rad, util, radutil
 from frads import mtxmethod as mm
-from frads import radutil as ru
 ### Import EnergyPlus Python Library ###
 srcloc = {'win32': 'C:\\', 'darwin': '/Applications', 'linux': '/usr/local'}
 dname = [os.path.join(srcloc[sys.platform], d)
@@ -36,7 +34,7 @@ def get_sky_vector(mo, da, hr, mi, lat, lon, dni, dhi):
     cmd2 = "genskyvec -m 4"
     res2 = sp.run(cmd2.split(), input=res1,
                   capture_output=True).stdout.decode()
-    return ru.smx2nparray(res2)
+    return radutil.smx2nparray(res2)
 
 
 def read_epjs(fpath):
@@ -53,17 +51,17 @@ def init_radiance(epjs_path, overwrite=False, nproc=1, run=False):
     for zn in radobj.zones:
         site = radobj.site
         zone = radobj.zones[zn]
-        ru.mkdir_p(zn)
+        util.mkdir_p(zn)
         objdir = 'Objects'
         rsodir = 'Resources'
         mtxdir = 'Matrices'
         resdir = 'Results'
-        ru.mkdir_p(objdir)
-        ru.mkdir_p(rsodir)
-        ru.mkdir_p(mtxdir)
-        ru.mkdir_p(resdir)
+        radutil.mkdir_p(objdir)
+        radutil.mkdir_p(rsodir)
+        radutil.mkdir_p(mtxdir)
+        radutil.mkdir_p(resdir)
         with open(os.path.join(objdir, 'materials.rad'), 'w') as wtr:
-            [wtr.write(ru.put_primitive(val))
+            [wtr.write(radutil.put_primitive(val))
              for key, val in radobj.mat_prims.items()]
         scene_paths = []
         window_paths = []
@@ -73,12 +71,12 @@ def init_radiance(epjs_path, overwrite=False, nproc=1, run=False):
                     _path = os.path.join(objdir, f"Window_{key}.rad")
                     window_paths.append(f"Window_{key}.rad")
                     with open(_path, 'w') as wtr:
-                        wtr.write(ru.put_primitive(val))
+                        wtr.write(radutil.put_primitive(val))
             else:
                 _path = os.path.join(objdir, f"{st}.rad")
                 scene_paths.append(f"{st}.rad")
                 with open(_path, 'w') as wtr:
-                    [wtr.write(ru.put_primitive(val))
+                    [wtr.write(radutil.put_primitive(val))
                      for key, val in zone[st].items()]
         cfg = mm.cfg_template
         cfg['nprocess'] = nproc
@@ -98,7 +96,7 @@ def init_radiance(epjs_path, overwrite=False, nproc=1, run=False):
         cfg['results'] = resdir
         cfg['matrices'] = mtxdir
         cfg['resources'] = rsodir
-        if run:
+        if radutiln:
             mtxmtd = mm.MTXMethod(cfg)
             pdsmx_path = mtxmtd.prep_2phase_pt()
             with open(pdsmx_path) as rdr:
@@ -152,7 +150,7 @@ def time_step_handler():
                              cfg['latitude'],
                              cfg['longitude'],
                              dni, dhi)
-        illum_val = ru.mtxmult([pdsmx, skv]).mean()*179
+        illum_val = radutil.mtxmult([pdsmx, skv]).mean()*179
     print(f"{month}/{day} {hour}:{minute} illum value is : {illum_val:.0f} lx")
     power_level = (1 - min(5000, illum_val)/5000) * \
         api.exchange.get_internal_variable_value(west_zone_light_design_level)

@@ -11,3 +11,9 @@ tags
 *.epw
 *.smx
 *.hdr
+.env
+.vim
+*.rad
+*.wea
+*.mat
+*.oct

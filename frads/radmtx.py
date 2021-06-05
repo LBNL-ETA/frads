@@ -15,9 +15,11 @@ import tempfile as tf
 import logging
 from frads import makesky
 from frads import radgeom
-from frads import radutil
+from frads import radutil, util
+from typing import Optional
 
 logger = logging.getLogger('frads.radmtx')
+
 
 class Sender:
     """Sender object for matrix generation with the following attributes:
@@ -29,7 +31,8 @@ class Sender:
         yres(int): sender y dimension
     """
 
-    def __init__(self, *, form: str, sender: str, xres: int, yres: int) -> None:
+    def __init__(self, *, form: str, sender: bytes,
+                 xres: Optional[int], yres: Optional[int]):
         """Instantiate the instance.
 
         Args:
@@ -45,9 +48,9 @@ class Sender:
         self.yres = yres
         logger.debug("Sender: %s", sender)
 
-
     @classmethod
-    def as_surface(cls, *, prim_list: list, basis: str, offset=None, left=None) -> Sender:
+    def as_surface(cls, *, prim_list: list, basis: str,
+                   offset=None, left=None):
         """
         Construct a sender from a surface.
 
@@ -63,7 +66,7 @@ class Sender:
         """
         prim_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
                                    left=left, source=None, out=None)
-        return cls(form='s', sender=prim_str, xres=None, yres=None)
+        return cls(form='s', sender=prim_str.encode(), xres=None, yres=None)
 
     @classmethod
     def as_view(cls, *, vu_dict: dict, ray_cnt: int, xres: int, yres: int) -> Sender:
@@ -83,8 +86,8 @@ class Sender:
         if None in (xres, yres):
             raise ValueError("Need to specify resolution")
         vcmd = f"vwrays {radutil.opt2str(vu_dict)} -x {xres} -y {yres} -d"
-        res_eval = radutil.spcheckout(vcmd.split()).decode().split()
-        xres, yres = res_eval[1], res_eval[3]
+        res_eval = util.spcheckout(vcmd.split()).decode().split()
+        xres, yres = int(res_eval[1]), int(res_eval[3])
         logger.info("Changed resolution to %s %s", xres, yres)
         cmd = f"vwrays -ff -x {xres} -y {yres} "
         if ray_cnt > 1:
@@ -110,10 +113,12 @@ class Sender:
         """
         if pts_list is None:
             raise ValueError("pts_list is None")
+        if not all(isinstance(item, list) for item in pts_list):
+            raise ValueError("All grid points has to be lists.")
         pts_list = [i for i in pts_list for _ in range(ray_cnt)]
         grid_str = os.linesep.join(
             [' '.join(map(str, li)) for li in pts_list]) + os.linesep
-        return cls(form='p', sender=grid_str, xres=None, yres=len(pts_list))
+        return cls(form='p', sender=grid_str.encode(), xres=None, yres=len(pts_list))
 
     @staticmethod
     def crop2circle(ray_cnt: int, xres: int) -> str:
@@ -156,11 +161,11 @@ class Receiver:
         logger.debug("Receivers: %s", receiver)
 
     def __add__(self, other: Receiver) -> Receiver:
-        self.receiver += other.receiver
+        self.receiver += '\n' + other.receiver
         return self
 
     @classmethod
-    def as_sun(cls, *, basis, smx_path, window_paths, full_mod=False) -> Receiver:
+    def as_sun(cls, *, basis, smx_path, window_normals, full_mod=False) -> Receiver:
         """Instantiate a sun receiver object.
         Args:
             basis: receiver sampling basis {kf | r1 | sc25...}
@@ -171,15 +176,13 @@ class Receiver:
         """
 
         gensun = makesky.Gensun(int(basis[-1]))
-        if (smx_path is None) and (window_paths is None):
+        if (smx_path is None) and (window_normals is None):
             str_repr = gensun.gen_full()
             return cls(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
-        else:
-            str_repr, mod_str = gensun.gen_cull(smx_path=smx_path, window_paths=window_paths)
-            if full_mod:
-                return cls(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
-            else:
-                return cls(receiver=str_repr, basis=basis, modifier=mod_str)
+        str_repr, mod_str = gensun.gen_cull(smx_path=smx_path, window_normals=window_normals)
+        if full_mod:
+            return cls(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
+        return cls(receiver=str_repr, basis=basis, modifier=mod_str)
 
     @classmethod
     def as_sky(cls, basis) -> Receiver:
@@ -227,39 +230,41 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
         The receiver as string
     """
 
-    assert basis is not None, 'Sampling basis cannot be None'
-    primscopy = copy.deepcopy(prims)
+    if basis is None:
+        raise ValueError('Sampling basis cannot be None')
+    # primscopy = copy.deepcopy(prims)
     upvector = str(radutil.up_vector(prims)).replace(' ', ',')
     # basis = "-" + basis if left else basis
     upvector = "-" + upvector if left else upvector
-    modifier_set = {p['modifier'] for p in prims}
+    modifier_set = {p.modifier for p in prims}
     if len(modifier_set) != 1:
         logger.warning("Primitives don't share modifier")
-    src_mod = f"rflx{prims[0]['modifier']}"
+    src_mod = f"rflx{prims[0].modifier}"
     header = f'#@rfluxmtx h={basis} u={upvector}\n'
     if out is not None:
         header += f"#@rfluxmtx o={out}\n\n"
     if source is not None:
         source_line = f"void {source} {src_mod}\n0\n0\n4 1 1 1 0\n\n"
         header += source_line
-    modifiers = [p['modifier'] for p in primscopy]
+    modifiers = [p.modifier for p in prims]
     # identifiers = [p['identifier'] for p in primscopy]
-    for prim in primscopy:
-        if prim['identifier'] in modifiers:
-            prim['identifier'] = 'discarded'
-    for prim in primscopy:
-        prim['modifier'] = src_mod
     content = ''
-    if offset is not None:
-        for prim in primscopy:
-            poly = prim['polygon']
+    for prim in prims:
+        if prim.identifier in modifiers:
+            _identifier = 'discarded'
+        else:
+            _identifier = prim.identifier
+        _modifier = src_mod
+        if offset is not None:
+            poly = radutil.parse_polygon(prim.real_arg)
             offset_vec = poly.normal().scale(offset)
             moved_pts = [pt + offset_vec for pt in poly.vertices]
-            prim['real_args'] = radgeom.Polygon(moved_pts).to_real()
-            content += radutil.put_primitive(prim)
-    else:
-        for prim in primscopy:
-            content += radutil.put_primitive(prim)
+            _real_args = radgeom.Polygon(moved_pts).to_real()
+        else:
+            _real_args = prim.real_arg
+        new_prim = radutil.Primitive(
+            _modifier, prim.ptype, _identifier, prim.str_arg, _real_args)
+        content += str(new_prim) + '\n'
     return header + content
 
 
@@ -278,7 +283,8 @@ def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
         return the stdout of the command
 
     """
-    assert None not in (sender, receiver), "Sender/Receiver object is None"
+    if None in (sender, receiver):
+        raise ValueError("Sender/Receiver object is None")
     opt = '' if opt is None else opt
     with tf.TemporaryDirectory() as tempd:
         receiver_path = os.path.join(tempd, 'receiver')
@@ -287,30 +293,30 @@ def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
         if isinstance(env[0], dict):
             env_path = os.path.join(tempd, 'env')
             with open(env_path, 'w') as wtr:
-                [wtr.write(radutil.put_primitive(prim)) for prim in env]
+                [wtr.write(str(prim)) for prim in env]
             env_paths = [env_path]
         else:
             env_paths = env
         cmd = ['rfluxmtx'] + opt.split()
+        stdin = None
         if sender.form == 's':
             sender_path = os.path.join(tempd, 'sender')
-            with open(sender_path, 'w') as wtr:
+            with open(sender_path, 'wb') as wtr:
                 wtr.write(sender.sender)
             cmd.extend([sender_path, receiver_path])
-            stdin = None
         elif sender.form == 'p':
             cmd.extend(['-I+', '-faa', '-y', str(sender.yres), '-', receiver_path])
-            stdin = sender.sender.encode()
+            stdin = sender.sender
         elif sender.form == 'v':
-            cmd.extend(["-ffc", "-x", sender.xres, "-y", sender.yres, "-ld-"])
+            cmd.extend(["-ffc", "-x", str(sender.xres), "-y", str(sender.yres), "-ld-"])
             if out is not None:
-                radutil.mkdir_p(out)
+                util.mkdir_p(out)
                 out = os.path.join(out, '%04d.hdr')
                 cmd.extend(["-o", out])
             cmd.extend(['-', receiver_path])
             stdin = sender.sender
         cmd.extend(env_paths)
-        return radutil.spcheckout(cmd, inp=stdin)
+        return util.spcheckout(cmd, inp=stdin)
 
 
 def rcvr_oct(receiver, env, oct_path):
@@ -326,7 +332,7 @@ def rcvr_oct(receiver, env, oct_path):
         with open(receiver_path, 'w') as wtr:
             wtr.write(receiver.receiver)
         ocmd = ['oconv', '-f'] + env + [receiver_path]
-        octree = radutil.spcheckout(ocmd)
+        octree = util.spcheckout(ocmd)
         with open(oct_path, 'wb') as wtr:
             wtr.write(octree)
 
@@ -352,13 +358,12 @@ def rcontrib(*, sender, modifier: str, octree, out, opt) -> None:
         with open(modifier_path, 'w') as wtr:
             wtr.write(modifier)
         cmd = ['rcontrib'] + lopt
+        stdin = sender.sender
         if sender.form == 'p':
             cmd += ['-I+', '-faf', '-y', str(sender.yres)]
-            stdin = sender.sender.encode()
         elif sender.form == 'v':
-            radutil.mkdir_p(out)
+            util.mkdir_p(out)
             out = os.path.join(out, '%04d.hdr')
             cmd += ['-ffc', '-x', str(sender.xres), '-y', str(sender.yres)]
-            stdin = sender.sender
         cmd += ['-o', out, '-M', modifier_path, octree]
-        radutil.spcheckout(cmd, inp=stdin)
+        util.spcheckout(cmd, inp=stdin)
