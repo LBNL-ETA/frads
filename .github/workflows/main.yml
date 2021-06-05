@@ -1,8 +1,8 @@
 # This is a basic workflow to help you get started with Actions
 
-name: CI
+name: Install + Test
 
-# Controls when the action will run. 
+# Controls when the action will run.
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
   push:
@@ -31,7 +31,7 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
-        
+
     - name: Download Release Asset
       id: download_release_asset
       uses: i3h/download-release-asset@v1
@@ -40,7 +40,7 @@ jobs:
         repo: Radiance
         tag: latest
         file: /Linux.zip$/
-        
+
     - name: Install Radiance
       run: |
         unzip Radiance_*_Linux.zip
@@ -50,11 +50,11 @@ jobs:
         export RAYPATH=.:${{ github.workspace }}/buildRad/radiance/lib
         export PATH=$PATH:${{ github.workspace }}/buildRad/radiance/bin
         rtrace -version
-        
+
     - name: Install frads
       run: |
         pip install --use-feature=in-tree-build .
-    
+
     - name: Run tests
       run: |
         export RAYPATH=.:${{ github.workspace }}/buildRad/radiance/lib
