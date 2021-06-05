@@ -5,18 +5,22 @@ Window zone 0-9
 
 """
 
-import argparse
-from frads import radmtx as rm
-from frads import radgeom as rg
+import logging
 import math
 import os
-from frads import radutil
 import shutil
 import subprocess as sp
 import tempfile as tf
-import logging
+from typing import List
+
+from frads import radmtx as rm
+from frads import radgeom as rg
+from frads import radutil, util
 
 logger = logging.getLogger('frads.mfacade')
+
+Primitive = radutil.Primitive
+
 
 class Genfmtx(object):
     """Generate facade matrix."""
@@ -43,8 +47,8 @@ class Genfmtx(object):
         self.port_prim = port_prim
 
         self.out = out
-        self.outdir = os.path.dirname(out)
-        self.out_name = radutil.basename(out)
+        self.outdir: str = os.path.dirname(out)
+        self.out_name = util.basename(out)
         self.env = env
 
         self.rbasis = rbasis
@@ -147,7 +151,7 @@ class Genfmtx(object):
     def klems_wrap(self):
         """prepare wrapping for Klems basis."""
         for key in self.src_dict:
-            for i in range(len(self.win_polygon)):
+            for _ in range(len(self.win_polygon)):
                 inp = self.src_dict[key]
                 out = self.fwrap_dict[key]
                 cmd = f"rmtxop -fa -t -c .265 .67 .065 {inp} | getinfo - > {out}"
@@ -160,25 +164,25 @@ class Genfmtx(object):
                 sub_key = [k for k in self.src_dict if k.endswith(str(i))]
                 sub_dict = {k: self.fwrap_dict[k] for k in sub_key}
                 for key in sub_key:
-                    self.rttree_reduce(key[:-1], self.src_dict[key],
-                                       self.fwrap_dict[key])
+                    self.rttree_reduce(self.src_dict[key], self.fwrap_dict[key])
                 cmd = 'wrapBSDF -a t4 -s Visible {} '.format(' '.join(
                     [" ".join(('-' + i[:2], j)) for i, j in sub_dict.items()]))
                 cmd += f"> {self.out_name}.xml"
                 sp.call(cmd, shell=True)
         else:
             self.klems_wrap()
-            for i in range(len(self.win_polygon)):
+            for i, _ in enumerate(self.win_polygon):
+                out_name = os.path.join(self.outdir, f"{self.out_name}_{i}.xml")
                 sub_dict = {
                     k: self.fwrap_dict[k]
                     for k in self.fwrap_dict if k.endswith(str(i))
                 }
                 cmd = 'wrapBSDF -a {} -c {} '.format(self.rbasis, ' '.join(
                     [" ".join(('-' + i[:2], j)) for i, j in sub_dict.items()]))
-                cmd += f'> {self.out_name}.xml'
+                cmd += f'> {out_name}'
                 sp.call(cmd, shell=True)
 
-    def rttree_reduce(self, typ, src, dest, spec='Visible'):
+    def rttree_reduce(self, src, dest, spec='Visible'):
         """call rttree_reduce to reduce shirley-chiu to tensor tree.
         copied from genBSDF."""
         CIEuv = 'Xi=.5141*Ri+.3239*Gi+.1620*Bi;'
@@ -211,7 +215,7 @@ class Genfmtx(object):
             cmd2 += cmd
             if os.name == 'posix':
                 cmd2 = cmd + f" -of {src} "
-            cmd2 += f"| rttree_reduce {avg} -h -ff -t {pcull} -r 4 -g {self.ttlog2} "
+            cmd2 += f"| rttree_reduce {avg} -h -ff -t {pcull} -r {self.ttrank} -g {self.ttlog2} "
             cmd2 += f"> {dest}"
         else:
             if os.name == 'posix':
@@ -227,24 +231,22 @@ def genport(*, wpolys, npolys, depth, scale):
         wpoly = merge_windows(wpolys)
     else:
         wpoly = wpolys[0]
-    wpoly = wpoly['polygon']
+    wpoly = radutil.parse_polygon(wpoly.real_arg)
     wnorm = wpoly.normal()
-    wcntr = wpoly.centroid()
     if npolys is not None:
         all_ports = get_port(wpoly, wnorm, npolys)
     elif depth is None:
-        raise 'Missing param: need to specify (depth and scale) or ncs file path'
+        raise ValueError('Need to specify (depth and scale) or ncp path')
     else:  # user direct input
         extrude_vector = wpoly.normal().reverse().scale(depth)
         scale_vector = rg.Vector(scale, scale, scale)
         scaled_window = wpoly.scale(scale_vector, wpoly.centroid())
         all_ports = scaled_window.extrude(extrude_vector)[1:]
-    ports = all_ports
     port_prims = []
     for pi in range(len(all_ports)):
         new_prim = radutil.polygon2prim(all_ports[pi], 'port',
                                      'portf%s' % str(pi + 1))
-        logger.debug(radutil.put_primitive(new_prim))
+        logger.debug(str(new_prim))
         port_prims.append(new_prim)
     return port_prims
 
@@ -258,13 +260,13 @@ def get_port(win_polygon, win_norm, ncs_prims):
     outward offset. This boundary box is then rotated back the same amount
     to encapsulate the original window and NCP geomteries.
     """
-    ncs_polygon = [p['polygon'] for p in ncs_prims if p['type']=='polygon']
+    ncs_polygon = [radutil.parse_polygon(p.real_arg)
+                   for p in ncs_prims if p.ptype=='polygon']
     if 1 in [int(abs(i)) for i in win_norm.to_list()]:
         ncs_polygon.append(win_polygon)
         bbox = rg.getbbox(ncs_polygon, offset=0.00)
         bbox.remove([b for b in bbox if b.normal().reverse()==win_norm][0])
         return [b.move(win_norm.scale(-.1)) for b in bbox]
-        #return bbox
     xax = [1, 0, 0]
     _xax = [-1, 0, 0]
     yax = [0, 1, 0]
@@ -293,19 +295,16 @@ def get_port(win_polygon, win_norm, ncs_prims):
     rotate_back = [pg.rotate(zaxis, rrad * -1) for pg in bbox]
     return rotate_back
 
-def merge_windows(primitive_list):
+def merge_windows(primitive_list: List[Primitive]):
     """Merge rectangles if coplanar."""
-    polygons = [p['polygon'] for p in primitive_list]
+    polygons = [radutil.parse_polygon(p.real_arg) for p in primitive_list]
     normals = [p.normal() for p in polygons]
-    norm_set = set([n.to_list() for n in normals])
-    if len(norm_set) > 1:
-        warn_msg = "windows oriented differently"
+    if len(set(normals)) > 1:
+        logger.warning("Windows Oriented Differently")
     points = [i for p in polygons for i in p.vertices]
-    chull = rg.Convexhull(points, normals[0])
-    hull_polygon = chull.hull
-    real_args = hull_polygon.to_real()
-    modifier = primitive_list[0]['modifier']
-    identifier = primitive_list[0]['identifier']
+    hull_polygon = rg.Convexhull(points, normals[0]).hull
+    modifier = primitive_list[0].modifier
+    identifier = primitive_list[0].identifier
     new_prim = radutil.polygon2prim(hull_polygon, modifier, identifier)
     return new_prim
 

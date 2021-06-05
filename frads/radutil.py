@@ -2,6 +2,7 @@
 
 import argparse
 from typing import NamedTuple, List
+from dataclasses import dataclass, field
 import glob
 import logging
 import math
@@ -59,10 +60,80 @@ class Primitive(NamedTuple):
     real_arg: str
     int_arg: str = '0'
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         output = f"{self.modifier} {self.ptype} {self.identifier} "
         output += f"{self.str_arg} {self.int_arg} {self.real_arg} "
         return output
+
+    def __str__(self) -> str:
+        output = f"\n{self.modifier} {self.ptype} {self.identifier}\n"
+        output += f"{self.str_arg}\n{self.int_arg}\n{self.real_arg}\n"
+        return output
+
+@dataclass
+class ScatteringData:
+    sdata: List[List[float]]
+    ncolumn: int = field(init=False)
+    nrow: int = field(init=False)
+    basis: str = field(init=False)
+
+    def __post_init__(self):
+        self.ncolumn = len(self.sdata[0])
+        self.nrow = len(self.sdata)
+        self.basis = BASIS_DICT[str(self.ncolumn)]
+
+    def to_bsdf(self):
+        lambdas = angle_basis_coeff(self.basis)
+        element_divi = lambda x,y: x/y
+        bsdf = [list(map(element_divi, i, lambdas)) for i in self.sdata]
+        return BSDFData(bsdf)
+
+
+    def __repr__(self) -> str:
+        out = ''
+        for row in self.sdata:
+            for val in row:
+                string = '%07.5f' % val
+                out += string + '\t'
+            out += '\n'
+        return out
+
+    def __str__(self) -> str:
+        out = '#?RADIANCE\nNCOMP=3\n'
+        out += 'NROWS=%d\nNCOLS=%d\n' % (self.nrow, self.ncolumn)
+        out += 'FORMAT=ascii\n\n'
+        for row in self.sdata:
+            for val in row:
+                string = '\t'.join(['%07.5f' % val] * 3)
+                out += string + '\t'
+            out += '\n'
+        return out
+
+
+@dataclass
+class BSDFData:
+    bsdf: List[List[float]]
+    ncolumn: int = field(init=False)
+    nrow: int = field(init=False)
+    basis: str = field(init=False)
+
+    def __post_init__(self):
+        self.ncolumn = len(self.bsdf[0])
+        self.nrow = len(self.bsdf)
+        self.basis = BASIS_DICT[str(self.ncolumn)]
+
+    def to_sdata(self) -> ScatteringData:
+        lambdas = angle_basis_coeff(self.basis)
+        element_mult = lambda x,y: x/y
+        sdata = [list(map(element_mult, i, lambdas))
+                 for i in self.bsdf]
+        return ScatteringData(sdata)
+
+
+@dataclass(frozen=True)
+class RadMatrix:
+    tf: ScatteringData
+    tb: ScatteringData
 
 
 def parse_primitive(lines: list) -> list:
@@ -166,7 +237,7 @@ def up_vector(primitives: list) -> radgeom.Vector:
     xaxis = radgeom.Vector(1, 0, 0)
     yaxis = radgeom.Vector(0, 1, 0)
     norm_dir = samp_dir(primitives)
-    if norm_dir == yaxis:
+    if norm_dir not in (xaxis, xaxis.scale(-1)):
         upvect = norm_dir.cross(xaxis)
     else:
         upvect = norm_dir.cross(yaxis)

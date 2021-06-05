@@ -232,9 +232,7 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
 
     if basis is None:
         raise ValueError('Sampling basis cannot be None')
-    # primscopy = copy.deepcopy(prims)
     upvector = str(radutil.up_vector(prims)).replace(' ', ',')
-    # basis = "-" + basis if left else basis
     upvector = "-" + upvector if left else upvector
     modifier_set = {p.modifier for p in prims}
     if len(modifier_set) != 1:
@@ -247,7 +245,6 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
         source_line = f"void {source} {src_mod}\n0\n0\n4 1 1 1 0\n\n"
         header += source_line
     modifiers = [p.modifier for p in prims]
-    # identifiers = [p['identifier'] for p in primscopy]
     content = ''
     for prim in prims:
         if prim.identifier in modifiers:
