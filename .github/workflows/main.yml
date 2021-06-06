@@ -194,7 +194,7 @@ jobs:
       run: |
         unzip EnergyPlus*Windows*.zip
         del /f EnergyPlus*.zip
-        ren EnergyPlus* EnergyPlus
+        move "EnergyPlus*" EnergyPlus
         ls
 
     - name: Install frads
