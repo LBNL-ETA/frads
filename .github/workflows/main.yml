@@ -140,6 +140,7 @@ jobs:
       run: |
         export RAYPATH=.:${{ github.workspace }}/radiance/lib
         export PATH=$PATH:${{ github.workspace }}/radiance/bin
+        export PATH=$PATH:${{ github.workspace }}/EnergyPlus
         rtrace -version
         cd test
         python -m unittest -v
@@ -193,7 +194,7 @@ jobs:
       run: |
         unzip EnergyPlus*Windows*.zip
         del /f EnergyPlus*.zip
-        ren "EnergyPlus*" "EnergyPlus"
+        ren EnergyPlus* EnergyPlus
         ls
 
     - name: Install frads
