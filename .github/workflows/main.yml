@@ -41,6 +41,15 @@ jobs:
         tag: latest
         file: /Linux.zip$/
 
+    - name: Download EnergyPlus
+      id: download_release_asset
+      uses: i3h/download-release-asset@v1
+      with:
+        owner: NREL
+        repo: EnergyPlus
+        tag: latest
+        file: /EnergyPlus.+Ubuntu2.+x86_64.tar.gz/
+
     - name: Install Radiance
       run: |
         unzip Radiance_*_Linux.zip
@@ -51,6 +60,14 @@ jobs:
         export PATH=$PATH:${{ github.workspace }}/buildRad/radiance/bin
         rtrace -version
 
+    - name: Install EnergyPlus
+      run: |
+        tar -xvf EnergyPlus*Ubuntu*.tar.gz
+        ls
+        rm EnergyPlus*.tar.gz
+        mv EnergyPlus* EnergyPlus
+        ls
+
     - name: Install frads
       run: |
         pip install --use-feature=in-tree-build .
@@ -59,6 +76,7 @@ jobs:
       run: |
         export RAYPATH=.:${{ github.workspace }}/buildRad/radiance/lib
         export PATH=$PATH:${{ github.workspace }}/buildRad/radiance/bin
+        export PATH=$PATH:${{ github.workspace }}/EnergyPlus
         rtrace -version
         cd test
         python -m unittest -v
@@ -79,7 +97,7 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Download Release Asset
+    - name: Download Radiance
       id: download_release_asset
       uses: i3h/download-release-asset@v1
       with:
@@ -88,6 +106,15 @@ jobs:
         tag: latest
         file: /OSX.zip$/
 
+    - name: Download EnergyPlus
+      id: download_release_asset
+      uses: i3h/download-release-asset@v1
+      with:
+        owner: NREL
+        repo: EnergyPlus
+        tag: latest
+        file: /EnergyPlus.+macOS.+x86_64.tar.gz/
+
     - name: Install Radiance
       run: |
         unzip Radiance_*_OSX.zip
@@ -95,6 +122,15 @@ jobs:
         export RAYPATH=.:${{ github.workspace }}/radiance/lib
         export PATH=$PATH:${{ github.workspace }}/radiance/bin
         rtrace -version
+
+    - name: Install EnergyPlus
+      run: |
+        tar -xvf EnergyPlus*macOS*.tar.gz
+        ls
+        rm EnergyPlus*.tar.gz
+        mv EnergyPlus*macOS* EnergyPlus
+        ls
+        export PATH=$PATH:${{ github.workspace }}/EnergyPlus
 
     - name: Install frads
       run: |
@@ -136,6 +172,15 @@ jobs:
         tag: latest
         file: /Windows.zip$/
 
+    - name: Download EnergyPlus
+      id: download_release_asset
+      uses: i3h/download-release-asset@v1
+      with:
+        owner: NREL
+        repo: EnergyPlus
+        tag: latest
+        file: /EnergyPlus.+Windows.+x86_64.zip/
+
     - name: Install Radiance
       run: |
         unzip Radiance_*_Windows.zip
@@ -143,6 +188,13 @@ jobs:
         set RAYPATH=.;${{ github.workspace }}\lib
         set PATH=%PATH%;${{ github.workspace }}\bin
         rtrace -version
+
+    - name: Install EnergyPlus
+      run: |
+        unzip EnergyPlus*Windows*.zip
+        del /f EnergyPlus*.zip
+        ren "EnergyPlus*" "EnergyPlus"
+        ls
 
     - name: Install frads
       run: |
@@ -152,6 +204,7 @@ jobs:
       run: |
         set RAYPATH=.;${{ github.workspace }}\lib
         set PATH=%PATH%;${{ github.workspace }}\bin
+        set PATH=%PATH%;${{ github.workspace }}\EnergyPlus
         rtrace -version
         cd test
         python -m unittest -v
