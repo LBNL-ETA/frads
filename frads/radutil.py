@@ -66,6 +66,8 @@ class Primitive(NamedTuple):
         return output
 
     def __str__(self) -> str:
+        if '' in (self.modifier, self.ptype, self.identifier):
+            return ''
         output = f"\n{self.modifier} {self.ptype} {self.identifier}\n"
         output += f"{self.str_arg}\n{self.int_arg}\n{self.real_arg}\n"
         return output

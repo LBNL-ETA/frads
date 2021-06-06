@@ -236,7 +236,7 @@ class epJSON2Rad:
 
     def parse_wndw_cnstrct(self, wcnstrct):
         """Parse window construction."""
-        if wcnstrct['default']:
+        if wcnstrct['ctype'] == 'default':
             material_name = wcnstrct['outside_layer'].replace(" ", "_")
         elif wcnstrct['ctype'] == 'cfs':
             material_name = wcnstrct['visible_optical_complex_back_transmittance_matrix_name']
@@ -343,9 +343,8 @@ class epJSON2Rad:
                                        k.startswith(f'vertex_{n+1}')] for n in range(nfvert)]
                             wndw_polygon = rg.Polygon([rg.Vector(*vert) for vert in fverts])
                             srf_windows.append(wndw_polygon)
-                            # window_construct = construction[fsurface['construction_name']]
-                            # wndw_mat = self.parse_wndw_cnstrct(window_construct)
-                            window_material = fsurface['construction_name']
+                            window_construct = construction[fsurface['construction_name']]
+                            window_material = self.parse_wndw_cnstrct(window_construct)
                             window_name = fn.replace(" ", "_")
                             zone['Window'][window_name] = ru.polygon2prim(
                                 wndw_polygon, window_material, window_name)
@@ -373,13 +372,13 @@ def main():
     parser.add_argument('fpath')
     parser.add_argument('-run', action='store_true', default=False)
     args = parser.parse_args()
-    kwargs = vars(args)
-    epjs = read_epjs(kwargs['fpath'])
+    epjs = read_epjs(args.fpath)
     radobj = epJSON2Rad(epjs)
     util.mkdir_p("Objects")
     util.mkdir_p("Resources")
     util.mkdir_p("Matrices")
-    with open(os.path.join("Objects", 'materials.mat'), 'w') as wtr:
+    material_path = f"{util.basename(args.fpath)}_materials.mat"
+    with open(os.path.join("Objects", material_path), 'w') as wtr:
         [wtr.write(str(val.primitive)) for val in radobj.mat_prims.values()]
     xml_paths = {}
     for key, val in radobj.matrices.items():
@@ -402,37 +401,45 @@ def main():
         scene_paths: List[str] = []
         window_paths: List[str] = []
         window_xml_paths: List[str] = []
-        for stype in zone:
+        floors: List[str] = []
+        for stype, surface in zone.items():
             if stype == 'Window':
-                for key, val in zone['Window'].items():
-                    _path = os.path.join("Objects", f"Window_{key}.rad")
-                    window_paths.append(f"Window_{key}.rad")
+                for key, val in surface.items():
+                    window_path = f"{key}.rad"
+                    _path = os.path.join("Objects", window_path)
+                    window_paths.append(window_path)
                     with open(_path, 'w') as wtr:
                         wtr.write(str(val))
                     if val.modifier in radobj.matrices:
                         window_xml_paths.append(os.path.basename(xml_paths[val.modifier]))
-            else:
-                _path = os.path.join("Objects", f"{stype}.rad")
-                for val in zone[stype].values():
-                    with open(_path, 'a') as wtr:
+            elif surface != {}:
+                _name = f"{zn}_{stype}.rad".replace(" ", "_")
+                _path = os.path.join("Objects", _name)
+                with open(_path, 'w') as wtr:
+                    for val in surface.values():
                         wtr.write(str(val))
-                if zone[stype] != {}:
-                    scene_paths.append(f"{stype}.rad")
+                scene_paths.append(_name)
+                if stype == "Floor":
+                    floors.append(_name)
+
         file_struct = {'base': os.getcwd(), 'objects': "Objects",
                        'matrices': "Matrices", 'resources': "Resources",
                        'results': "Results"}
-        model = {'material': 'materials.mat', 'scene': ' '.join(scene_paths),
+        model = {'material': material_path, 'scene': ' '.join(scene_paths),
                  'window_paths': ' '.join(window_paths),
                  'window_xml': ' '.join(window_xml_paths), 'window_cfs': '',
                  'window_control': ' '.join(map(str, range(len(window_xml_paths)))),
                  }
-        raysender = {'grid_surface': 'Floor.rad', 'grid_spacing': GRID_SPACING,
+        if len(floors) > 1:
+            logger.warning("More than one floor in this zone")
+        floor0 = floors[0]
+        raysender = {'grid_surface': floor0, 'grid_spacing': GRID_SPACING,
                      'grid_height': GRID_HEIGHT, 'view': ''}
         site = {'wea_path':'', 'latitude': radobj.site['latitude'],
                 'longitude':radobj.site['longitude'], 'zipcode':''}
         templ_config = {"File Structure": file_struct, "Site": site,
                         "Model": model, "Ray Sender": raysender}
-        if kwargs['run']:
+        if args.run:
             pass
             # mtxmtd = mm.MTXMethod(cfg)
         else:
