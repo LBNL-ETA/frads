@@ -19,7 +19,7 @@ class TestGenmtx(unittest.TestCase):
         wea_metadata, wea_data = makesky.epw2wea(
             epw.fname, dhour=True, shour=6, ehour=20,
             remove_zero=True, window_normal=window_normals)
-        cmd, wea_path = makesky.gendaymtx(
+        cmd, _ = makesky.gendaymtx(
             wea_data, wea_metadata, mf=6, direct=True, onesun=True)
         process = sp.run(cmd, stdout=sp.PIPE)
         with open('test.smx', 'wb') as wtr:
@@ -34,7 +34,6 @@ class TestGenmtx(unittest.TestCase):
         self.assertTrue(os.path.isdir("test_genmtx_sun_mtx"))
         self.assertEqual(len(glob.glob('test_genmtx_sun_mtx/*.hdr')), 555)
         shutil.rmtree("test_genmtx_sun_mtx")
-        os.remove(wea_path)
         os.remove('test.smx')
 
 
