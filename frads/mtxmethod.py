@@ -62,15 +62,16 @@ def get_wea(config, window_normals=None):
         else:
             remove_zero = True
             wea_name = util.basename(epw.fname) + '_d6.wea'
-        wea = makesky.epw2wea(
-            epw=epw_path, dh=config.daylight_hours_only,
-            sh=float(config.start_hour), eh=float(config.end_hour),
-            remove_zero=remove_zero, window_normals=window_normals
-        )
+        shour = None if config.start_hour == '' else float(config.start_hour)
+        ehour = None if config.end_hour == '' else float(config.end_hour)
+        wea_metadata, wea_data = makesky.epw2wea(
+            epw_path, dhour=config.daylight_hours_only, shour=shour,
+            ehour=ehour, remove_zero=remove_zero, window_normal=window_normals)
         wea_path = os.path.join(config.rsodir, wea_name)
         with open(wea_path, 'w') as wtr:
-            wtr.write(wea.wea)
-        datetime_stamps = wea.dt_string
+            wtr.write(wea_metadata.wea_header())
+            wtr.write('\n'.join(map(str, wea_data)))
+        datetime_stamps = [row.dt_string() for row in wea_data]
     return wea_path, datetime_stamps
 
 
@@ -566,10 +567,10 @@ def calc_2phase_pt(datetime_stamps, dsmx, smx, config):
 
 def calc_2phase_vu(datetime_stamps, dsmx, smx, config):
     """."""
-    logger.info("Computing for 3-phase image-based results")
+    logger.info("Computing for 2-phase image-based results")
     for view in dsmx:
         opath = os.path.join(config.resdir, f'view_{config.name}_{view}')
-        if os.path.os.path.isdir(opath):
+        if os.path.isdir(opath):
             shutil.rmtree(opath)
         util.sprun(
             imgmult(os.path.join(dsmx[view], '%04d.hdr'), smx, odir=opath))

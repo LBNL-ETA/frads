@@ -15,12 +15,12 @@ logger = logging.getLogger("frads.util")
 class MradConfig:
     name: str = ''
     vmx_basis: str = 'kf'
-    vmx_opt: str = '-ab 5 -ad 262144 -lw 1e-6'
+    vmx_opt: str = '-ab 5 -ad 65536 -lw 1e-5'
     fmx_basis: str = 'kf'
-    fmx_opt: str = '-ab 3 -ad 65536 -lw 1e-4'
+    fmx_opt: str = '-ab 3 -ad 65536 -lw 5e-5'
     smx_basis: str = 'r4'
     dmx_opt: str = '-ab 2 -ad 128 -c 5000'
-    dsmx_opt: str = '-ab 6 -ad 262144 -lw 1e-6'
+    dsmx_opt: str = '-ab 7 -ad 8196 -lw 5e-5'
     cdsmx_opt: str = '-ab 1'
     cdsmx_basis: str = 'r6'
     ray_count: int = 1
@@ -125,8 +125,8 @@ def parse_vu(vu_str: str) -> dict:
     vparser.add_argument('-va', type=float)
     vparser.add_argument('-vs', type=float)
     vparser.add_argument('-vl', type=float)
-    vparser.add_argument('-x', type=int, default=500)
-    vparser.add_argument('-y', type=int, default=500)
+    vparser.add_argument('-x', type=int)
+    vparser.add_argument('-y', type=int)
     vparser.add_argument('-vf', type=str)
     args, _ = vparser.parse_known_args(args_list)
     view_dict = vars(args)

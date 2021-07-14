@@ -1,7 +1,7 @@
 """Utility functions."""
 
 import argparse
-from typing import NamedTuple, List
+from typing import NamedTuple, List, Set
 from dataclasses import dataclass, field
 import glob
 import logging
@@ -210,6 +210,16 @@ def polygon2prim(polygon: radgeom.Polygon,
                  modifier: str, identifier: str) -> Primitive:
     """Generate a primitive from a polygon."""
     return Primitive(modifier, 'polygon', identifier, '0', polygon.to_real())
+
+
+def primitive_normal(primitive_paths: List[str]) -> Set[radgeom.Vector]:
+    """Return a set of normal vectors given a list of primitive paths."""
+    _primitives: List[Primitive] = []
+    _normals: List[radgeom.Vector]
+    for path in primitive_paths:
+        _primitives.extend(unpack_primitives(path))
+    _normals = [parse_polygon(prim.real_arg).normal() for prim in _primitives]
+    return set(_normals)
 
 
 def samp_dir(primlist: list) -> radgeom.Vector:

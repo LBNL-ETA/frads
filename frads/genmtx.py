@@ -6,7 +6,9 @@ TWang
 import argparse
 import logging
 import os
+from typing import Set, Union
 from frads import radmtx as rm
+from frads import radgeom
 from frads import radutil, util
 
 
@@ -63,6 +65,8 @@ def main():
     logger.addHandler(console_handler)
     assert len(args.receiver) == len(args.outpath)
     env = args.env
+    sender = None
+    outpath = None
     if args.octree is not None:
         env.extend(['-i', args.octree])
     # what's the sender
@@ -91,14 +95,18 @@ def main():
         full_modifier = False
         if args.sender_type != 'v':
             full_modifier = True
+        window_normals: Union[None, Set[radgeom.Vector]] = None
+        if args.wpths is not None:
+            window_normals = radutil.primitive_normal(args.wpths)
         receiver = rm.Receiver.as_sun(
-            basis=args.rs, smx_path=args.smx,
-            window_paths=args.wpths, full_mod=full_modifier)
+            basis=args.receiver_basis, smx_path=args.smx,
+            window_normals=window_normals, full_mod=full_modifier)
+        outpath = args.outpath[0]
     else:  # assuming multiple receivers
         rcvr_prims = []
         for path in args.receiver:
             rcvr_prims.extend(radutil.unpack_primitives(path))
-        modifiers = set([prim['modifier'] for prim in rcvr_prims])
+        modifiers = set([prim.modifier for prim in rcvr_prims])
         receiver = rm.Receiver(
             receiver='', basis=args.receiver_basis, modifier=None)
         for mod, op in zip(modifiers, args.outpath):
