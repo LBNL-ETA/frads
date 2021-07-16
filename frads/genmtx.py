@@ -7,6 +7,7 @@ import argparse
 import logging
 import os
 from typing import Set, Union
+import tempfile as tf
 from frads import radmtx as rm
 from frads import radgeom
 from frads import radutil, util
@@ -128,8 +129,17 @@ def main():
         logger.info('Suns are the receivers.')
         sun_oct = 'sun.oct'
         rm.rcvr_oct(receiver, env, sun_oct)
+        tempd = tf.mkdtemp()
+        mod_names = ["%04d" % (int(l[3:])-1)
+                     for l in receiver.modifier.splitlines()]
         rm.rcontrib(sender=sender, modifier=receiver.modifier, octree=sun_oct,
-                   out=outpath, opt=args.option)
+                   out=tempd, opt=args.option)
+        _files = [os.path.join(tempd, f) for f in sorted(os.listdir(tempd))
+                  if f.endswith('.hdr')]
+        util.mkdir_p(outpath)
+        for idx, val in enumerate(_files):
+            os.rename(val, os.path.join(outpath, mod_names[idx]+'.hdr'))
+
     else:
         res = rm.rfluxmtx(sender=sender, receiver=receiver, env=env, opt=args.option, out=outpath)
         if (outpath is not None) and (args.sender_type != 'v'):

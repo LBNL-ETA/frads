@@ -5,6 +5,7 @@ Routines for generating sky models
 import argparse
 import csv
 import datetime
+import logging
 import math
 import os
 import subprocess as sp
@@ -14,9 +15,11 @@ import urllib.request
 import urllib.error
 import ssl
 from frads import radutil, util, radgeom
-from typing import List, Union, Set, Tuple, NamedTuple
+from typing import List, Union, Set, NamedTuple
 
 LSEP = os.linesep
+
+logger = logging.getLogger("frads.makesky")
 
 class WeaMetaData(NamedTuple):
     city: str
@@ -113,10 +116,7 @@ class Gensun(object):
             Corresponding modifier strings
         """
 
-        if window_normals is not None:
-            win_norm = window_normals
-        else:
-            win_norm = [radgeom.Vector(0, -1, 0)]
+        win_norm = []
         if smx_path is not None:
             cmd = f"rmtxop -ff -c .3 .6 .1 -t {smx_path} "
             cmd += "| getinfo - | total -if5186 -t,"
@@ -124,24 +124,36 @@ class Gensun(object):
                     for i in sp.check_output(cmd, shell=True).split(b',')]
         else:
             dtot = [1] * self.runlen
-
         out_lines = []
         mod_str = []
-        for i in range(1, self.runlen):
-            dirs = radgeom.Vector(*self.rsrc.dir_calc(i))
-            _mod = 'sol'+str(i)
-            v = 0
-            if dtot[i - 1] > 0:
-                for norm in win_norm:
-                    if norm * dirs < 0:
-                        v = 1
-                        mod_str.append(_mod)
-                        break
-            line = f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} "
-            line += f"source sun 0 0 4 {dirs.z:.6g} {dirs.x:.6g} {dirs.z:.6g} 0.533"
-            out_lines.append(line)
-        # if mod_str[-1] != 'sol%s'%(self.runlen-1):
-            # mod_str.append('sol%s'%(self.runlen-1))
+        if window_normals is not None:
+            win_norm = window_normals
+            for i in range(1, self.runlen):
+                dirs = radgeom.Vector(*self.rsrc.dir_calc(i))
+                _mod = 'sol'+str(i)
+                v = 0
+                if dtot[i - 1] > 0:
+                    for norm in win_norm:
+                        if norm * dirs < 0:
+                            v = 1
+                            mod_str.append(_mod)
+                            break
+                line = f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} "
+                line += f"source sun 0 0 4 {dirs.z:.6g} {dirs.x:.6g} {dirs.z:.6g} 0.533"
+                out_lines.append(line)
+        else:
+            for i in range(1, self.runlen):
+                dirs = radgeom.Vector(*self.rsrc.dir_calc(i))
+                _mod = 'sol'+str(i)
+                v = 0
+                if dtot[i - 1] > 0:
+                    v = 1
+                    mod_str.append(_mod)
+                line = f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} "
+                line += f"source sun 0 0 4 {dirs.z:.6g} {dirs.x:.6g} {dirs.z:.6g} 0.533"
+                out_lines.append(line)
+        logger.debug(out_lines)
+        logger.debug(mod_str)
         return LSEP.join(out_lines), LSEP.join(mod_str)
 
 
