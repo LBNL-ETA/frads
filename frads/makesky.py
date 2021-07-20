@@ -88,7 +88,7 @@ def grndglow(basis='u') -> str:
 class Gensun(object):
     """Generate sun sources for matrix generation."""
 
-    def __init__(self, mf):
+    def __init__(self, mf: int):
         """."""
         self.runlen = 144 * mf**2 + 3
         self.rsrc = radutil.Reinsrc(mf)
