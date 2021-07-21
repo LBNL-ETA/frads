@@ -45,7 +45,7 @@ class TestGenmtx(unittest.TestCase):
         process = sp.run(cmd, stdout=sp.PIPE)
         with open('test.smx', 'wb') as wtr:
             wtr.write(process.stdout)
-        cmd = ["genmtx", '-vv', "-st", "v", "-s", "v1a.vf", "-r", "sun", "-rs", "r6",
+        cmd = ["genmtx", "-st", "v", "-s", "v1a.vf", "-r", "sun", "-rs", "r6",
                "-o", "test_genmtx_sun_mtx2", "-opt", "-ab 0",
                "-res", "8", "8", "-smx", 'test.smx']
         process = sp.run(cmd, stderr=sp.PIPE)
