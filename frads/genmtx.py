@@ -102,7 +102,6 @@ def main():
         receiver = rm.Receiver.as_sun(
             basis=args.receiver_basis, smx_path=args.smx,
             window_normals=window_normals, full_mod=full_modifier)
-        outpath = args.outpath[0]
     else:  # assuming multiple receivers
         rcvr_prims = []
         for path in args.receiver:
@@ -127,18 +126,19 @@ def main():
     # generate matrices
     if args.receiver[0] == 'sun':
         logger.info('Suns are the receivers.')
+        outpath = os.path.join(os.getcwd(), args.outpath[0])
         sun_oct = 'sun.oct'
         rm.rcvr_oct(receiver, env, sun_oct)
-        tempd = tf.mkdtemp()
-        mod_names = ["%04d" % (int(l[3:])-1)
-                     for l in receiver.modifier.splitlines()]
-        rm.rcontrib(sender=sender, modifier=receiver.modifier, octree=sun_oct,
-                   out=tempd, opt=args.option)
-        _files = [os.path.join(tempd, f) for f in sorted(os.listdir(tempd))
-                  if f.endswith('.hdr')]
-        util.mkdir_p(outpath)
-        for idx, val in enumerate(_files):
-            os.rename(val, os.path.join(outpath, mod_names[idx]+'.hdr'))
+        with tf.TemporaryDirectory(dir=os.getcwd()) as tempd:
+            mod_names = ["%04d" % (int(l[3:])-1)
+                         for l in receiver.modifier.splitlines()]
+            rm.rcontrib(sender=sender, modifier=receiver.modifier, octree=sun_oct,
+                       out=tempd, opt=args.option)
+            _files = [os.path.join(tempd, f) for f in sorted(os.listdir(tempd))
+                      if f.endswith('.hdr')]
+            util.mkdir_p(outpath)
+            for idx, val in enumerate(_files):
+                os.rename(val, os.path.join(outpath, mod_names[idx]+'.hdr'))
 
     else:
         res = rm.rfluxmtx(sender=sender, receiver=receiver, env=env, opt=args.option, out=outpath)
