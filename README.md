@@ -15,7 +15,13 @@ It also support EnergyPlus(>=9.3) integration with its new EMS module which allo
 
 ## Installation
 
-You can install _frads_ by entering the following command in your terminal/cmd/powershell:
+You can install official release of _frads_ by entering the following command in your terminal/cmd/powershell:
+
+```
+pip install frads
+```
+
+You can also install the latest from this Github repository using this command:
 
 ```
 pip install git+https://github.com/LBNL-ETA/frads.git
