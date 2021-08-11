@@ -2,16 +2,24 @@
 
 import argparse
 import math
+import logging
 import os
-import tempfile as tf
 import subprocess as sp
-import sys
 from frads import radutil, radgeom, util
-import math
 
 
-def main():
-    """Generate a BSDF for macroscopic systems."""
+"""
+TODO:
+    1. New feature for custom input period geometry
+    2. New feature for custom section drawing
+"""
+
+
+logger = logging.getLogger("frads")
+
+
+def get_parser():
+    """Get commandline argument parser."""
     parser = argparse.ArgumentParser()
     parser.add_argument('-blinds', nargs=3, type=float, metavar=('depth', 'spacing', 'angle'))
     parser.add_argument('-curve', default='')
@@ -24,9 +32,15 @@ def main():
     parser.add_argument('-window')
     parser.add_argument('-env')
     parser.add_argument('-o', default='default_blinds.rad')
+    return parser
+
+
+def main():
+    """Generate a BSDF for macroscopic systems."""
+    parser = get_parser()
     args = parser.parse_args()
     mat_prim = radutil.neutral_plastic_prim('void', 'blindmaterial', *args.m)
-    mat_prim_str = radutil.put_primitive(mat_prim)
+    mat_prim_str = str(mat_prim)
     if args.custom:
         # Custom periodic geometry
         pass
@@ -36,8 +50,8 @@ def main():
     elif args.window:
         primitves = radutil.unpack_primitives(args.window)
         env_primitives = radutil.unpack_primitives(args.env)
-        env_identifier = [prim['identifier'] for prim in env_primitives]
-        windows = [p for p in primitves if p['identifier'].startswith('window')]
+        env_identifier = [prim.identifier for prim in env_primitives]
+        windows = [p for p in primitves if p.identifier.startswith('window')]
         window = windows[0] # only take the first window primitive
         depth, spacing, angle = args.blinds
         movedown = depth * math.cos(math.radians(float(angle)))
@@ -46,18 +60,20 @@ def main():
         height, width, angle2negY, translate = radutil.analyze_window(window, window_movedown)
         xform_cmd = f'!xform -rz {math.degrees(angle2negY)} -rx -90 -t {translate.x} {translate.y} {translate.z} {args.env}\n'
         xform_cmd += f'!xform -rz {math.degrees(angle2negY)} -rx -90 -t {translate.x} {translate.y} {translate.z} {args.window}\n'
-        print(xform_cmd)
+        logger.info(xform_cmd)
         slat_cmd = radutil.gen_blinds(depth, width, height, spacing, angle, args.curve, movedown)
-        print(slat_cmd)
+        logger.info(slat_cmd)
         lower_bound = max(movedown, window_movedown)
         with open("tmp_blinds.rad", 'w') as wtr:
             wtr.write(mat_prim_str)
             wtr.write(xform_cmd)
             wtr.write(slat_cmd)
-        cmd = f"genBSDF -n 4 -f +b -c 500 +geom meter -dim {-width/2} {width/2} {-height/2} {height/2} -{lower_bound} 0 tmp_blinds.rad"
-        print(cmd)
-        _stdout = sp.run(cmd.split(), check=True, stdout=sp.PIPE).stdout.decode()
-        xml_name = "{}_blinds_{}_{}_{}.xml".format(window['identifier'], depth, spacing, angle)
+        cmd = ["genBSDF", "-n", "4", "-f", "+b", "-c", "500", "+geom", "meter", "-dim"]
+        cmd += [str(-width/2), str(width/2), str(-height/2), str(height/2)]
+        cmd += [str(-lower_bound), "0", "tmp_blinds.rad"]
+        logger.info(cmd)
+        _stdout = sp.run(cmd, check=True, stdout=sp.PIPE).stdout.decode()
+        xml_name = "{}_blinds_{}_{}_{}.xml".format(window.identifier, depth, spacing, angle)
         with open(xml_name, 'w') as wtr:
             wtr.write(_stdout)
         #move back
@@ -71,7 +87,7 @@ def main():
         result_primitives = radutil.parse_primitive(_stdout.decode().splitlines())
         result_primitives = [prim for prim in result_primitives if prim['identifier'] not in env_identifier]
         with open(args.o, 'w') as wtr:
-            [wtr.write(radutil.put_primitive(prim)) for prim in result_primitives]
+            [wtr.write(str(prim)) for prim in result_primitives]
     else:
         width = 10 # default blinds width
         height = 0.096 # default blinds height
@@ -90,8 +106,8 @@ def main():
         tmis = util.tmit2tmis(.38)
         glass_prim = radutil.glass_prim('void', 'glass1', tmis, tmis, tmis)
         glazing_polygon = radgeom.Polygon.rectangle3pts(pt1, pt2, pt3)
-        glazing_prim_str = radutil.put_primitive(glass_prim)
-        glazing_prim_str += radutil.put_primitive(radutil.polygon2prim(glazing_polygon, 'glass1', 'window'))
+        glazing_prim_str = str(glass_prim)
+        glazing_prim_str += str(radutil.polygon2prim(glazing_polygon, 'glass1', 'window'))
         with open("tmp_blinds.rad", 'w') as wtr:
             wtr.write(mat_prim_str)
             wtr.write(glazing_prim_str)
@@ -102,5 +118,3 @@ def main():
         with open(xml_name, 'w') as wtr:
             wtr.write(_stdout)
     os.remove("tmp_blinds.rad")
-
-

@@ -36,7 +36,7 @@ class TestGenmtx(unittest.TestCase):
         os.remove('test.smx')
 
     def test_sun_mtx2(self):
-        epw = makesky.getEPW("33.6","-112.4")
+        epw = makesky.getEPW("32.6056027", "-114.712143")
         wea_metadata, wea_data = makesky.epw2wea(
             epw.fname, dhour=True, shour=6, ehour=20,
             remove_zero=True)
@@ -52,7 +52,7 @@ class TestGenmtx(unittest.TestCase):
         print(process.stderr)
         self.assertEqual(process.stderr, b'')
         self.assertTrue(os.path.isdir("test_genmtx_sun_mtx2"))
-        self.assertEqual(len(glob.glob('test_genmtx_sun_mtx2/*.hdr')), 647)
+        self.assertEqual(len(glob.glob('test_genmtx_sun_mtx2/*.hdr')), 657)
         shutil.rmtree("test_genmtx_sun_mtx2")
         os.remove('test.smx')
 

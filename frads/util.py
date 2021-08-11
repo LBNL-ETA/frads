@@ -3,12 +3,47 @@ from dataclasses import dataclass, field
 import logging
 import math
 import os
+import re
+import ssl
 import subprocess as sp
+import time
+from typing import Dict, List, Optional, NamedTuple
+import urllib.error
+import urllib.request
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional
-from frads import radutil
+
 
 logger = logging.getLogger("frads.util")
+
+
+class PaneProperty(NamedTuple):
+    name: str
+    thickness: float
+    gtype: str
+    coated_side: str
+    wavelength: List[float]
+    transmittance: List[float]
+    reflectance_front: List[float]
+    reflectance_back: List[float]
+
+    def get_tf_str(self):
+        wavelength_tf = tuple(zip(self.wavelength, self.transmittance))
+        return '\n'.join([' '.join(map(str, pair)) for pair in wavelength_tf])
+
+    def get_rf_str(self):
+        wavelength_rf = tuple(zip(self.wavelength, self.reflectance_front))
+        return '\n'.join([' '.join(map(str, pair)) for pair in wavelength_rf])
+
+    def get_rb_str(self):
+        wavelength_rb = tuple(zip(self.wavelength, self.reflectance_back))
+        return '\n'.join([' '.join(map(str, pair)) for pair in wavelength_rb])
+
+
+class PaneRGB(NamedTuple):
+    measured_data: PaneProperty
+    coated_rgb: List[float]
+    glass_rgb: List[float]
+    trans_rgb: List[float]
 
 
 @dataclass
@@ -100,7 +135,6 @@ class MradConfig:
                         self.sun_cfs[wname] = os.path.join(self.objdir, _cfs)
                     else:
                         raise NameError("Unknow file type for dbsdf")
-
 
 
 def parse_vu(vu_str: str) -> dict:
@@ -207,37 +241,142 @@ def parse_idf(content: str) -> dict:
     return obj_dict
 
 
+def parse_optics(fpath):
+    """Read and parse an optics file."""
+    # enc = 'cp1250' #decoding needed to parse header
+    with open(fpath, errors='ignore') as rdr:
+        raw = rdr.read()
+    header_lines = [i for i in raw.splitlines() if i.startswith('{')]
+    if header_lines == []:
+        raise Exception('No header in optics file')
+    header = {}
+    for line in header_lines:
+        if line.strip().split("}")[-1] != "":
+            key = re.search("{(.*?)}", line).group(1).strip()
+            val = line.split("}")[-1].strip()
+            header[key] = val
+        elif line:
+            content = re.search("{(.*?)}", line).group(1).strip()
+            if content != "":
+                key = content.split(":")[0].strip()
+                val = content.split(":")[1].strip()
+                header[key] = val
+    name = header['Product Name'].replace(" ","_")
+    thickness = float(header['Thickness'])
+    gtype = header['Type']
+    coated_side = header["Coated Side"].lower()
+    data = [i.split() for i in raw.strip().splitlines() if not i.startswith('{')]
+    wavelength = [float(row[0]) for row in data]
+    transmittance = [float(row[1]) for row in data]
+    reflectance_front = [float(row[2]) for row in data]
+    reflectance_back = [float(row[3]) for row in data]
+    if header['Units, Wavelength Units'] == 'SI Microns': # um to nm
+        wavelength = [val * 1e3 for val in wavelength]
+    return PaneProperty(
+        name, thickness, gtype, coated_side, wavelength,
+        transmittance, reflectance_front, reflectance_back)
+
+
+def parse_igsdb_json(json_obj: dict):
+    name = json_obj['name'].replace(" ", "_")
+    gtype = json_obj['type']
+    coated_side = json_obj['coated_side'].lower()
+    thickness = json_obj['measured_data']['thickness']
+    spectral_data = json_obj['spectral_data']['spectral_data']
+
+    wavelength = []
+    transmittance = []
+    reflectance_front = []
+    reflectance_back = []
+
+    for row in spectral_data:
+        wavelength.append(row['wavelength'] * 1e3) # um to nm
+        transmittance.append(row['T'])
+        reflectance_front.append(row['Rf'])
+        reflectance_back.append(row['Rb'])
+    return PaneProperty(
+        name, thickness, gtype, coated_side, wavelength,
+        transmittance, reflectance_front, reflectance_back)
+
+
+def get_igsdb_json(igsdb_id, token, xml=False):
+    """Get igsdb data by igsdb_id"""
+    if token == None:
+        raise ValueError("Need IGSDB token")
+    url = "https://igsdb.lbl.gov/api/v1/products/{}"
+    if xml:
+        url += "/datafile"
+    header = {"Authorization": "Token "+token}
+    response = request(url.format(igsdb_id), header)
+    if response == '{"detail":"Not found."}':
+        raise ValueError("Unknown igsdb id: ", igsdb_id)
+    return response
+
+
+def spec2rgb(inp: str, cspace: str) -> list:
+    """Convert spectral data to RGB."""
+    color_primaries = {
+        'radiance': 'CIE_Radiance(i)', 'sharp': 'CIE_Sharp(i)',
+        'adobe': 'CIE_Adobe(i)', 'rimm': 'CIE_RIMM(i)',
+        '709': 'CIE_709(i)', 'p3': 'CIE_P3(i)', '2020': 'CIE_2020(i)'
+    }
+    primaries = color_primaries[cspace]
+    cmd1 = [
+        "rcalc", "-f", "cieresp.cal",
+        "-e", "ty=triy($1);$1=ty",
+        "-e", "$2=$2*trix($1);$3=$2*ty;$4=$2*triz($1)",
+        "-e", "cond=if($1-359,831-$1,-1)"
+    ]
+    cmd2 = [
+        "rcalc", "-f", "xyz_rgb.cal",
+        "-e", f"CIE_pri(i)={primaries}",
+        "-e", "$1=R($1,$2,$3);$2=G($1,$2,$3);$3=B($1,$2,$3)"
+    ]
+    proc = sp.run(cmd1, input=inp.encode(), check=True, stdout=sp.PIPE)
+    res = [row.split('\t') for row in proc.stdout.decode().splitlines()]
+    row_cnt = len(res)
+    avg_0 = sum([float(row[0]) for row in res])/row_cnt
+    avg_1 = sum([float(row[1]) for row in res])/row_cnt
+    avg_2 = sum([float(row[2]) for row in res])/row_cnt
+    avg_3 = sum([float(row[3]) for row in res])/row_cnt
+    XYZ = f"{avg_1/avg_0} {avg_2/avg_0} {avg_3/avg_0}"
+    proc2=  sp.run(cmd2, input=XYZ.encode(), stdout=sp.PIPE)
+    return proc2.stdout.decode().split()
+
+
+
+
 def unpack_idf(path: str) -> dict:
     """Read and parse and idf files."""
     with open(path, 'r') as rdr:
         return parse_idf(rdr.read())
 
 
-def idf2mtx(fname:str, section: list, out_dir: str=None) -> None:
-    """Converting bsdf data in idf format to Radiance format."""
-    out_dir = os.getcwd() if out_dir is None else out_dir
-    if not os.path.isdir(out_dir):
-        os.makedirs(out_dir)
-    for sec in section:
-        name = sec[0]
-        output_path = os.path.join(out_dir, "%s_%s.mtx" % (fname, name))
-        row_cnt = int(sec[1])
-        col_cnt = int(sec[2])
-        if sec[2] in radutil.BASIS_DICT:
-            _btdf_data = nest_list(list(map(float, sec[3:])), col_cnt)
-            lambdas = radutil.angle_basis_coeff(radutil.BASIS_DICT[sec[2]])
-            sdata = [list(map(lambda x, y: x * y, i, lambdas)) for i in _btdf_data]
-            with open(output_path, 'w') as wt:
-                header = '#?RADIANCE\nNCOMP=3\n'
-                header += 'NROWS=%d\nNCOLS=%d\n' % (row_cnt, col_cnt)
-                header += 'FORMAT=ascii\n\n'
-                wt.write(header)
-                for row in sdata:
-                    for val in row:
-                        string = '\t'.join(['%07.5f' % val] * 3)
-                        wt.write(string)
-                        wt.write('\t')
-                    wt.write('\n')
+# def idf2mtx(fname:str, section: list, out_dir: str=None) -> None:
+#     """Converting bsdf data in idf format to Radiance format."""
+#     out_dir = os.getcwd() if out_dir is None else out_dir
+#     if not os.path.isdir(out_dir):
+#         os.makedirs(out_dir)
+#     for sec in section:
+#         name = sec[0]
+#         output_path = os.path.join(out_dir, "%s_%s.mtx" % (fname, name))
+#         row_cnt = int(sec[1])
+#         col_cnt = int(sec[2])
+#         if sec[2] in radutil.BASIS_DICT:
+#             _btdf_data = nest_list(list(map(float, sec[3:])), col_cnt)
+#             lambdas = radutil.angle_basis_coeff(radutil.BASIS_DICT[sec[2]])
+#             sdata = [list(map(lambda x, y: x * y, i, lambdas)) for i in _btdf_data]
+#             with open(output_path, 'w') as wt:
+#                 header = '#?RADIANCE\nNCOMP=3\n'
+#                 header += 'NROWS=%d\nNCOLS=%d\n' % (row_cnt, col_cnt)
+#                 header += 'FORMAT=ascii\n\n'
+#                 wt.write(header)
+#                 for row in sdata:
+#                     for val in row:
+#                         string = '\t'.join(['%07.5f' % val] * 3)
+#                         wt.write(string)
+#                         wt.write('\t')
+#                     wt.write('\n')
 
 
 def nest_list(inp: list, col_cnt: int) -> List[list]:
@@ -270,7 +409,6 @@ def write_square_matrix(opath, sdata):
                 wt.write(string)
                 wt.write('\t')
             wt.write('\n')
-
 
 
 def parse_bsdf_xml(path: str) -> Optional[dict]:
@@ -347,7 +485,6 @@ def silent_remove(path):
         os.remove(path)
     except FileNotFoundError as e:
         logger.error(e)
-        pass
 
 
 def mkdir_p(path):
@@ -375,3 +512,27 @@ def spcheckout(cmd, inp=None):
     if proc.stderr != b'':
         logger.warning(proc.stderr)
     return proc.stdout
+
+
+def request(url, header):
+    user_agents = 'Mozilla/5.0 (Windows NT 6.1) '
+    user_agents += 'AppleWebKit/537.36 (KHTML, like Gecko) '
+    user_agents += 'Chrome/41.0.2228.0 Safari/537.3'
+    header['User-Agent'] = user_agents
+    request = urllib.request.Request(
+        url, headers=header
+    )
+    tmpctx = ssl.SSLContext()
+    raw = ''
+    for _ in range(3): # try 3 times
+        try:
+            with urllib.request.urlopen(request, context=tmpctx) as resp:
+                raw = resp.read().decode()
+                break
+        except urllib.error.HTTPError:
+            time.sleep(1)
+    if raw.startswith('404'):
+        raise Exception(urllib.error.URLError)
+    if raw == '':
+        raise ValueError("Empty return from request")
+    return raw

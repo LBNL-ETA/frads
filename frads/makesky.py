@@ -10,10 +10,6 @@ import math
 import os
 import subprocess as sp
 import tempfile as tf
-import time
-import urllib.request
-import urllib.error
-import ssl
 from frads import radutil, util, radgeom
 from typing import List, Union, Set, NamedTuple
 
@@ -43,6 +39,7 @@ class WeaDataRow(NamedTuple):
     day: int
     hour: int
     minute: int
+    second: int
     hours: float
     dni: float
     dhi: float
@@ -163,7 +160,6 @@ def epw2sunmtx(epw_path: str) -> str:
     with tf.NamedTemporaryFile() as wea:
         cmd = f"epw2wea {epw_path} {wea.name}"
         sp.call(cmd, shell=True)
-        # large file
         cmd = f"gendaymtx -od -u -m 6 -d -5 .533 {wea.name} > {smx_path}"
         sp.call(cmd, shell=True)
     return smx_path
@@ -189,6 +185,7 @@ def loc2sunmtx(basis, lat, lon, ele):
         cmd = f"gendaymtx -od -m 6 -u -d -5 .533 {wea.name} > {smx_path}"
         sp.call(cmd, shell=True)
     return smx_path
+
 
 def gendaymtx(data_entry: List[WeaDataRow], metadata: WeaMetaData,
               mf=4, direct=False, solar=False, onesun=False,
@@ -301,12 +298,14 @@ def parse_csv(csv_path, ftype='csv', dt_col="date_time",
 
 
 def sky_cont(mon, day, hrs, lat, lon, mer, dni, dhi,
-             year=None, grefl=.2, spect='0'):
+             year=None, grefl=.2, spect='0', rotate=None):
     out_str = f'!gendaylit {mon} {day} {hrs} '
     out_str += f'-a {lat} -o {lon} -m {mer} '
     if year is not None:
         out_str += f'-y {year} '
     out_str += f'-W {dni} {dhi} -g {grefl} -O {spect}{LSEP*2}'
+    if rotate is not None:
+        out_str += f"| xform -rz {rotate}"
     out_str += f'skyfunc glow skyglow 0 0 4 1 1 1 0{LSEP*2}'
     out_str += f'skyglow source sky 0 0 4 0 0 1 180{LSEP*2}'
     out_str += f'skyfunc glow groundglow 0 0 4 1 1 1 0{LSEP*2}'
@@ -353,21 +352,22 @@ def start_end_hour(data: list, sh: float, eh: float):
     return filter(filter_hour, data)
 
 
-def check_daylight(data, metadata):
+def check_sun_above_horizon(data, metadata):
     """Remove non-daylight hour entries."""
     def solar_altitude_check(row: WeaDataRow):
-        alt, _ = solar_angle(metadata.latitude, metadata.longitude, metadata.timezone,
-                             row.month, row.day, row.hours)
+        alt, _ = solar_angle(metadata.latitude, metadata.longitude,
+                             metadata.timezone, row.month,
+                             row.day, row.hours)
         return alt > 0
     return filter(solar_altitude_check, data)
 
-def remove_wea_zero_entry(data, metadata, window_normal=None):
-    """Remove data entries with zero solar luminance.
-    If window normal supplied, eliminate entries not seen by window.
-    Solar luminance determined using Treganza sky model.
-    Window field of view is 176 deg with 2 deg tolerance.
-    """
 
+def remove_wea_zero_entry(data, metadata, window_normal=None):
+    """Remove wea data entries with zero solar luminance.
+    If window normal supplied, eliminate entries not seen by window.
+    Solar luminance determined using Perez sky model.
+    Window field of view is 176 deg with 2 deg tolerance on each side.
+    """
     check_window_normal = True if window_normal is not None else False
     new_dataline = []
     zero_dni = lambda row: row.dni!=0
@@ -379,7 +379,6 @@ def remove_wea_zero_entry(data, metadata, window_normal=None):
         process = sp.run(cmd, stderr=sp.PIPE, stdout=sp.PIPE)
         primitives = radutil.parse_primitive(
             process.stdout.decode().splitlines())
-        light = 0
         if process.stderr == b'':
             light = float(primitives[0].real_arg.split()[2])
             dirs = radgeom.Vector(*list(map(float, primitives[1].real_arg.split()[1:4])))
@@ -393,126 +392,6 @@ def remove_wea_zero_entry(data, metadata, window_normal=None):
                     new_dataline.append(row)
     return new_dataline
 
-
-def epw2wea(epw_path,
-            dhour=False, shour=None, ehour=None,
-            remove_zero=False, window_normal=None):
-    """."""
-    metadata, data = parse_epw(epw_path)
-    if None not in (shour, ehour):
-        data = start_end_hour(data, shour, ehour)
-    if dhour:
-        data = check_daylight(data, metadata)
-    if remove_zero:
-        data = remove_wea_zero_entry(data, metadata,
-                                     window_normal=window_normal)
-    return metadata, list(data)
-
-
-
-
-# class epw2wea(object):
-#     """."""
-#
-#     def __init__(self, epw: str, dh=False, sh=None, eh=None,
-#                  remove_zero=False, window_normals=None):
-#         """."""
-#         self.epw = epw
-#         self.read_epw()  # read-in epw/tmy data
-#
-#         if sh > 0 and eh > 0:
-#             self.start_end_hour(sh, eh)
-#
-#         if dh:
-#             self.daylight()  # filter out non-daylight hours if asked
-#
-#         if remove_zero:
-#             self.remove_entries(window_normals=window_normals)
-#
-#         self.wea = self.header + '\n' + self.string
-#         self.dt_string = []
-#         for line in self.string.splitlines():
-#             entry = line.split()
-#             mo = int(entry[0])
-#             da = int(entry[1])
-#             hr = int(float(entry[2]))
-#             self.dt_string.append(f"{mo:02d}{da:02d}_{hr:02d}30")
-#
-#     def remove_entries(self, window_normals=None):
-#         """Remove data entries with zero solar luminance."""
-#         check_window_normal = True if window_normals is not None else False
-#         new_string = []
-#         for line in self.string.splitlines():
-#             items = line.split()
-#             cmd = f'gendaylit {items[0]} {items[1]} {items[2]} '
-#             cmd += f'-a {self.latitude} -o {self.longitude} '
-#             cmd += f'-m {self.tz} -W {items[3]} {items[4]}'
-#             process = sp.run(cmd.split(), stderr=sp.PIPE, stdout=sp.PIPE)
-#             primitives = radutil.parse_primitive(
-#                 process.stdout.decode().splitlines())
-#             light = 0
-#             if process.stderr == b'':
-#                 light = float(primitives[0].real_arg.split()[2])
-#                 dirs = radgeom.Vector(*list(map(float, primitives[1].real_arg.split()[1:4])))
-#                 if light > 0:
-#                     if check_window_normal:
-#                         for normal in window_normals:
-#                             if normal * dirs < -0.035:
-#                                 new_string.append(line)
-#                     else:
-#                         new_string.append(line)
-#         self.string = '\n'.join(new_string)
-#
-#     def solar_altitude_check(self, string_line: str):
-#         mon, day, hours = string_line.split()[:3]
-#         alt, _ = solar_angle(self.latitude, self.longitude, self.tz,
-#                              int(mon), int(day), float(hours))
-#         return alt > 0
-#
-#     def daylight(self):
-#         """."""
-#         string_line = self.string.splitlines()
-#         new_string = filter(self.solar_altitude_check, string_line)
-#         self.string = '\n'.join(new_string)
-#
-#     def start_end_hour(self, sh, eh):
-#         string_line = self.string.splitlines()
-#         def filter_hour(string_line):
-#             hour = string_line.split()[2]
-#             return sh <= float(hour) <= eh
-#         new_string = filter(filter_hour, string_line)
-#         self.string = "\n".join(new_string)
-#
-#     def read_epw(self):
-#         """."""
-#         with open(self.epw, 'r', newline=os.linesep) as epw:
-#             raw = epw.readlines()  # read-in epw content
-#         epw_header = raw[0].split(',')
-#         content = raw[8:]
-#         string = ""
-#         for li in content:
-#             line = li.split(',')
-#             month = int(line[1])
-#             day = int(line[2])
-#             hour = int(line[3]) - 1
-#             hours = hour + 0.5
-#             dir_norm = float(line[14])
-#             dif_hor = float(line[15])
-#             string += "%d %d %2.3f %.1f %.1f\n" \
-#                 % (month, day, hours, dir_norm, dif_hor)
-#         self.string = string
-#         city = epw_header[1]
-#         country = epw_header[3]
-#         self.latitude = float(epw_header[6])
-#         self.longitude = -1 * float(epw_header[7])
-#         self.tz = int(float(epw_header[8])) * (-15)
-#         elevation = epw_header[9].rstrip()
-#         self.header = "place {}_{}\n".format(city, country)
-#         self.header += "latitude {}\n".format(self.latitude)
-#         self.header += "longitude {}\n".format(self.longitude)
-#         self.header += "time_zone {}\n".format(self.tz)
-#         self.header += "site_elevation {}\n".format(elevation)
-#         self.header += "weather_data_file_units 1\n"
 
 def parse_epw(epw_path: str) -> tuple:
     """Parse epw file and return wea header and data."""
@@ -529,7 +408,7 @@ def parse_epw(epw_path: str) -> tuple:
         hours = hour + 0.5
         dir_norm = float(line[14])
         dif_hor = float(line[15])
-        data.append(WeaDataRow(month, day, hour, 30, hours, dir_norm, dif_hor))
+        data.append(WeaDataRow(month, day, hour, 30, 0, hours, dir_norm, dif_hor))
     city = epw_header[1]
     country = epw_header[3]
     latitude = float(epw_header[6])
@@ -538,6 +417,21 @@ def parse_epw(epw_path: str) -> tuple:
     elevation = float(epw_header[9].rstrip())
     meta_data = WeaMetaData(city, country, latitude, longitude, tz, elevation)
     return meta_data, data
+
+
+def epw2wea(epw_path,
+            dhour=False, shour=None, ehour=None,
+            remove_zero=False, window_normal=None):
+    """epw2wea with added filter."""
+    metadata, data = parse_epw(epw_path)
+    if None not in (shour, ehour):
+        data = start_end_hour(data, shour, ehour)
+    if dhour:
+        data = check_sun_above_horizon(data, metadata)
+    if remove_zero:
+        data = remove_wea_zero_entry(data, metadata,
+                                     window_normal=window_normal)
+    return metadata, list(data)
 
 
 class getEPW(object):
@@ -562,22 +456,7 @@ class getEPW(object):
         min_idx = distances.index(min(distances))
         url = urls[min_idx]
         epw_fname = os.path.basename(url)
-        user_agents = 'Mozilla/5.0 (Windows NT 6.1) '
-        user_agents += 'AppleWebKit/537.36 (KHTML, like Gecko) '
-        user_agents += 'Chrome/41.0.2228.0 Safari/537.3'
-        request = urllib.request.Request(
-            url, headers={'User-Agent': user_agents}
-        )
-        tmpctx = ssl.SSLContext()
-        raw = ''
-        for _ in range(3):
-            try:
-                with urllib.request.urlopen(request, context=tmpctx) as resp:
-                    raw = resp.read().decode()
-                    break
-            except urllib.error.HTTPError:
-                time.sleep(1)
-        assert not raw.startswith('404'), f'Bad URL:{url}'
+        raw = util.request(url, {})
         with open(epw_fname, 'w') as wtr:
             wtr.write(raw)
         self.fname = epw_fname

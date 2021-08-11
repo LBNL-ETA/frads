@@ -10,6 +10,7 @@ import os
 from frads import mtxmethod
 from frads import util
 
+
 logger = logging.getLogger('frads')
 
 
@@ -28,18 +29,28 @@ def initialize(args: argparse.Namespace) -> None:
     Args:
         args: argparse.Namespace
     """
-    cwd = os.getcwd()
-    file_struct = {'base': args.base, 'objects': args.objdir,
-                   'matrices': args.mtxdir, 'resources': args.rsodir,
-                   'results': args.resdir}
-    model = {'material': '', 'scene': '', 'window_paths': '',
-             'window_xml': '', 'window_cfs': ''}
-    raysender = {'grid_surface': args.grid[0], 'grid_spacing': args.grid[1],
-                 'grid_height': args.grid[2], 'view': ''}
     if (args.latlon == ('','')) and (args.wea_path == '') and (args.zipcode == ''):
         raise ValueError("Site not defined, use --wea_path | --latlon | --zipcode")
-    site = {'wea_path':args.wea_path, 'latitude': args.latlon[0],
-            'longitude':args.latlon[1], 'zipcode':args.zipcode}
+    cwd = os.getcwd()
+    file_struct = {
+        'base': args.base, 'objects': args.objdir,
+        'matrices': args.mtxdir, 'resources': args.rsodir,
+        'results': args.resdir
+    }
+    model = {
+        'material': '', 'scene': '', 'window_paths': '',
+        'window_xml': '', 'window_cfs': ''
+    }
+    raysender = {
+        'grid_surface': args.grid[0], 'grid_spacing': args.grid[1],
+        'grid_height': args.grid[2], 'view': ''
+    }
+    site = {
+        'wea_path':args.wea_path, 'latitude': args.latlon[0],
+        'longitude':args.latlon[1], 'zipcode':args.zipcode,
+        'start_hour': None, 'end_hour': None,
+        'daylight_hours_only': False
+    }
     object_pattern: str = args.object if args.object is not None else '.rad'
     window_pattern: str = args.window if args.window is not None else 'window*.rad'
     material_pattern: str = args.material if args.material is not None else '*.mat'
@@ -54,8 +65,8 @@ def initialize(args: argparse.Namespace) -> None:
         model['window_paths'] = ' '.join(window_files)
     else:
         logger.warning("No %s directory found at %s, making so",
-                       args.obj, args.base)
-        util.mkdir_p(os.path.join(args.base, args.obj))
+                       args.objdir, args.base)
+        util.mkdir_p(os.path.join(args.base, args.objdir))
     util.mkdir_p(os.path.join(args.base, args.mtxdir))
     util.mkdir_p(os.path.join(args.base, args.resdir))
     util.mkdir_p(os.path.join(args.base, args.rsodir))

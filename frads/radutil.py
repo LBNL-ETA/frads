@@ -5,6 +5,7 @@ from typing import NamedTuple, List, Set
 from dataclasses import dataclass, field
 import glob
 import logging
+import json
 import math
 import os
 import re
@@ -72,6 +73,7 @@ class Primitive(NamedTuple):
         output += f"{self.str_arg}\n{self.int_arg}\n{self.real_arg}\n"
         return output
 
+
 @dataclass
 class ScatteringData:
     sdata: List[List[float]]
@@ -89,7 +91,6 @@ class ScatteringData:
         element_divi = lambda x,y: x/y
         bsdf = [list(map(element_divi, i, lambdas)) for i in self.sdata]
         return BSDFData(bsdf)
-
 
     def __repr__(self) -> str:
         out = ''
@@ -701,37 +702,64 @@ def combine_mtx(mtxs, out_dir):
 
 def header_parser(header):
     """Parse for a matrix file header."""
-    nrow = int(re.search('NROWS=(.*)\n', header).group(1))
-    ncol = int(re.search('NCOLS=(.*)\n', header).group(1))
-    ncomp = int(re.search('NCOMP=(.*)\n', header).group(1))
-    return nrow, ncol, ncomp
+    nrow = int(re.search(b'NROWS=(.*)\n', header).group(1))
+    ncol = int(re.search(b'NCOLS=(.*)\n', header).group(1))
+    ncomp = int(re.search(b'NCOMP=(.*)\n', header).group(1))
+    dtype = re.search(b'FORMAT=(.*)', header).group(1)
+    return nrow, ncol, ncomp, dtype
 
 
 def mtx2nparray(datastr):
     """Convert Radiance 3-channel matrix file to numpy array."""
-    raw = datastr.split('\n\n')
+    raw = datastr.split(b'\n\n')
     header = raw[0]
-    nrow, ncol, ncomp = header_parser(header)
-    data = raw[1].splitlines()
-    rdata = np.array([i.split()[::ncomp] for i in data], dtype=float)
-    gdata = np.array([i.split()[1::ncomp] for i in data], dtype=float)
-    bdata = np.array([i.split()[2::ncomp] for i in data], dtype=float)
+    if not header.startswith(b"#?RADIANCE"):
+        raise ValueError("No header found")
+    nrow, ncol, ncomp, dtype = header_parser(header)
+    if dtype==b'ascii':
+        data = raw[1].splitlines()
+        rdata = np.array([i.split()[::ncomp] for i in data], dtype=float)
+        gdata = np.array([i.split()[1::ncomp] for i in data], dtype=float)
+        bdata = np.array([i.split()[2::ncomp] for i in data], dtype=float)
+    else:
+        if dtype==b'float':
+            data = np.frombuffer(raw[1], np.single).reshape(nrow, ncol*ncomp)
+        elif dtype==b'double':
+            data = np.frombuffer(raw[1], np.double).reshape(nrow, ncol*ncomp)
+        else:
+            raise ValueError("Unsupported data type %s" % dtype)
+        rdata = data[:, ::ncomp]
+        gdata = data[:, 1::ncomp]
+        bdata = data[:, 2::ncomp]
     assert len(bdata) == nrow
     assert len(bdata[0]) == ncol
     return rdata, gdata, bdata
 
 
 def smx2nparray(datastr):
-    raw = datastr.split('\n\n')
+    raw = datastr.split(b'\n\n')
     header = raw[0]
-    nrow, ncol, ncomp = header_parser(header)
-    data = [i.splitlines() for i in raw[1:] if i != '']
-    rdata = np.array([[i.split()[::ncomp][0] for i in row] for row in data],
-                     dtype=float)
-    gdata = np.array([[i.split()[1::ncomp][0] for i in row] for row in data],
-                     dtype=float)
-    bdata = np.array([[i.split()[2::ncomp][0] for i in row] for row in data],
-                     dtype=float)
+    if not header.startswith(b"#?RADIANCE"):
+        raise ValueError("No header found")
+    nrow, ncol, ncomp, dtype = header_parser(header)
+    if dtype==b'ascii':
+        data = [i.splitlines() for i in raw[1:] if i != b'']
+        rdata = np.array([[i.split()[::ncomp][0] for i in row] for row in data],
+                         dtype=float)
+        gdata = np.array([[i.split()[1::ncomp][0] for i in row] for row in data],
+                         dtype=float)
+        bdata = np.array([[i.split()[2::ncomp][0] for i in row] for row in data],
+                         dtype=float)
+    else:
+        if dtype==b'float':
+            data = np.frombuffer(b'\n\n'.join(raw[1:]), np.single).reshape(nrow, ncol*ncomp)
+        elif dtype==b'double':
+            data = np.frombuffer(b'\n\n'.join(raw[1:]), np.double).reshape(nrow, ncol*ncomp)
+        else:
+            raise ValueError("Unsupported data type %s" % dtype)
+        rdata = data[:, 0::ncomp]
+        gdata = data[:, 1::ncomp]
+        bdata = data[:, 2::ncomp]
     if ncol == 1:
         assert np.size(bdata, 1) == nrow
         assert np.size(bdata, 0) == ncol
@@ -751,11 +779,12 @@ def mtxmult(mtxs):
         return rmtxop(mtxs)
 
 
-def numpy_mtxmult(mtxs):
+def numpy_mtxmult(mtxs, weight=None):
     """Matrix multiplication with Numpy."""
-    resr = np.linalg.multi_dot([mat[0] for mat in mtxs]) * .265
-    resg = np.linalg.multi_dot([mat[1] for mat in mtxs]) * .67
-    resb = np.linalg.multi_dot([mat[2] for mat in mtxs]) * .065
+    weight = (47.4, 119.9, 11.6) if weight is None else weight
+    resr = np.linalg.multi_dot([mat[0] for mat in mtxs]) * weight[0]
+    resg = np.linalg.multi_dot([mat[1] for mat in mtxs]) * weight[1]
+    resb = np.linalg.multi_dot([mat[2] for mat in mtxs]) * weight[2]
     return resr + resg + resb
 
 
@@ -800,6 +829,36 @@ def analyze_window(window_prim, movedown):
     return height, width, angle2negY, translate
 
 
+def dctsnp():
+    """commandline program that performs matrix multiplication
+    using numpy."""
+    if not numpy_installed:
+        print("Numpy not installed")
+        return
+    aparser = argparse.ArgumentParser(
+        prog='dctsnp',
+        description='dctimestep but using numpy (non-image)')
+    aparser.add_argument('-m', '--mtx', required=True, nargs='+', help='scene matrix')
+    aparser.add_argument('-s', '--smx', required=True, help='sky matrix')
+    aparser.add_argument('-w', '--weight', type=float, default=None,
+                         nargs=3, help='RGB weights')
+    aparser.add_argument('-o', '--output', required=True, help='output path')
+    args = aparser.parse_args()
+    def mtx_parser(fpath):
+        if fpath.endswith('.xml'):
+            cmd = ['rmtxop', fpath]
+            raw = util.spcheckout(cmd)
+        else:
+            with open(fpath, 'rb') as rdr:
+                raw =rdr.read()
+        return mtx2nparray(raw)
+    npmtx = [mtx_parser(mtx) for mtx in args.mtx]
+    with open(args.smx, 'rb') as rdr:
+        npmtx.append(smx2nparray(rdr.read()))
+    result = numpy_mtxmult(npmtx, weight=args.weight)
+    np.savetxt(args.output, result)
+
+
 def varays():
     """Commandline utility program for generating circular fisheye rays."""
     aparser = argparse.ArgumentParser(
@@ -816,3 +875,87 @@ def varays():
     cmd += f"-vf {args.vf} | "
     cmd += radmtx.Sender.crop2circle(args.c, args.x)
     sp.run(cmd, shell=True)
+
+
+def get_glazing_primitive(panes: List[util.PaneRGB]) -> Primitive:
+    """Generate a BRTDfunc to represent a glazing system."""
+    if len(panes) > 2:
+        raise ValueError("Only double pane supported")
+    name = "+".join([pane.measured_data.name for pane in panes])
+    if len(panes) == 1:
+        str_arg = "10 sr_clear_r sr_clear_g sr_clear_b "
+        str_arg += "st_clear_r st_clear_g st_clear_b 0 0 0 glaze1.cal"
+        coated_real = "1" if panes[0].measured_data.coated_side == 'front' else "-1"
+        real_arg = f"19 0 0 0 0 0 0 0 0 0 {coated_real} "
+        real_arg += " ".join(map(str, panes[0].glass_rgb)) + " "
+        real_arg += " ".join(map(str, panes[0].coated_rgb)) + " "
+        real_arg += " ".join(map(str, panes[0].trans_rgb))
+    else:
+        s12t_rgb = panes[0].trans_rgb
+        s34t_rgb = panes[1].trans_rgb
+        if panes[0].measured_data.coated_side == 'back':
+            s2r_rgb=panes[0].coated_rgb
+            s1r_rgb=panes[0].glass_rgb
+        else: # front or neither side coated
+            s2r_rgb=panes[0].glass_rgb
+            s1r_rgb=panes[0].coated_rgb
+        if panes[1].measured_data.coated_side == 'back':
+            s4r_rgb = panes[1].coated_rgb
+            s3r_rgb= panes[1].glass_rgb
+        else: # front or neither side coated
+            s4r_rgb = panes[1].glass_rgb
+            s3r_rgb = panes[1].coated_rgb
+        str_arg = f"if(Rdot,cr(fr({s4r_rgb[0]}),ft({s34t_rgb[0]}),fr({s2r_rgb[0]})),"
+        str_arg += f"cr(fr({s1r_rgb[0]}),ft({s12t_rgb[0]}),ft({s3r_rgb[0]}))) \n"
+        str_arg += f"if(Rdot,cr(fr({s4r_rgb[1]}),ft({s34t_rgb[1]}),fr({s2r_rgb[1]})),"
+        str_arg += f"cr(fr({s1r_rgb[1]}),ft({s12t_rgb[1]}),fr({s3r_rgb[1]}))) \n"
+        str_arg += f"if(Rdot,cr(fr({s4r_rgb[2]}),ft({s34t_rgb[2]}),fr({s2r_rgb[2]})),"
+        str_arg += f"cr(fr({s1r_rgb[2]}),ft({s12t_rgb[2]}),fr({s3r_rgb[2]}))) \n"
+        str_arg += f"ft({s34t_rgb[0]})*ft({s12t_rgb[0]}) \n"
+        str_arg += f"ft({s34t_rgb[1]})*ft({s12t_rgb[1]}) \n"
+        str_arg += f"ft({s34t_rgb[2]})*ft({s12t_rgb[2]}) \n"
+        str_arg += "0 0 0 glaze2.cal"
+        real_arg = "9 0 0 0 0 0 0 0 0 0"
+    return Primitive("void", "BRTDfunc", name, str_arg, real_arg)
+
+def glaze():
+    """Command-line program for generating BRTDfunc for glazing system."""
+    aparser = argparse.ArgumentParser(
+        prog='glaze',
+        description='Generate BRTDfunc for a glazing system')
+    aparser.add_argument('-X', '--optics', nargs='+', help='Optics file path')
+    aparser.add_argument('-C', '--cspace', default='radiance', help='Color space to determine primaries')
+    aparser.add_argument('-D', '--igsdb', nargs="+", help='IGSDB json file path or ID')
+    aparser.add_argument('-T', '--token', help='IGSDB token')
+    args = aparser.parse_args()
+    if args.optics is not None:
+        panes = [util.parse_optics(fpath) for fpath in args.optics]
+    elif args.igsdb is not None:
+        panes = []
+        for item in args.igsdb:
+            if os.path.isfile(item):
+                with open(item, 'r') as rdr:
+                    json_obj = json.load(rdr)
+            elif item[0].isdigit():
+                if args.token is None:
+                    raise ValueError("Missing IGSDB token")
+                json_string = util.get_igsdb_json(item, args.token)
+                json_obj = json.loads(json_string)
+            else:
+                raise ValueError("Unknown IGSDB entry format")
+            panes.append(util.parse_igsdb_json(json_obj))
+    else:
+        raise ValueError("Need to specify either optics or igsdb file")
+    pane_rgb = []
+    for pane in panes:
+        tf_rgb = util.spec2rgb(pane.get_tf_str(), args.cspace)
+        rf_rgb = util.spec2rgb(pane.get_rf_str(), args.cspace)
+        rb_rgb = util.spec2rgb(pane.get_rb_str(), args.cspace)
+        if pane.coated_side == 'front':
+            coated_rgb = rf_rgb
+            glass_rgb = rb_rgb
+        else:
+            coated_rgb = rb_rgb
+            glass_rgb = rf_rgb
+        pane_rgb.append(util.PaneRGB(pane, coated_rgb, glass_rgb, tf_rgb))
+    print(get_glazing_primitive(pane_rgb))

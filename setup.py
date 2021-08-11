@@ -32,6 +32,8 @@ setuptools.setup(
                             'varays=frads.radutil:varays',
                             'genradroom=frads.room:genradroom',
                             'geombsdf=frads.geombsdf:main',
+                            'dctsnp=frads.radutil:dctsnp',
+                            'rglaze=frads.radutil:glaze',
                             ],
     }
 )
