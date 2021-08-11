@@ -219,20 +219,20 @@ gengrid
 
 dctsnp
 -------
-*dctsnp* can be used to multiply matrix similar to what the Radiance dctimestep program. Matrix multiplications are performed using Python numpy packages, which are based on BLAS linear algebra pacakges. Help and instruction can be found using -h flag::
+*dctsnp* can be used to multiply matrix similar to what the Radiance dctimestep program. Matrix multiplications are performed using Python numpy packages (meaning numpy required for this tool), which are based on BLAS linear algebra pacakges. Help and instruction can be found using -h flag::
 
    $ dctsnp -h
 
 .. program-output:: dctsnp -h
 
 
-glaze
+rglaze
 -------
 *glaze* produce the same output as the original .csh glaze interactive script that comes with the Radiance distro. This command-line program is not interactive; glass coating and coated-side are determined by input optic files or IGSDB json data. Help and instruction can be found using -h flag::
 
-   $ glaze -h
+   $ rglaze -h
 
-.. program-output:: glaze -h
+.. program-output:: rglaze -h
 
 
 eprad
