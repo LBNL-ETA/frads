@@ -19,12 +19,11 @@ class TestMrad(unittest.TestCase):
         os.remove("default.cfg")
 
     def test_1_init2(self):
-        cmd = ["mrad", "init", "-latlon", "37.72 -122.22"]
+        cmd = ["mrad", "init", "--latlon", "37.72", "-122.22"]
         process = sp.run(cmd, check=True, stderr=sp.PIPE)
         self.assertEqual(process.stderr, b'')
         self.assertTrue(os.path.isfile("default.cfg"))
         os.remove("default.cfg")
-
 
     def test_2_two_phase(self):
         cmd = ['mrad', '-vvvv', 'run', 'two_phase.cfg']
@@ -58,7 +57,6 @@ class TestMrad(unittest.TestCase):
         self.assertEqual(len(view_results), 4354)
         shutil.rmtree("Matrices")
         shutil.rmtree("Results")
-
 
 
 if __name__ == "__main__":
