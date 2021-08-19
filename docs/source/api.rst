@@ -24,6 +24,7 @@ radutil
 ---------
 .. module:: frads.radutil
 .. autofunction:: parse_primitive
+.. autofunction:: unpack_primitives
 .. autofunction:: samp_dir
 .. autofunction:: up_vector
 .. autofunction:: gen_grid
