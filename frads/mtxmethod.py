@@ -1,5 +1,8 @@
 """
 Typical Radiance matrix-based simulation workflows
+
+TODO:
+    1. all_material and blackenvpath causing rerunning hang, maybe move them to tmp
 """
 
 import logging
@@ -83,7 +86,6 @@ def gen_smx(wea_path, mfactor, outdir, onesun=False, direct=False):
     cmd = f"gendaymtx -of -m {mfactor[-1]}{sun_only}{_five}".split()
     cmd.append(wea_path)
     logger.info('Generating sku/sun matrix using command')
-    logger.info(' '.join(cmd))
     res = util.spcheckout(cmd)
     if direct:
         if onesun:
@@ -95,6 +97,7 @@ def gen_smx(wea_path, mfactor, outdir, onesun=False, direct=False):
     with open(smxpath, 'wb') as wtr:
         wtr.write(res)
     return smxpath
+
 
 def get_window_group(config: util.MradConfig) -> Tuple[dict, list]:
     window_groups = {}

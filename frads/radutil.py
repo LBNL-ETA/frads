@@ -850,7 +850,7 @@ def dctsnp():
             raw = util.spcheckout(cmd)
         else:
             with open(fpath, 'rb') as rdr:
-                raw =rdr.read()
+                raw = rdr.read()
         return mtx2nparray(raw)
     npmtx = [mtx_parser(mtx) for mtx in args.mtx]
     with open(args.smx, 'rb') as rdr:

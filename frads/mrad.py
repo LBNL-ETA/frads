@@ -32,6 +32,20 @@ def initialize(args: argparse.Namespace) -> None:
     if (args.latlon == ('','')) and (args.wea_path == '') and (args.zipcode == ''):
         raise ValueError("Site not defined, use --wea_path | --latlon | --zipcode")
     cwd = os.getcwd()
+    default_config = util.MradConfig()
+    sim_ctrl = {
+        'vmx_basis': default_config.vmx_basis,
+        'vmx_opt': default_config.vmx_opt,
+        'fmx_basis': default_config.fmx_basis,
+        'smx_basis': default_config.smx_basis,
+        'dmx_opt': default_config.dmx_opt,
+        'dsmx_opt': default_config.dsmx_opt,
+        'cdsmx_opt':  default_config.cdsmx_opt,
+        'cdsmx_basis':  default_config.cdsmx_basis,
+        'separate_direct':  default_config.separate_direct,
+        'overwrite':  default_config.overwrite,
+        'method':  default_config.method,
+    }
     file_struct = {
         'base': args.base, 'objects': args.objdir,
         'matrices': args.mtxdir, 'resources': args.rsodir,
@@ -39,7 +53,7 @@ def initialize(args: argparse.Namespace) -> None:
     }
     model = {
         'material': '', 'scene': '', 'window_paths': '',
-        'window_xml': '', 'window_cfs': ''
+        'window_xml': '', 'window_cfs': '', 'window_control': '',
     }
     raysender = {
         'grid_surface': args.grid[0], 'grid_spacing': args.grid[1],
@@ -71,7 +85,8 @@ def initialize(args: argparse.Namespace) -> None:
     util.mkdir_p(os.path.join(args.base, args.resdir))
     util.mkdir_p(os.path.join(args.base, args.rsodir))
     cfg = ConfigParser(allow_no_value=True)
-    templ_config = {"File Structure": file_struct, "Site": site,
+    templ_config = {"Simulation Control": sim_ctrl,
+                    "File Structure": file_struct, "Site": site,
                     "Model": model, "Ray Sender": raysender}
     cfg.read_dict(templ_config)
     os.chdir(cwd)

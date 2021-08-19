@@ -433,6 +433,19 @@ def epw2wea(epw_path,
                                      window_normal=window_normal)
     return metadata, list(data)
 
+def haversine(lat1:float, lat2:float, lon1:float, lon2:float) -> float:
+    """Calculate distance between two points on earth."""
+    earth_radius = 6371e3
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lam = math.radians(lon2 - lon1)
+    a = math.sin(delta_phi/2) * math.sin(delta_phi/2) + \
+        math.cos(phi1) * math.cos(phi2) * \
+        math.sin(delta_lam/2) * math.sin(delta_lam/2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return earth_radius * c
+
 
 class getEPW(object):
     """Download the closest EPW file from the given Lat and Lon."""
@@ -450,8 +463,9 @@ class getEPW(object):
         with open(self.epw_url_path, 'r') as rdr:
             csvreader = csv.DictReader(rdr, delimiter=',')
             for row in csvreader:
-                distances.append((float(row['Latitude']) - self.lat)**2
-                                 + (float(row['Longitude']) - self.lon)**2)
+                distances.append(haversine(
+                    float(row['Latitude']), self.lat,
+                    float(row['Longitude']), self.lon))
                 urls.append(row['URL'])
         min_idx = distances.index(min(distances))
         url = urls[min_idx]
@@ -460,6 +474,7 @@ class getEPW(object):
         with open(epw_fname, 'w') as wtr:
             wtr.write(raw)
         self.fname = epw_fname
+
 
     @classmethod
     def from_zip(cls, zipcode):

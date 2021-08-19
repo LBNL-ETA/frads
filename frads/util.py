@@ -499,7 +499,7 @@ def mkdir_p(path):
 
 def sprun(cmd):
     """Call subprocess run"""
-    logger.info(cmd)
+    logger.debug(cmd)
     proc = sp.run(cmd, check=True, stderr=sp.PIPE)
     if proc.stderr != b'':
         logger.warning(proc.stderr)
@@ -507,7 +507,7 @@ def sprun(cmd):
 
 def spcheckout(cmd, inp=None):
     """Call subprocess run and return results."""
-    logger.info(cmd)
+    logger.debug(cmd)
     proc = sp.run(cmd, input=inp, check=True, stderr=sp.PIPE, stdout=sp.PIPE)
     if proc.stderr != b'':
         logger.warning(proc.stderr)

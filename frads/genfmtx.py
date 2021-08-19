@@ -15,12 +15,12 @@ def genfmtx_args(parser):
     parser.add_argument('-ncp')
     parser.add_argument('-opt', type=str, default='-ab 1', help='Simulation parameters')
     parser.add_argument('-o', required=True, help='Output file path | directory')
-    parser.add_argument('-rs', required=True, choices=['kq','kh','r1','r2','r4','r6','kf'])
+    parser.add_argument('-rs', required=True, choices=['kf','r1','r2','r4','r6','sc*'])
     parser.add_argument('-ss', required=True, help='Sender sampling basis, kf|r1|r2|....')
-    parser.add_argument('-forw', action='store_true', help='Crop to circle?')
-    parser.add_argument('-refl', action='store_true', help='Crop to circle?')
-    parser.add_argument('-wrap', action='store_true', help='Crop to circle?')
-    parser.add_argument('-s', '--solar', action='store_true', help='Do solar calc')
+    parser.add_argument('-forw', action='store_true', help='Doing front direction?')
+    parser.add_argument('-refl', action='store_true', help='Doing reflection?')
+    parser.add_argument('-wrap', action='store_true', help='Produce an xml file instead?')
+    parser.add_argument('-s', '--solar', action='store_true', help='Do solar calc?')
     parser.add_argument('-env', nargs='+', default=[], help='Environment file paths')
     return parser
 
