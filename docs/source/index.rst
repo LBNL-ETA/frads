@@ -13,7 +13,7 @@ Intended audience:
 
 1) Developers who are interested in incorporating multi-phase matrix methods into their software and are seeking examples and guidance; i.e., LBNL-suggested default parameters and settings; and,
 
-2) Engineering firms and students who are comfortable working in the command-line environment and tasked with a project that cannot be completed with existing proprietary software.  
+2) Engineering firms and students who are comfortable working in the command-line environment and tasked with a project that cannot be completed with existing tools.  
 
 
 .. toctree::
