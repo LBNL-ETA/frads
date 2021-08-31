@@ -9,7 +9,7 @@ This is the repository for _frads_ development. Radiance is a free and open-sour
 
 ## Contact/ Support
 We welcome beta users of _frads_. Feel free to post questions and suggestions in the Discussion section of this GitHub site or contact the principal author at taoningwang@lbl.gov.
-Information about Radiance can be found at: https://www.radiance-online.org.
+Information about Radiance can be found at: https://www.radiance-online.org .
 The Radiance community is active and welcomes new users via the Radiance Discourse site or Unmet Hours.
 
 ## Testing
@@ -45,7 +45,7 @@ pip install git+https://github.com/LBNL-ETA/frads.git
 
 ## Reference
 
-Taoning Wang, “Frads: a python library for Radiance simulation control”, 2021 Radiance workshop, Bilbao, Spain, August 19, 2021, [ppt](https://www.radiance-online.org/community/workshops/2021-bilbao-spain-2/presentations/19_thursday/frads.pdf) , [voice recording](https://www.radiance-online.org/community/workshops/2021-bilbao-spain-2)
+Taoning Wang, "Frads: a python library for Radiance simulation control", 2021 Radiance workshop, Bilbao, Spain, August 19, 2021, [ppt](https://www.radiance-online.org/community/workshops/2021-bilbao-spain-2/presentations/19_thursday/frads.pdf) , [voice recording](https://www.radiance-online.org/community/workshops/2021-bilbao-spain-2)
 
 Wang, T., Ward, G., and Lee, E.S. (2021), A Python Library for Radiance Matrix-based Simulation Control and EnergyPlus Integration, Proceedings of Building Simulation 2021, International Building Performance Simulation Association, Bruges, September 1-3, 2021. Publication to be posted: [pdf](https://eta.lbl.gov/publications)
 
