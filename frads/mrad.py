@@ -65,7 +65,7 @@ def initialize(args: argparse.Namespace) -> None:
         'start_hour': None, 'end_hour': None,
         'daylight_hours_only': False
     }
-    object_pattern: str = args.object if args.object is not None else '.rad'
+    object_pattern: str = args.object if args.object is not None else '*.rad'
     window_pattern: str = args.window if args.window is not None else 'window*.rad'
     material_pattern: str = args.material if args.material is not None else '*.mat'
     if args.objdir in os.listdir(args.base):

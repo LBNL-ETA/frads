@@ -905,7 +905,7 @@ def get_glazing_primitive(panes: List[util.PaneRGB]) -> Primitive:
         else: # front or neither side coated
             s4r_rgb = panes[1].glass_rgb
             s3r_rgb = panes[1].coated_rgb
-        str_arg = f"if(Rdot,cr(fr({s4r_rgb[0]}),ft({s34t_rgb[0]}),fr({s2r_rgb[0]})),"
+        str_arg = f"10\nif(Rdot,cr(fr({s4r_rgb[0]}),ft({s34t_rgb[0]}),fr({s2r_rgb[0]})),"
         str_arg += f"cr(fr({s1r_rgb[0]}),ft({s12t_rgb[0]}),ft({s3r_rgb[0]}))) \n"
         str_arg += f"if(Rdot,cr(fr({s4r_rgb[1]}),ft({s34t_rgb[1]}),fr({s2r_rgb[1]})),"
         str_arg += f"cr(fr({s1r_rgb[1]}),ft({s12t_rgb[1]}),fr({s3r_rgb[1]}))) \n"
