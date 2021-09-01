@@ -34,7 +34,7 @@ pip install git+https://github.com/LBNL-ETA/frads.git
 ```
 
 ## To do
-- [x] 2-, 3-, 4-, and 5-phase methods implemented (image-based 5-phase not working on Windows, 4-phase to be tested)
+- [x] 2-, 3-, 4-, and 5-phase methods implemented (image-based 5-phase works on Windows by aggressive sun-culling, 4-phase to be tested)
 - [x] epJSON to Radiance workflow implemented (not fully tested), window puncher + wall thickener
 - [x] EnergyPlus Radiance runtime interaction preliminarily implemented
 - [ ] Automated window subdivision analysis
