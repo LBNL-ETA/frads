@@ -345,47 +345,44 @@ class Polygon:
         return cls([pt1, pt2, pt3, pt4])
 
 
-class Convexhull:
-    """Convex hull on coplanar points."""
+def convexhull(points: List[Vector], normal: Vector):
+    """Convex hull on coplanar points.
 
-    def __init__(self, points: List[Vector], normal: Vector):
-        """Convex hull on coplanar points.
-
-        Parameters:
-            points (list): list of Point;
-            normal (Vector): plane's normal
-        """
-        self.normal = normal
-        u = min(points, key=lambda p: p.x)
-        v = max(points, key=lambda p: p.x)
-        if u.__str__() == v.__str__():
-            u = min(points, key=lambda p: p.y)
-            v = max(points, key=lambda p: p.y)
-        left, right = self.toleft(u, v, points), self.toleft(v, u, points)
-        points = [v] + self.extend(u, v, left) + [u] + self.extend(v, u, right)
-        self.hull = Polygon(points)
-
-    def toleft(self, u, v, points):
+    Parameters:
+        points (list): list of Point;
+        normal (Vector): plane's normal
+    """
+    def toleft(u, v, points):
         """."""
         vect2 = v - u
         pts = []
         for p in points:
             vect1 = p - u
             cross_prod = vect1.cross(vect2)
-            cross_val = cross_prod * self.normal
+            cross_val = cross_prod * normal
             if cross_val < 0:
                 pts.append(p)
         return pts
 
-    def extend(self, u, v, points):
+    def extend_pts(u, v, points):
         """."""
         if not points:
             return []
 
         vect2 = v - u
-        w = min(points, key=lambda p: (p - u).cross(vect2) * self.normal)
-        p1, p2 = self.toleft(w, v, points), self.toleft(u, w, points)
-        return self.extend(w, v, p1) + [w] + self.extend(u, w, p2)
+        w = min(points, key=lambda p: (p - u).cross(vect2) * normal)
+        p1, p2 = toleft(w, v, points), toleft(u, w, points)
+        return extend_pts(w, v, p1) + [w] + extend_pts(u, w, p2)
+
+    u = min(points, key=lambda p: p.x)
+    v = max(points, key=lambda p: p.x)
+    if u.__str__() == v.__str__():
+        u = min(points, key=lambda p: p.y)
+        v = max(points, key=lambda p: p.y)
+    left, right = toleft(u, v, points), toleft(v, u, points)
+    points = [v] + extend_pts(u, v, left) + [u] + extend_pts(v, u, right)
+    return Polygon(points)
+
 
 def polygon_center(*polygons):
     """Calculate the center from polygons."""
@@ -405,31 +402,34 @@ def get_polygon_limits(polygon_list: list, offset=0.0):
     zmax = max(lim[5]) + offset
     return xmin, xmax, ymin, ymax, zmin, zmax
 
-def getbbox(polygon_list, offset=0.0):
-    """
+
+def getbbox(polygons: list, offset: float = 0.0):
+    """Get a bounding box for a list of polygons.
+
     Return a list of polygon that is the
     orthogonal bounding box of a list of polygon.
+
+    Args:
+        polygons: list of polygons
+        offset: make the box smaller or bigger
+
+    Returns:
+        A list of polygon that is the bounding box.
     """
     xmin, xmax, ymin, ymax, zmin, zmax = get_polygon_limits(
-        polygon_list, offset=offset)
-
+        polygons, offset=offset)
     fp1 = Vector(xmin, ymin, zmin)
     fp2 = Vector(xmax, ymin, zmin)
     fp3 = Vector(xmax, ymax, zmin)
     fpg = Polygon.rectangle3pts(fp1, fp2, fp3) #-Z
-
     cp1 = Vector(xmin, ymin, zmax)
     cp2 = Vector(xmax, ymin, zmax)
     cp3 = Vector(xmax, ymax, zmax)
     cpg = Polygon.rectangle3pts(cp3, cp2, cp1) #+Z
-
     swpg = Polygon.rectangle3pts(cp2, fp2, fp1) #-Y
-
     ewpg = Polygon.rectangle3pts(fp3, fp2, cp2) #+X
-
     s2n_vec = Vector(0, ymax - ymin, 0)
     nwpg = Polygon([v + s2n_vec for v in swpg.vertices]).flip() #+Y
-
     e2w_vec = Vector(xmax - xmin, 0, 0)
     wwpg = Polygon([v - e2w_vec for v in ewpg.vertices]).flip() #-X
 

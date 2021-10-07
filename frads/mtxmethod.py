@@ -12,7 +12,7 @@ import shutil
 import subprocess as sp
 import tempfile as tf
 from typing import NamedTuple, List, Dict, Tuple
-from frads import radutil, radgeom, radmtx, makesky, mfacade, util
+from frads import radutil, radgeom, radmtx, makesky, mfacade, mtxmult, util
 
 
 logger = logging.getLogger('frads.mtxmethod')
@@ -46,35 +46,43 @@ def get_wea(config, window_normals=None):
     else:
         if config.zipcode != '':
             logger.info('Downloading EPW file using zipcode.')
-            epw = makesky.getEPW.from_zip(config.zipcode)
+            lat, lon = util.get_latlon_from_zipcode(config.zipcode)
+            epw_fname, url = util.get_epw_url(lat, lon)
         elif '' not in (config.latitude, config.longitude):
             logger.info('Downloading EPW file using lat&lon.')
-            epw = makesky.getEPW(config.latitude, config.longitude)
+            epw_fname, url = util.get_epw_url(
+                float(config.latitude), float(config.longitude))
         else:
             raise NameError("Not site info defined")
-        logger.info("Downloaded: %s", epw.fname)
-        epw_path = os.path.join(config.rsodir, epw.fname)
-        try:
-            os.rename(epw.fname, epw_path)
-        except FileExistsError as fee:
-            logger.info(fee)
+        epw_str = util.request(url, {})
+        logger.info("Downloaded: %s", epw_fname)
         logger.info('Converting EPW to a .wea file')
         if window_normals is None:
             remove_zero = False
-            wea_name = util.basename(epw.fname) + '.wea'
+            wea_name = util.basename(epw_fname) + '.wea'
         else:
             remove_zero = True
-            wea_name = util.basename(epw.fname) + '_d6.wea'
-        shour = None if config.start_hour == '' else float(config.start_hour)
-        ehour = None if config.end_hour == '' else float(config.end_hour)
-        wea_metadata, wea_data = makesky.epw2wea(
-            epw_path, dhour=config.daylight_hours_only, shour=shour,
-            ehour=ehour, remove_zero=remove_zero, window_normal=window_normals)
+            wea_name = util.basename(epw_fname) + '_d6.wea'
+        wea_metadata, wea_data = makesky.parse_epw(epw_str)
+        if (config.start_hour != '') and (config.end_hour != ''):
+            wea_data = makesky.start_end_hour(
+                wea_data, config.start_hour, config.end_hour)
+        if config.daylight_hours_only:
+            wea_data = makesky.check_sun_above_horizon(wea_data, wea_metadata)
+        if remove_zero:
+            wea_data = makesky.remove_wea_zero_entry(
+                wea_data, wea_metadata, window_normals)
         wea_path = os.path.join(config.rsodir, wea_name)
+        datetime_stamps = []
+        data_str = []
+        for row in list(wea_data):
+            datetime_stamps.append(row.dt_string())
+            data_str.append(str(row))
+        if data_str == []:
+            raise ValueError("Empty wea file")
         with open(wea_path, 'w') as wtr:
             wtr.write(wea_metadata.wea_header())
-            wtr.write('\n'.join(map(str, wea_data)))
-        datetime_stamps = [row.dt_string() for row in wea_data]
+            wtr.write('\n'.join(data_str))
     return wea_path, datetime_stamps
 
 
@@ -109,6 +117,7 @@ def get_window_group(config: util.MradConfig) -> Tuple[dict, list]:
             _window_primitives[0].real_arg).normal()
         window_normals.append(_normal)
     return window_groups, window_normals
+
 
 def get_sender_grid(config: util.MradConfig) -> dict:
     """."""
@@ -192,26 +201,26 @@ def assemble_model(config: util.MradConfig) -> Model:
                  _cfs_path, _blackenvpath)
 
 
-def mtxmult(*mtx):
-    """Multiply matrices using rmtxop, convert to photopic, remove header."""
-    cmd1 = ['dctimestep', '-od'] + list(mtx)
-    cmd2 = ['rmtxop', '-fa', '-c', '47.4', '119.9', '11.6', '-', '-t']
-    cmd3 = ['getinfo', '-']
-    out1 = sp.Popen(cmd1, stdout=sp.PIPE)
-    out2 = sp.Popen(cmd2, stdin=out1.stdout, stdout=sp.PIPE)
-    out1.stdout.close()
-    out3 = sp.Popen(cmd3, stdin=out2.stdout, stdout=sp.PIPE)
-    out2.stdout.close()
-    out = out3.communicate()[0]
-    return out
-
-
-def imgmult(*mtx, odir):
-    """Image-based matrix multiplication using dctimestep."""
-    util.mkdir_p(odir)
-    cmd = ['dctimestep', '-oc', '-o', os.path.join(odir, '%04d.hdr')]
-    cmd += list(mtx)
-    return cmd
+# def mtxmult(*mtx):
+#     """Multiply matrices using rmtxop, convert to photopic, remove header."""
+#     cmd1 = ['dctimestep', '-od'] + list(mtx)
+#     cmd2 = ['rmtxop', '-fa', '-c', '47.4', '119.9', '11.6', '-', '-t']
+#     cmd3 = ['getinfo', '-']
+#     out1 = sp.Popen(cmd1, stdout=sp.PIPE)
+#     out2 = sp.Popen(cmd2, stdin=out1.stdout, stdout=sp.PIPE)
+#     out1.stdout.close()
+#     out3 = sp.Popen(cmd3, stdin=out2.stdout, stdout=sp.PIPE)
+#     out2.stdout.close()
+#     out = out3.communicate()[0]
+#     return out
+#
+#
+# def imgmult(*mtx, odir):
+#     """Image-based matrix multiplication using dctimestep."""
+#     util.mkdir_p(odir)
+#     cmd = ['dctimestep', '-oc', '-o', os.path.join(odir, '%04d.hdr')]
+#     cmd += list(mtx)
+#     return cmd
 
 
 def prep_2phase_pt(model, config):
@@ -335,7 +344,7 @@ def facade_matrix(model, config, direct=False):
     for ncppath in config.ncppath:
         name = util.basename(ncppath)
         ncp_prims[name] = radutil.unpack_primitives(ncppath)
-    all_ncp_prims = [prim for key, prim in ncp_prims.items()]
+    all_ncp_prims = [prim for _, prim in ncp_prims.items()]
     all_window_prims = [prim for key, prim in model.window_groups.items()]
     port_prims = mfacade.genport(wpolys=all_window_prims, npolys=all_ncp_prims,
                                  depth=None, scale=None)
@@ -374,7 +383,8 @@ def daylight_matrix(sender_prims, model, config, direct=False):
             prim_list=surface_primitives, basis=config.vmx_basis)
         if not os.path.isfile(dmxs[sname]) or config.overwrite:
             logger.info("Generating daylight matrix for %s", _name)
-            dmx_res = radmtx.rfluxmtx(sender=sndr_window, receiver=model.receiver_sky,
+            dmx_res = radmtx.rfluxmtx(sender=sndr_window,
+                                      receiver=model.receiver_sky,
                                       env=_env, out=None, opt=_opt)
             with open(dmxs[sname], 'wb') as wtr:
                 wtr.write(dmx_res)
@@ -420,7 +430,7 @@ def calc_4phase_pt(model, vmx, fmx, dmx, smx, datetime_stamps, config):
         with open(fdmx_path, 'wb') as wtr:
             wtr.write(fdmx_res)
         for wname in model.window_groups:
-            _res = mtxmult(vmx[wname], config.klems_bsdfs[wname], fmx[wname],
+            _res = mtxmult.mtxmult(vmx[wname], config.klems_bsdfs[wname], fmx[wname],
                            dmx[wname], smx).splitlines()
             presl.append([map(float, l.decode().strip().split('\t'))
                           for l in _res])
@@ -430,6 +440,7 @@ def calc_4phase_pt(model, vmx, fmx, dmx, smx, datetime_stamps, config):
             for idx, val in enumerate(res):
                 wtr.write(datetime_stamps[idx] + ',')
                 wtr.write(','.join(map(str, val)) + '\n')
+
 
 def prep_4phase_pt(model, config, direct=False):
     """Prepare matrices using four-phase methods for point-based calculation."""
@@ -470,21 +481,23 @@ def direct_sun_matrix_pt(model, smx_path, config):
         path to resulting direct sun matrix
     """
 
-    logger.info(f"Direct sun matrix for sensor grid")
+    logger.info("Direct sun matrix for sensor grid")
     rcvr_sun = radmtx.Receiver.as_sun(
-        basis='r6', smx_path=smx_path, window_normals=model.window_normals, full_mod=True)
+        basis='r6', smx_path=smx_path,
+        window_normals=model.window_normals, full_mod=True)
     sun_oct = os.path.join(config.rsodir, 'sun.oct')
     cdsenv = [model.material_path, model.blackenvpath] + model.cfs_paths
     radmtx.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
     pcdsmx = {}
     for grid_name, sender_grid in model.sender_grid.items():
-        pcdsmx[grid_name] = os.path.join(config.mtxdir, f'pcdsmx_{grid_name}.mtx')
+        pcdsmx[grid_name] = os.path.join(
+            config.mtxdir, f'pcdsmx_{grid_name}.mtx')
         if not os.path.isfile(pcdsmx[grid_name]) or config.overwrite:
-            logger.info(f"Generating using rcontrib...")
+            logger.info("Generating using rcontrib...")
             radmtx.rcontrib(sender=sender_grid, modifier=rcvr_sun.modifier,
-                            octree=sun_oct, out=pcdsmx[grid_name], opt=config.cdsmx_opt)
+                            octree=sun_oct, out=pcdsmx[grid_name],
+                            opt=config.cdsmx_opt)
     return pcdsmx
-
 
 
 def direct_sun_matrix_vu(model, smx_path, vmap_oct, cdmap_oct, config):
@@ -494,11 +507,11 @@ def direct_sun_matrix_vu(model, smx_path, vmap_oct, cdmap_oct, config):
     Returns:
         path to resulting direct sun matrix
     """
-    logger.info(f"Generating image-based direct sun matrix")
+    logger.info("Generating image-based direct sun matrix")
     rcvr_sun = radmtx.Receiver.as_sun(
         basis='r6', smx_path=smx_path, window_normals=model.window_normals)
-    mod_names = ["%04d" % (int(l[3:])-1)
-                 for l in rcvr_sun.modifier.splitlines()]
+    mod_names = ["%04d" % (int(line[3:])-1)
+                 for line in rcvr_sun.modifier.splitlines()]
     sun_oct = os.path.join(config.rsodir, 'sun.oct')
     cdsenv = [model.material_path, model.blackenvpath] + model.cfs_paths
     radmtx.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
@@ -556,16 +569,20 @@ def direct_sun_matrix_vu(model, smx_path, vmap_oct, cdmap_oct, config):
     return vcdfmx, vcdrmx, vmap_paths, cdmap_paths
 
 
-def calc_2phase_pt(datetime_stamps, dsmx, smx, config):
+def calc_2phase_pt(model, datetime_stamps, dsmx, smx, config):
     """."""
     logger.info("Computing for 2-phase sensor grid results.")
     for grid_name in dsmx:
-        opath = os.path.join(config.resdir, f'grid_{config.name}_{grid_name}.txt')
-        res = mtxmult(dsmx[grid_name], smx).splitlines()
+        grid_lines = model.sender_grid[grid_name].sender.decode().strip().splitlines()
+        xypos = [",".join(line.split()[:3]) for line in grid_lines]
+        opath = os.path.join(
+            config.resdir, f'grid_{config.name}_{grid_name}.txt')
+        res = mtxmult.mtxmult(dsmx[grid_name], smx).splitlines()
         with open(opath, 'w') as wtr:
+            wtr.write("\t"+"\t".join(xypos)+"\n")
             for idx, _ in enumerate(res):
                 wtr.write(datetime_stamps[idx] + '\t')
-                wtr.write(res[idx].decode() + '\n')
+                wtr.write(res[idx].decode().rstrip() + '\n')
 
 
 def calc_2phase_vu(datetime_stamps, dsmx, smx, config):
@@ -576,7 +593,7 @@ def calc_2phase_vu(datetime_stamps, dsmx, smx, config):
         if os.path.isdir(opath):
             shutil.rmtree(opath)
         util.sprun(
-            imgmult(os.path.join(dsmx[view], '%04d.hdr'), smx, odir=opath))
+            mtxmult.imgmult(os.path.join(dsmx[view], '%04d.hdr'), smx, odir=opath))
         ofiles = [os.path.join(opath, f) for f in sorted(os.listdir(opath))
                   if f.endswith('.hdr')]
         for idx, val in enumerate(ofiles):
@@ -589,10 +606,14 @@ def calc_3phase_pt(model, datetime_stamps, vmx, dmx, smx, config):
     for grid_name in model.sender_grid:
         presl = []
         for wname in model.window_groups:
-            _res = mtxmult(vmx[grid_name+wname], config.klems_bsdfs[wname],
-                           dmx[wname], smx).splitlines()
-            presl.append([map(float, line.decode().strip().split('\t'))
-                          for line in _res])
+            _res = mtxmult.mtxmult(vmx[grid_name+wname], config.klems_bsdfs[wname],
+                           dmx[wname], smx)
+            if isinstance(_res, bytes):
+                _res = _res.splitlines()
+                presl.append([map(float, line.decode().strip().split('\t'))
+                              for line in _res])
+            else:
+                presl.append(_res.T.tolist())
         res = [[sum(tup) for tup in zip(*line)] for line in zip(*presl)]
         respath = os.path.join(config.resdir, f'grid_{config.name}_{grid_name}.txt')
         with open(respath, 'w') as wtr:
@@ -613,14 +634,14 @@ def calc_3phase_vu(model, datetime_stamps, vmx, dmx, smx, config):
         for wname in model.window_groups:
             _vrespath = os.path.join(config.resdir, f'{view}_{wname}')
             util.mkdir_p(_vrespath)
-            cmd = imgmult(vmx[view+wname], config.klems_bsdfs[wname],
+            cmd = mtxmult.imgmult(vmx[view+wname], config.klems_bsdfs[wname],
                           dmx[wname], smx, odir=_vrespath)
             util.sprun(cmd)
             vresl.append(_vrespath)
         if len(vresl) > 1:
             for i in range(1, len(vresl)):
                 vresl.insert(i*2-1, '+')
-            radutil.pcombop(vresl, opath)
+            mtxmult.pcombop(vresl, opath)
             for path in vresl:
                 if path != '+':
                     shutil.rmtree(path)
@@ -641,12 +662,12 @@ def calc_5phase_pt(model, vmx, vmxd, dmx, dmxd, pcdsmx,
     for grid_name in model.sender_grid:
         presl = []
         pdresl = []
-        mult_cds = mtxmult(pcdsmx[grid_name], smx_sun)
+        mult_cds = mtxmult.mtxmult(pcdsmx[grid_name], smx_sun)
         prescd = [list(map(float, l.decode().strip().split('\t')))
                   for l in mult_cds.splitlines()]
         for wname in model.window_groups:
-            _res = mtxmult(vmx[grid_name+wname], config.klems_bsdfs[wname], dmx[wname], smx)
-            _resd = mtxmult(
+            _res = mtxmult.mtxmult(vmx[grid_name+wname], config.klems_bsdfs[wname], dmx[wname], smx)
+            _resd = mtxmult.mtxmult(
                 vmxd[grid_name+wname], config.klems_bsdfs[wname], dmxd[wname], smxd)
             presl.append([map(float, l.decode().strip().split('\t'))
                           for l in _res.splitlines()])
@@ -676,16 +697,16 @@ def calc_5phase_vu(model, vmx, vmxd, dmx, dmxd, vcdrmx, vcdfmx,
             vrescdf = tf.mkdtemp(dir=td)
             vrescd = tf.mkdtemp(dir=td)
             cmds = []
-            cmds.append(imgmult(os.path.join(vcdrmx[view], '%04d.hdr'),
+            cmds.append(mtxmult.imgmult(os.path.join(vcdrmx[view], '%04d.hdr'),
                                 smx_sun, odir=vrescdr))
-            cmds.append(imgmult(os.path.join(vcdfmx[view], '%04d.hdr'),
+            cmds.append(mtxmult.imgmult(os.path.join(vcdfmx[view], '%04d.hdr'),
                                 smx_sun, odir=vrescdf))
             for wname in model.window_groups:
                 _vrespath = tf.mkdtemp(dir=td)
                 _vdrespath = tf.mkdtemp(dir=td)
-                cmds.append(imgmult(vmx[view+wname], config.klems_bsdfs[wname],
+                cmds.append(mtxmult.imgmult(vmx[view+wname], config.klems_bsdfs[wname],
                                     dmx[wname], smx, odir=_vrespath))
-                cmds.append(imgmult(vmxd[view+wname], config.klems_bsdfs[wname],
+                cmds.append(mtxmult.imgmult(vmxd[view+wname], config.klems_bsdfs[wname],
                                     dmxd[wname], smxd, odir=_vdrespath))
                 vresl.append(_vrespath)
                 vdresl.append(_vdrespath)
@@ -699,17 +720,17 @@ def calc_5phase_vu(model, vmx, vmxd, dmx, dmxd, vcdrmx, vcdfmx,
             if len(model.window_groups) > 1:
                 [vresl.insert(i*2-1, '+') for i in range(1, len(vresl))]
                 [vdresl.insert(i*2-1, '+') for i in range(1, len(vdresl))]
-                radutil.pcombop(
+                mtxmult.pcombop(
                     vresl, res3, nproc=int(config.nprocess))
-                radutil.pcombop(
+                mtxmult.pcombop(
                     vdresl, res3di, nproc=int(config.nprocess))
             else:
                 os.rename(vresl[0], res3)
                 os.rename(vdresl[0], res3di)
             logger.info("Applying mapterial reflectance map")
-            radutil.pcombop([res3di, '*', vmap_paths[view]],
+            mtxmult.pcombop([res3di, '*', vmap_paths[view]],
                             res3d, nproc=int(config.nprocess))
-            radutil.pcombop([vrescdr, '*', cdmap_paths[view], '+', vrescdf],
+            mtxmult.pcombop([vrescdr, '*', cdmap_paths[view], '+', vrescdf],
                             vrescd, nproc=int(config.nprocess))
             opath = os.path.join(config.resdir, f"view_{config.name}_{view}")
             if os.path.os.path.isdir(opath):
@@ -746,8 +767,10 @@ def two_phase(model, config):
     smx = gen_smx(wea_path, config.smx_basis, config.mtxdir)
     pdsmx = prep_2phase_pt(model, config)
     vdsmx = prep_2phase_vu(model, config)
-    calc_2phase_pt(datetime_stamps, pdsmx, smx, config)
-    calc_2phase_vu(datetime_stamps, vdsmx, smx, config)
+    if not config.no_multiply:
+        calc_2phase_pt(model, datetime_stamps, pdsmx, smx, config)
+        calc_2phase_vu(datetime_stamps, vdsmx, smx, config)
+    return pdsmx, vdsmx
 
 
 def three_phase(model, config, direct=False):
@@ -773,14 +796,16 @@ def three_phase(model, config, direct=False):
                                 model, config, direct=True)
         pvmxsd = view_matrix_pt(model, config, direct=True)
         vvmxsd = view_matrix_vu(model, config, direct=True)
-        calc_5phase_pt(model, pvmxs, pvmxsd, dmxs, dmxsd, pcdsmx,
-                       smx, smxd, smx_sun, datetime_stamps, config)
-        calc_5phase_vu(model, vvmxs, vvmxsd, dmxs, dmxsd, vcdfmx,
-                       vcdrmx, vmap_paths, cdmap_paths, smx, smxd,
-                       smx_sun_img, datetime_stamps, datetime_stamps_d6, config)
+        if not config.no_multiply:
+            calc_5phase_pt(model, pvmxs, pvmxsd, dmxs, dmxsd, pcdsmx,
+                           smx, smxd, smx_sun, datetime_stamps, config)
+            calc_5phase_vu(model, vvmxs, vvmxsd, dmxs, dmxsd, vcdfmx,
+                           vcdrmx, vmap_paths, cdmap_paths, smx, smxd,
+                           smx_sun_img, datetime_stamps, datetime_stamps_d6, config)
     else:
-        calc_3phase_pt(model, datetime_stamps, pvmxs, dmxs, smx, config)
-        calc_3phase_vu(model, datetime_stamps, vvmxs, dmxs, smx, config)
+        if not config.no_multiply:
+            calc_3phase_pt(model, datetime_stamps, pvmxs, dmxs, smx, config)
+            calc_3phase_vu(model, datetime_stamps, vvmxs, dmxs, smx, config)
 
 
 def four_phase(model, config, direct=False):
@@ -814,7 +839,7 @@ def four_phase(model, config, direct=False):
                        smx_sun_img, datetime_stamps, datetime_stamps_d6, config)
     else:
         calc_4phase_pt(pvmxs, fmxs, dmxs, smx)
-        calc_4phase_vu(vvmxs, fmxs, dmxs, smx)
+        # calc_4phase_vu(vvmxs, fmxs, dmxs, smx)
 
 
 

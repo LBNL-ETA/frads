@@ -1,24 +1,16 @@
 """Utility functions."""
 
 import argparse
-from typing import NamedTuple, List, Set
 from dataclasses import dataclass, field
-import glob
-import logging
 import json
+import logging
 import math
 import os
-import re
 import subprocess as sp
-import multiprocessing as mp
+from typing import List, NamedTuple, Set
+
 from frads import radgeom, radmtx, util
 logger = logging.getLogger("frads.radutil")
-try:
-    import numpy as np
-    numpy_installed = True
-except ModuleNotFoundError:
-    logger.info("Numpy not installed")
-    numpy_installed = False
 
 
 GEOM_TYPE = ['polygon', 'ring', 'tube', 'cone']
@@ -88,8 +80,7 @@ class ScatteringData:
 
     def to_bsdf(self):
         lambdas = angle_basis_coeff(self.basis)
-        element_divi = lambda x,y: x/y
-        bsdf = [list(map(element_divi, i, lambdas)) for i in self.sdata]
+        bsdf = [list(map(lambda x, y: x/y, i, lambdas)) for i in self.sdata]
         return BSDFData(bsdf)
 
     def __repr__(self) -> str:
@@ -127,8 +118,7 @@ class BSDFData:
 
     def to_sdata(self) -> ScatteringData:
         lambdas = angle_basis_coeff(self.basis)
-        element_mult = lambda x,y: x/y
-        sdata = [list(map(element_mult, i, lambdas))
+        sdata = [list(map(lambda x, y: x/y, i, lambdas))
                  for i in self.bsdf]
         return ScatteringData(sdata)
 
@@ -324,7 +314,7 @@ def glass_prim(mod, ident, tr, tg, tb, refrac=1.52):
 def bsdf_prim(mod, ident, xmlpath, upvec,
               pe=False, thickness=0.0, xform=None, real_args='0'):
     """Create a BSDF primtive."""
-    str_args = '{} {} '.format(xmlpath, str(upvec))
+    str_args = '"{}" {} '.format(xmlpath, str(upvec))
     str_args_count = 5
     if pe:
         _type = 'aBSDF'
@@ -490,8 +480,9 @@ def gen_grid(polygon: radgeom.Polygon, height: float, spacing: float) -> list:
     grid_hgt = radgeom.Vector(0, 0, plane_height) + grid_dir.scale(height)
     raw_pts = [radgeom.Vector(round(i, 3), round(j, 3), round(grid_hgt.z, 3))
                for i in x0 for j in y0]
-    scale_factor = 1 - 0.3/(imax- imin) # scale boundary down .3 meter
-    _polygon = polygon.scale(radgeom.Vector(scale_factor, scale_factor, 0), polygon.centroid())
+    scale_factor = 1 - 0.3/(imax - imin)  # scale boundary down .3 meter
+    _polygon = polygon.scale(radgeom.Vector(
+        scale_factor, scale_factor, 0), polygon.centroid())
     _vertices = _polygon.vertices
     if polygon.normal() == radgeom.Vector(0, 0, 1):
         pt_incls = pt_inclusion(_vertices)
@@ -513,7 +504,7 @@ def gengrid():
     parser.add_argument('-op', action='store_const', const='', default=True)
     args = parser.parse_args()
     prims = unpack_primitives(args.surface)
-    polygon_prims = [prim for prim in prims if prim.ptype=='polygon']
+    polygon_prims = [prim for prim in prims if prim.ptype == 'polygon']
     polygon = parse_polygon(polygon_prims[0].real_arg)
     if args.op:
         polygon = polygon.flip()
@@ -534,263 +525,6 @@ def material_lib():
     tmis = util.tmit2tmis(.6)
     mlib.append(glass_prim('void', 'glass_60', tmis, tmis, tmis))
     return mlib
-
-
-def pcomb(inputs):
-    """Image operations with pcomb.
-    Parameter: inputs,
-        e.g: ['img1.hdr', '+', img2.hdr', '-', 'img3.hdr', 'output.hdr']
-    """
-    input_list = inputs[:-1]
-    out_dir = inputs[-1]
-    component_idx = range(0, len(input_list), 2)
-    components = [input_list[i] for i in component_idx]
-    color_op_list = []
-    for c in 'rgb':
-        color_op = input_list[:]
-        for i in component_idx:
-            color_op[i] = '%si(%d)' % (c, i/2+1)
-        cstr = '%so=%s' % (c, ''.join(color_op))
-        color_op_list.append(cstr)
-    rgb_str = ';'.join(color_op_list)
-    cmd = ['pcomb', '-e', '%s' % rgb_str]
-    img_name = util.basename(input_list[0], keep_ext=True)
-    for c in components:
-        cmd.append('-o')
-        cmd.append(c)
-    res = util.spcheckout(cmd)
-    with open(os.path.join(out_dir, img_name), 'wb') as wtr:
-        wtr.write(res)
-
-
-def dctsop(inputs, out_dir, nproc=1):
-    if not os.path.isdir(out_dir):
-        os.makedirs(out_dir)
-    nproc = mp.cpu_count() if nproc is None else nproc
-    process = mp.Pool(nproc)
-    assert len(inputs) > 1
-    mtx_inp = inputs[:-1]
-    sky_dir = inputs[-1]
-    sky_files = (os.path.join(sky_dir, i) for i in os.listdir(sky_dir))
-    grouped = [mtx_inp+[skv] for skv in sky_files]
-    [sub.append(out_dir) for sub in grouped]
-    process.map(dctimestep, grouped)
-
-
-def pcombop(inputs, out_dir, nproc=1):
-    """
-    inputs(list): e.g.[inpdir1,'+',inpdir2,'-',inpdir3]
-    out_dir: output directory
-    """
-    if not os.path.isdir(out_dir):
-        os.makedirs(out_dir)
-    nproc = mp.cpu_count() if nproc is None else nproc
-    process = mp.Pool(nproc)
-    assert len(inputs) > 2
-    assert len(inputs) % 2 == 1
-    inp_dir = [inputs[i] for i in range(0, len(inputs), 2)]
-    inp_cnt = len(inp_dir)
-    ops = [inputs[i] for i in range(1, len(inputs), 2)]
-    inp_lists = []
-    for i in inp_dir:
-        if os.path.isdir(i):
-            inp_lists.append(glob.glob(os.path.join(i, '*.hdr')))
-        else:
-            inp_lists.append(i)
-    inp_lists_full = []
-    for i in range(inp_cnt):
-        if os.path.isdir(inp_dir[i]):
-            inp_lists_full.append(inp_lists[i])
-        else:
-            inp_lists_full.append(inp_dir[i])
-    max_len = sorted([len(i) for i in inp_lists_full if type(i) == list])[0]
-    for i in range(len(inp_lists_full)):
-        if type(inp_lists_full[i]) is not list:
-            inp_lists_full[i] = [inp_lists_full[i]] * max_len
-    equal_len = all(len(i) == len(inp_lists_full[0]) for i in inp_lists_full)
-    if not equal_len:
-        logger.warning("Input directories don't the same number of files")
-    grouped = [list(i) for i in zip(*inp_lists_full)]
-    [sub.insert(i, ops[int((i-1)/2)])
-     for sub in grouped for i in range(1, len(sub)+1, 2)]
-    [sub.append(out_dir) for sub in grouped]
-    process.map(pcomb, grouped)
-
-
-def dctimestep(input_list):
-    """Image operations in forms of Vs, VDs, VTDs, VDFs, VTDFs."""
-    inputs = input_list[:-1]
-    out_dir = input_list[-1]
-    inp_dir_count = len(inputs)
-    sky = input_list[-2]
-    img_name = util.basename(sky)
-    out_path = os.path.join(out_dir, img_name)
-
-    if inputs[1].endswith('.xml') is False\
-            and inp_dir_count > 2 and os.path.isdir(inputs[0]):
-        combined = "'!rmtxop %s" % (' '.join(inputs[1:-1]))
-        img = [i for i in os.listdir(inputs[0]) if i.endswith('.hdr')][0]
-        str_count = len(img.split('.hdr')[0])  # figure out unix %0d string
-        appendi = r"%0"+"%sd.hdr" % (str_count)
-        new_inp_dir = [os.path.join(inputs[0], appendi), combined]
-        cmd = "dctimestep -oc %s %s' > %s.hdr" \
-            % (' '.join(new_inp_dir), sky, out_path)
-
-    else:
-        if not os.path.isdir(inputs[0]) and not inputs[1].endswith('.xml'):
-            combined = os.path.join(os.path.dirname(inputs[0]), "tmp.vfdmtx")
-            stderr = combine_mtx(inputs[:-1], combined)
-            if stderr != "":
-                print(stderr)
-                return
-            inputs_ = [combined]
-
-        elif inp_dir_count == 5:
-            combined = os.path.join(os.path.dirname(inputs[2]), "tmp.fdmtx")
-            stderr = combine_mtx(inputs[2:4], combined)
-            if stderr != "":
-                print(stderr)
-                return
-            inputs_ = [inputs[0], inputs[1], combined]
-
-        else:
-            inputs_ = inputs[:-1]
-
-        if os.path.isdir(inputs[0]):
-            img = [i for i in os.listdir(inputs[0])
-                   if i.endswith('.hdr')][0]
-            str_count = len(img.split('.hdr')[0])
-            appendi = r"%0"+"%sd.hdr" % (str_count)
-            inputs_[0] = os.path.join(inputs[0], appendi)
-            out_ext = ".hdr"
-        else:
-            out_ext = ".dat"
-
-        input_string = ' '.join(inputs_)
-        out_path = out_path + out_ext
-        cmd = "dctimestep %s %s > %s" % (input_string, sky, out_path)
-    sp.call(cmd, shell=True)
-
-
-def rpxop():
-    """Operate on input directories given a operation type."""
-    PROGRAM_SCRIPTION = "Image operations with parallel processing"
-    parser = argparse.ArgumentParser(
-        prog='imgop', description=PROGRAM_SCRIPTION)
-    parser.add_argument('-t', type=str, required=True,
-                        choices=['dcts', 'pcomb'],
-                        help='operation types: {pcomb|dcts}')
-    parser.add_argument('-i', type=str, required=True,
-                        nargs="+", help='list of inputs')
-    parser.add_argument('-o', type=str, required=True, help="output directory")
-    parser.add_argument('-n', type=int, help='number of processors to use')
-    args = parser.parse_args()
-    if args.t == "pcomb":
-        pcombop(args.i, args.o, nproc=args.n)
-    elif args.t == 'dcts':
-        dctsop(args.i, args.o, nproc=args.n)
-
-
-def combine_mtx(mtxs, out_dir):
-    """."""
-    cmd = "rmtxop"
-    args = " -ff %s > %s" % (" ".join(mtxs), out_dir)
-    process = sp.Popen(cmd + args, stdout=sp.PIPE, stderr=sp.PIPE, shell=True)
-    _, stderr = process.communicate()
-    return stderr
-
-
-def header_parser(header):
-    """Parse for a matrix file header."""
-    nrow = int(re.search(b'NROWS=(.*)\n', header).group(1))
-    ncol = int(re.search(b'NCOLS=(.*)\n', header).group(1))
-    ncomp = int(re.search(b'NCOMP=(.*)\n', header).group(1))
-    dtype = re.search(b'FORMAT=(.*)', header).group(1)
-    return nrow, ncol, ncomp, dtype
-
-
-def mtx2nparray(datastr):
-    """Convert Radiance 3-channel matrix file to numpy array."""
-    raw = datastr.split(b'\n\n')
-    header = raw[0]
-    if not header.startswith(b"#?RADIANCE"):
-        raise ValueError("No header found")
-    nrow, ncol, ncomp, dtype = header_parser(header)
-    if dtype==b'ascii':
-        data = raw[1].splitlines()
-        rdata = np.array([i.split()[::ncomp] for i in data], dtype=float)
-        gdata = np.array([i.split()[1::ncomp] for i in data], dtype=float)
-        bdata = np.array([i.split()[2::ncomp] for i in data], dtype=float)
-    else:
-        if dtype==b'float':
-            data = np.frombuffer(raw[1], np.single).reshape(nrow, ncol*ncomp)
-        elif dtype==b'double':
-            data = np.frombuffer(raw[1], np.double).reshape(nrow, ncol*ncomp)
-        else:
-            raise ValueError("Unsupported data type %s" % dtype)
-        rdata = data[:, ::ncomp]
-        gdata = data[:, 1::ncomp]
-        bdata = data[:, 2::ncomp]
-    assert len(bdata) == nrow
-    assert len(bdata[0]) == ncol
-    return rdata, gdata, bdata
-
-
-def smx2nparray(datastr):
-    raw = datastr.split(b'\n\n')
-    header = raw[0]
-    if not header.startswith(b"#?RADIANCE"):
-        raise ValueError("No header found")
-    nrow, ncol, ncomp, dtype = header_parser(header)
-    if dtype==b'ascii':
-        data = [i.splitlines() for i in raw[1:] if i != b'']
-        rdata = np.array([[i.split()[::ncomp][0] for i in row] for row in data],
-                         dtype=float)
-        gdata = np.array([[i.split()[1::ncomp][0] for i in row] for row in data],
-                         dtype=float)
-        bdata = np.array([[i.split()[2::ncomp][0] for i in row] for row in data],
-                         dtype=float)
-    else:
-        if dtype==b'float':
-            data = np.frombuffer(b'\n\n'.join(raw[1:]), np.single).reshape(nrow, ncol*ncomp)
-        elif dtype==b'double':
-            data = np.frombuffer(b'\n\n'.join(raw[1:]), np.double).reshape(nrow, ncol*ncomp)
-        else:
-            raise ValueError("Unsupported data type %s" % dtype)
-        rdata = data[:, 0::ncomp]
-        gdata = data[:, 1::ncomp]
-        bdata = data[:, 2::ncomp]
-    if ncol == 1:
-        assert np.size(bdata, 1) == nrow
-        assert np.size(bdata, 0) == ncol
-        rdata = rdata.flatten()
-        gdata = gdata.flatten()
-        bdata = bdata.flatten()
-    else:
-        assert np.size(bdata, 0) == nrow
-        assert np.size(bdata, 1) == ncol
-    return rdata, gdata, bdata
-
-
-def mtxmult(mtxs):
-    if numpy_installed:
-        return numpy_mtxmult(mtxs)
-    else:
-        return rmtxop(mtxs)
-
-
-def numpy_mtxmult(mtxs, weight=None):
-    """Matrix multiplication with Numpy."""
-    weight = (47.4, 119.9, 11.6) if weight is None else weight
-    resr = np.linalg.multi_dot([mat[0] for mat in mtxs]) * weight[0]
-    resg = np.linalg.multi_dot([mat[1] for mat in mtxs]) * weight[1]
-    resb = np.linalg.multi_dot([mat[2] for mat in mtxs]) * weight[2]
-    return resr + resg + resb
-
-
-def rmtxop(*mtxs):
-    cmd = ["rmtxop", *mtxs]
-    return util.spcheckout(cmd)
 
 
 def gen_blinds(depth, width, height, spacing, angle, curve, movedown):
@@ -829,36 +563,6 @@ def analyze_window(window_prim, movedown):
     return height, width, angle2negY, translate
 
 
-def dctsnp():
-    """commandline program that performs matrix multiplication
-    using numpy."""
-    if not numpy_installed:
-        print("Numpy not installed")
-        return
-    aparser = argparse.ArgumentParser(
-        prog='dctsnp',
-        description='dctimestep but using numpy (non-image)')
-    aparser.add_argument('-m', '--mtx', required=True, nargs='+', help='scene matrix')
-    aparser.add_argument('-s', '--smx', required=True, help='sky matrix')
-    aparser.add_argument('-w', '--weight', type=float, default=None,
-                         nargs=3, help='RGB weights')
-    aparser.add_argument('-o', '--output', required=True, help='output path')
-    args = aparser.parse_args()
-    def mtx_parser(fpath):
-        if fpath.endswith('.xml'):
-            cmd = ['rmtxop', fpath]
-            raw = util.spcheckout(cmd)
-        else:
-            with open(fpath, 'rb') as rdr:
-                raw = rdr.read()
-        return mtx2nparray(raw)
-    npmtx = [mtx_parser(mtx) for mtx in args.mtx]
-    with open(args.smx, 'rb') as rdr:
-        npmtx.append(smx2nparray(rdr.read()))
-    result = numpy_mtxmult(npmtx, weight=args.weight)
-    np.savetxt(args.output, result)
-
-
 def varays():
     """Commandline utility program for generating circular fisheye rays."""
     aparser = argparse.ArgumentParser(
@@ -894,29 +598,33 @@ def get_glazing_primitive(panes: List[util.PaneRGB]) -> Primitive:
         s12t_rgb = panes[0].trans_rgb
         s34t_rgb = panes[1].trans_rgb
         if panes[0].measured_data.coated_side == 'back':
-            s2r_rgb=panes[0].coated_rgb
-            s1r_rgb=panes[0].glass_rgb
-        else: # front or neither side coated
-            s2r_rgb=panes[0].glass_rgb
-            s1r_rgb=panes[0].coated_rgb
+            s2r_rgb = panes[0].coated_rgb
+            s1r_rgb = panes[0].glass_rgb
+        else:  # front or neither side coated
+            s2r_rgb = panes[0].glass_rgb
+            s1r_rgb = panes[0].coated_rgb
         if panes[1].measured_data.coated_side == 'back':
             s4r_rgb = panes[1].coated_rgb
-            s3r_rgb= panes[1].glass_rgb
-        else: # front or neither side coated
+            s3r_rgb = panes[1].glass_rgb
+        else:  # front or neither side coated
             s4r_rgb = panes[1].glass_rgb
             s3r_rgb = panes[1].coated_rgb
-        str_arg = f"10\nif(Rdot,cr(fr({s4r_rgb[0]}),ft({s34t_rgb[0]}),fr({s2r_rgb[0]})),"
-        str_arg += f"cr(fr({s1r_rgb[0]}),ft({s12t_rgb[0]}),ft({s3r_rgb[0]}))) \n"
-        str_arg += f"if(Rdot,cr(fr({s4r_rgb[1]}),ft({s34t_rgb[1]}),fr({s2r_rgb[1]})),"
-        str_arg += f"cr(fr({s1r_rgb[1]}),ft({s12t_rgb[1]}),fr({s3r_rgb[1]}))) \n"
-        str_arg += f"if(Rdot,cr(fr({s4r_rgb[2]}),ft({s34t_rgb[2]}),fr({s2r_rgb[2]})),"
-        str_arg += f"cr(fr({s1r_rgb[2]}),ft({s12t_rgb[2]}),fr({s3r_rgb[2]}))) \n"
-        str_arg += f"ft({s34t_rgb[0]})*ft({s12t_rgb[0]}) \n"
-        str_arg += f"ft({s34t_rgb[1]})*ft({s12t_rgb[1]}) \n"
-        str_arg += f"ft({s34t_rgb[2]})*ft({s12t_rgb[2]}) \n"
+        str_arg = "10\nif(Rdot,"
+        str_arg += f"cr(fr({s4r_rgb[0]}),ft({s34t_rgb[0]}),fr({s2r_rgb[0]})),"
+        str_arg += f"cr(fr({s1r_rgb[0]}),ft({s12t_rgb[0]}),ft({s3r_rgb[0]})))\n"
+        str_arg += "if(Rdot,"
+        str_arg += f"cr(fr({s4r_rgb[1]}),ft({s34t_rgb[1]}),fr({s2r_rgb[1]})),"
+        str_arg += f"cr(fr({s1r_rgb[1]}),ft({s12t_rgb[1]}),fr({s3r_rgb[1]})))\n"
+        str_arg += "if(Rdot,"
+        str_arg += f"cr(fr({s4r_rgb[2]}),ft({s34t_rgb[2]}),fr({s2r_rgb[2]})),"
+        str_arg += f"cr(fr({s1r_rgb[2]}),ft({s12t_rgb[2]}),fr({s3r_rgb[2]})))\n"
+        str_arg += f"ft({s34t_rgb[0]})*ft({s12t_rgb[0]})\n"
+        str_arg += f"ft({s34t_rgb[1]})*ft({s12t_rgb[1]})\n"
+        str_arg += f"ft({s34t_rgb[2]})*ft({s12t_rgb[2]})\n"
         str_arg += "0 0 0 glaze2.cal"
         real_arg = "9 0 0 0 0 0 0 0 0 0"
     return Primitive("void", "BRTDfunc", name, str_arg, real_arg)
+
 
 def glaze():
     """Command-line program for generating BRTDfunc for glazing system."""
@@ -924,8 +632,10 @@ def glaze():
         prog='glaze',
         description='Generate BRTDfunc for a glazing system')
     aparser.add_argument('-X', '--optics', nargs='+', help='Optics file path')
-    aparser.add_argument('-C', '--cspace', default='radiance', help='Color space to determine primaries')
-    aparser.add_argument('-D', '--igsdb', nargs="+", help='IGSDB json file path or ID')
+    aparser.add_argument('-C', '--cspace', default='radiance',
+                         help='Color space to determine primaries')
+    aparser.add_argument('-D', '--igsdb', nargs="+",
+                         help='IGSDB json file path or ID')
     aparser.add_argument('-T', '--token', help='IGSDB token')
     args = aparser.parse_args()
     if args.optics is not None:

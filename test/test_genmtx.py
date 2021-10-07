@@ -3,7 +3,8 @@ import subprocess as sp
 import os
 import glob
 import shutil
-from frads import makesky, radutil
+from frads import makesky, radutil, util
+
 
 class TestGenmtx(unittest.TestCase):
 
@@ -15,15 +16,15 @@ class TestGenmtx(unittest.TestCase):
     def test_sun_mtx(self):
         window_path = os.path.join("Objects", "upper_glass.rad")
         window_normals = radutil.primitive_normal([window_path])
-        epw = makesky.getEPW("37", "-122")
+        _, url = util.get_epw_url(37, 122)
+        epw = util.request(url, {})
         wea_metadata, wea_data = makesky.epw2wea(
-            epw.fname, dhour=True, shour=6, ehour=20,
+            epw, dhour=True, shour=6, ehour=20,
             remove_zero=True, window_normal=window_normals)
-        cmd, _ = makesky.gendaymtx(
+        smx = makesky.gendaymtx(
             wea_data, wea_metadata, mf=6, direct=True, onesun=True)
-        process = sp.run(cmd, stdout=sp.PIPE)
         with open('test.smx', 'wb') as wtr:
-            wtr.write(process.stdout)
+            wtr.write(smx)
         cmd = ["genmtx", "-st", "v", "-s", "v1a.vf", "-r", "sun", "-rs", "r6",
                "-o", "test_genmtx_sun_mtx", "-wpths", window_path, "-opt", "-ab 0",
                "-res", "8", "8", "-smx", 'test.smx']
@@ -36,15 +37,15 @@ class TestGenmtx(unittest.TestCase):
         os.remove('test.smx')
 
     def test_sun_mtx2(self):
-        epw = makesky.getEPW("32.6056027", "-114.712143")
+        _, url = util.get_epw_url(32.6056027, 114.712143)
+        epw = util.request(url, {})
         wea_metadata, wea_data = makesky.epw2wea(
-            epw.fname, dhour=True, shour=6, ehour=20,
+            epw, dhour=True, shour=6, ehour=20,
             remove_zero=True)
-        cmd, _ = makesky.gendaymtx(
+        smx = makesky.gendaymtx(
             wea_data, wea_metadata, mf=6, direct=True, onesun=True)
-        process = sp.run(cmd, stdout=sp.PIPE)
         with open('test.smx', 'wb') as wtr:
-            wtr.write(process.stdout)
+            wtr.write(smx)
         cmd = ["genmtx", "-st", "v", "-s", "v1a.vf", "-r", "sun", "-rs", "r6",
                "-o", "test_genmtx_sun_mtx2", "-opt", "-ab 0",
                "-res", "8", "8", "-smx", 'test.smx']
@@ -55,7 +56,6 @@ class TestGenmtx(unittest.TestCase):
         self.assertEqual(len(glob.glob('test_genmtx_sun_mtx2/*.hdr')), 657)
         shutil.rmtree("test_genmtx_sun_mtx2")
         os.remove('test.smx')
-
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ class TestMrad(unittest.TestCase):
         proc = sp.run(cmd, check=True, stderr=sp.PIPE)
         self.assertEqual(proc.stderr, b'')
         view_results = glob.glob("Results/view_five_phase_view_00/*.hdr")
-        self.assertEqual(len(view_results), 4354)
+        self.assertEqual(len(view_results), 4385)
         shutil.rmtree("Matrices")
         shutil.rmtree("Results")
 

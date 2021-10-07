@@ -240,7 +240,7 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
     src_mod = f"rflx{prims[0].modifier}"
     header = f'#@rfluxmtx h={basis} u={upvector}\n'
     if out is not None:
-        header += f"#@rfluxmtx o={out}\n\n"
+        header += f'#@rfluxmtx o="{out}"\n\n'
     if source is not None:
         source_line = f"void {source} {src_mod}\n0\n0\n4 1 1 1 0\n\n"
         header += source_line

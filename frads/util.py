@@ -1,4 +1,5 @@
 import argparse
+import csv
 from dataclasses import dataclass, field
 import logging
 import math
@@ -7,7 +8,7 @@ import re
 import ssl
 import subprocess as sp
 import time
-from typing import Dict, List, Optional, NamedTuple
+from typing import Dict, List, Optional, NamedTuple, Tuple
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -64,6 +65,7 @@ class MradConfig:
     nprocess: int = 1
     overwrite: bool = False
     method: str = field(default_factory=str)
+    no_multiply: bool = False
     base: str = os.getcwd()
     matrices: str = 'Matrices'
     results: str = 'Results'
@@ -135,6 +137,57 @@ class MradConfig:
                         self.sun_cfs[wname] = os.path.join(self.objdir, _cfs)
                     else:
                         raise NameError("Unknow file type for dbsdf")
+
+    def to_dict(self):
+        sim_ctrl = {
+            "vmx_basis": self.vmx_basis,
+            "vmx_opt": self.vmx_opt,
+            "fmx_basis": self.fmx_basis,
+            "smx_basis": self.smx_basis,
+            "dmx_opt": self.dmx_opt,
+            "dsmx_opt": self.dsmx_opt,
+            "cdsmx_opt":  self.cdsmx_opt,
+            "cdsmx_basis":  self.cdsmx_basis,
+            "separate_direct":  self.separate_direct,
+            "overwrite":  self.overwrite,
+            "method":  self.method,
+        }
+        file_struct = {
+            "base": self.base,
+            "objects": self.objects,
+            "matrices": self.matrices,
+            "resources": self.resources,
+            "results": self.results
+        }
+        model = {
+            "material": self.material,
+            "scene": self.scene,
+            "window_paths": self.window_paths,
+            "window_xml": self.window_xml,
+            "window_cfs": self.window_cfs,
+            "window_control": self.window_control,
+        }
+        raysender = {
+            "grid_surface": self.grid_surface,
+            "grid_spacing": self.grid_spacing,
+            "grid_height": self.grid_height,
+            "view": self.view
+        }
+        site = {
+            "wea_path": self.wea_path,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "zipcode": self.zipcode,
+            "start_hour": self.start_hour,
+            "end_hour": self.end_hour,
+            "daylight_hours_only": self.daylight_hours_only
+        }
+        return {"Simulation Control": sim_ctrl,
+                "File Structure": file_struct,
+                "Site": site,
+                "Model": model,
+                "Ray Sender": raysender}
+
 
 
 def parse_vu(vu_str: str) -> dict:
@@ -213,9 +266,9 @@ def parse_opt(opt_str: str) -> dict:
 
 def tmit2tmis(tmit: float) -> float:
     """Convert from transmittance to transmissivity."""
-    return round(
-        (math.sqrt(0.8402528435 + 0.0072522239 * tmit**2) - 0.9166530661) /
-        0.0036261119 / tmit, 3)
+    tmis = round((math.sqrt(0.8402528435 + 0.0072522239 * tmit**2)
+                  - 0.9166530661) / 0.0036261119 / tmit, 3)
+    return max(0, min(tmis, 1))
 
 
 def parse_idf(content: str) -> dict:
@@ -301,12 +354,12 @@ def parse_igsdb_json(json_obj: dict):
 
 def get_igsdb_json(igsdb_id, token, xml=False):
     """Get igsdb data by igsdb_id"""
-    if token == None:
+    if token is None:
         raise ValueError("Need IGSDB token")
     url = "https://igsdb.lbl.gov/api/v1/products/{}"
     if xml:
         url += "/datafile"
-    header = {"Authorization": "Token "+token}
+    header = {"Authorization": "Token " + token}
     response = request(url.format(igsdb_id), header)
     if response == '{"detail":"Not found."}':
         raise ValueError("Unknown igsdb id: ", igsdb_id)
@@ -314,13 +367,32 @@ def get_igsdb_json(igsdb_id, token, xml=False):
 
 
 def spec2rgb(inp: str, cspace: str) -> list:
-    """Convert spectral data to RGB."""
+    """Convert spectral data to RGB.
+
+    Convert wavelength and spectral data in visible
+    spectrum to red, green, and blue given a color space.
+
+    Args:
+        inp: file path with wavelength spectral data
+        cspace: Color space to transform the spectral data.
+            { radiance | sharp | adobe | rimm | 709 | p3 | 2020 }
+    Returns:
+        Red, Green, Blue in a list.
+
+    Raise:
+        KeyError where cspace is not defined.
+    """
+
     color_primaries = {
         'radiance': 'CIE_Radiance(i)', 'sharp': 'CIE_Sharp(i)',
         'adobe': 'CIE_Adobe(i)', 'rimm': 'CIE_RIMM(i)',
         '709': 'CIE_709(i)', 'p3': 'CIE_P3(i)', '2020': 'CIE_2020(i)'
     }
-    primaries = color_primaries[cspace]
+    try:
+        primaries = color_primaries[cspace]
+    except KeyError as key_error:
+        print(color_primaries.keys())
+        raise key_error
     cmd1 = [
         "rcalc", "-f", "cieresp.cal",
         "-e", "ty=triy($1);$1=ty",
@@ -335,48 +407,19 @@ def spec2rgb(inp: str, cspace: str) -> list:
     proc = sp.run(cmd1, input=inp.encode(), check=True, stdout=sp.PIPE)
     res = [row.split('\t') for row in proc.stdout.decode().splitlines()]
     row_cnt = len(res)
-    avg_0 = sum([float(row[0]) for row in res])/row_cnt
-    avg_1 = sum([float(row[1]) for row in res])/row_cnt
-    avg_2 = sum([float(row[2]) for row in res])/row_cnt
-    avg_3 = sum([float(row[3]) for row in res])/row_cnt
-    XYZ = f"{avg_1/avg_0} {avg_2/avg_0} {avg_3/avg_0}"
-    proc2=  sp.run(cmd2, input=XYZ.encode(), stdout=sp.PIPE)
+    avg_0 = sum([float(row[0]) for row in res]) / row_cnt
+    avg_1 = sum([float(row[1]) for row in res]) / row_cnt
+    avg_2 = sum([float(row[2]) for row in res]) / row_cnt
+    avg_3 = sum([float(row[3]) for row in res]) / row_cnt
+    XYZ = f"{avg_1 / avg_0} {avg_2 / avg_0} {avg_3 / avg_0}"
+    proc2 = sp.run(cmd2, input=XYZ.encode(), stdout=sp.PIPE)
     return proc2.stdout.decode().split()
-
-
 
 
 def unpack_idf(path: str) -> dict:
     """Read and parse and idf files."""
     with open(path, 'r') as rdr:
         return parse_idf(rdr.read())
-
-
-# def idf2mtx(fname:str, section: list, out_dir: str=None) -> None:
-#     """Converting bsdf data in idf format to Radiance format."""
-#     out_dir = os.getcwd() if out_dir is None else out_dir
-#     if not os.path.isdir(out_dir):
-#         os.makedirs(out_dir)
-#     for sec in section:
-#         name = sec[0]
-#         output_path = os.path.join(out_dir, "%s_%s.mtx" % (fname, name))
-#         row_cnt = int(sec[1])
-#         col_cnt = int(sec[2])
-#         if sec[2] in radutil.BASIS_DICT:
-#             _btdf_data = nest_list(list(map(float, sec[3:])), col_cnt)
-#             lambdas = radutil.angle_basis_coeff(radutil.BASIS_DICT[sec[2]])
-#             sdata = [list(map(lambda x, y: x * y, i, lambdas)) for i in _btdf_data]
-#             with open(output_path, 'w') as wt:
-#                 header = '#?RADIANCE\nNCOMP=3\n'
-#                 header += 'NROWS=%d\nNCOLS=%d\n' % (row_cnt, col_cnt)
-#                 header += 'FORMAT=ascii\n\n'
-#                 wt.write(header)
-#                 for row in sdata:
-#                     for val in row:
-#                         string = '\t'.join(['%07.5f' % val] * 3)
-#                         wt.write(string)
-#                         wt.write('\t')
-#                     wt.write('\n')
 
 
 def nest_list(inp: list, col_cnt: int) -> List[list]:
@@ -508,13 +551,65 @@ def sprun(cmd):
 def spcheckout(cmd, inp=None):
     """Call subprocess run and return results."""
     logger.debug(cmd)
-    proc = sp.run(cmd, input=inp, check=True, stderr=sp.PIPE, stdout=sp.PIPE)
+    proc = sp.run(cmd, input=inp, stderr=sp.PIPE, stdout=sp.PIPE)
     if proc.stderr != b'':
         logger.warning(proc.stderr)
     return proc.stdout
 
 
-def request(url, header):
+def get_latlon_from_zipcode(zipcode: str) -> Tuple[float, float]:
+    """Get latitude and longitude from US zipcode."""
+    _file_path_ = os.path.dirname(__file__)
+    zip2latlon = "zip_latlon.txt"
+    zip2latlon_path = os.path.join(_file_path_, 'data', zip2latlon)
+    with open(zip2latlon_path, 'r') as rdr:
+        csvreader = csv.DictReader(rdr, delimiter='\t')
+        for row in csvreader:
+            if row['GEOID'] == zipcode:
+                lat = float(row['INTPTLAT'])
+                lon = float(row['INTPTLONG'])
+                break
+        else:
+            raise ValueError('zipcode not found in US')
+    return lat, lon
+
+
+def haversine(lat1: float, lat2: float, lon1: float, lon2: float) -> float:
+    """Calculate distance between two points on earth."""
+    earth_radius = 6371e3
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lam = math.radians(lon2 - lon1)
+    a = (math.sin(delta_phi / 2) * math.sin(delta_phi / 2)
+         + (math.cos(phi1) * math.cos(phi2)
+            * math.sin(delta_lam / 2) * math.sin(delta_lam / 2)))
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return earth_radius * c
+
+
+def get_epw_url(lat: float, lon: float) -> Tuple[str, str]:
+    """Get EPW name and url given latitude and longitude."""
+    lon = lon * -1
+    _file_path_ = os.path.dirname(__file__)
+    epw_url = "epw_url.csv"
+    epw_url_path = os.path.join(_file_path_, 'data', epw_url)
+    distances = []
+    urls = []
+    with open(epw_url_path, 'r') as rdr:
+        csvreader = csv.DictReader(rdr, delimiter=',')
+        for row in csvreader:
+            distances.append(haversine(
+                float(row['Latitude']), float(lat),
+                float(row['Longitude']), float(lon)))
+            urls.append(row['URL'])
+    min_idx = distances.index(min(distances))
+    url = urls[min_idx]
+    epw_fname = os.path.basename(url)
+    return epw_fname, url
+
+
+def request(url: str, header: dict) -> str:
     user_agents = 'Mozilla/5.0 (Windows NT 6.1) '
     user_agents += 'AppleWebKit/537.36 (KHTML, like Gecko) '
     user_agents += 'Chrome/41.0.2228.0 Safari/537.3'
@@ -524,7 +619,7 @@ def request(url, header):
     )
     tmpctx = ssl.SSLContext()
     raw = ''
-    for _ in range(3): # try 3 times
+    for _ in range(3):  # try 3 times
         try:
             with urllib.request.urlopen(request, context=tmpctx) as resp:
                 raw = resp.read().decode()

@@ -17,6 +17,7 @@ LSEP = os.linesep
 
 logger = logging.getLogger("frads.makesky")
 
+
 class WeaMetaData(NamedTuple):
     city: str
     country: str
@@ -31,8 +32,9 @@ class WeaMetaData(NamedTuple):
         header += f"longitude {self.longitude}\n"
         header += f"time_zone {self.timezone}\n"
         header += f"site_elevation {self.elevation}\n"
-        header += f"weather_data_file_units 1\n"
+        header += "weather_data_file_units 1\n"
         return header
+
 
 class WeaDataRow(NamedTuple):
     month: int
@@ -201,16 +203,14 @@ def gendaymtx(data_entry: List[WeaDataRow], metadata: WeaMetaData,
         cmd.append('.533')
     if binary:
         cmd.append('-of')
-    _, _path = tf.mkstemp()
-    with open(_path, 'w') as wtr:
-        wtr.write(metadata.wea_header())
-        wtr.write('\n'.join(map(str, data_entry)))
-    cmd.append(_path)
-    return cmd, _path
+    wea_input = metadata.wea_header() + "\n".join(map(str, data_entry))
+    sky_matrix = util.spcheckout(cmd, inp=wea_input.encode())
+    return sky_matrix
+
 
 def gendaymtx_cmd(data_entry: List[str], metadata: WeaMetaData,
-              mf=4, direct=False, solar=False, onesun=False,
-              rotate=0, binary=False):
+                  mf=4, direct=False, solar=False, onesun=False,
+                  rotate=0, binary=False):
     """."""
     sun_only = ' -d' if direct else ''
     spect = ' -O1' if solar else ' -O0'
@@ -338,7 +338,7 @@ def solar_angle(lat, lon, mer, month, day, hour):
     azimuth = -math.atan2(math.cos(solar_decline)*math.sin(solar_time*(math.pi/12.)),
                           - math.cos(latitude_r)*math.sin(solar_time)
                           - math.sin(latitude_r)*math.cos(solar_decline)
-                          *math.cos(solar_time*(math.pi/12)))
+                          * math.cos(solar_time*(math.pi/12)))
 
     return altitude, azimuth
 
@@ -346,6 +346,8 @@ def solar_angle(lat, lon, mer, month, day, hour):
 def start_end_hour(data: list, sh: float, eh: float):
     """Remove wea data entries outside of the
     start and end hour."""
+    if sh == 0 and eh == 0:
+        return data
 
     def filter_hour(dataline):
         return sh <= float(dataline[2]) <= eh
@@ -362,7 +364,7 @@ def check_sun_above_horizon(data, metadata):
     return filter(solar_altitude_check, data)
 
 
-def remove_wea_zero_entry(data, metadata, window_normal=None):
+def remove_wea_zero_entry(data, metadata: WeaMetaData, window_normal=None):
     """Remove wea data entries with zero solar luminance.
     If window normal supplied, eliminate entries not seen by window.
     Solar luminance determined using Perez sky model.
@@ -370,8 +372,7 @@ def remove_wea_zero_entry(data, metadata, window_normal=None):
     """
     check_window_normal = True if window_normal is not None else False
     new_dataline = []
-    zero_dni = lambda row: row.dni!=0
-    data = filter(zero_dni, data)
+    data = filter(lambda row: row.dni != 0, data)
     for row in data:
         cmd = ['gendaylit', str(row.month), str(row.day), str(row.hours),
                '-a', str(metadata.latitude), '-o', str(metadata.longitude),
@@ -393,10 +394,9 @@ def remove_wea_zero_entry(data, metadata, window_normal=None):
     return new_dataline
 
 
-def parse_epw(epw_path: str) -> tuple:
+def parse_epw(epw_str: str) -> tuple:
     """Parse epw file and return wea header and data."""
-    with open(epw_path, 'r', newline=os.linesep) as epw:
-        raw = epw.readlines()  # read-in epw content
+    raw = epw_str.splitlines()
     epw_header = raw[0].split(',')
     content = raw[8:]
     data = []
@@ -408,7 +408,8 @@ def parse_epw(epw_path: str) -> tuple:
         hours = hour + 0.5
         dir_norm = float(line[14])
         dif_hor = float(line[15])
-        data.append(WeaDataRow(month, day, hour, 30, 0, hours, dir_norm, dif_hor))
+        data.append(WeaDataRow(
+            month, day, hour, 30, 0, hours, dir_norm, dif_hor))
     city = epw_header[1]
     country = epw_header[3]
     latitude = float(epw_header[6])
@@ -419,11 +420,11 @@ def parse_epw(epw_path: str) -> tuple:
     return meta_data, data
 
 
-def epw2wea(epw_path,
+def epw2wea(epw_str,
             dhour=False, shour=None, ehour=None,
             remove_zero=False, window_normal=None):
     """epw2wea with added filter."""
-    metadata, data = parse_epw(epw_path)
+    metadata, data = parse_epw(epw_str)
     if None not in (shour, ehour):
         data = start_end_hour(data, shour, ehour)
     if dhour:
@@ -433,63 +434,6 @@ def epw2wea(epw_path,
                                      window_normal=window_normal)
     return metadata, list(data)
 
-def haversine(lat1:float, lat2:float, lon1:float, lon2:float) -> float:
-    """Calculate distance between two points on earth."""
-    earth_radius = 6371e3
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    delta_phi = math.radians(lat2 - lat1)
-    delta_lam = math.radians(lon2 - lon1)
-    a = math.sin(delta_phi/2) * math.sin(delta_phi/2) + \
-        math.cos(phi1) * math.cos(phi2) * \
-        math.sin(delta_lam/2) * math.sin(delta_lam/2)
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-    return earth_radius * c
-
-
-class getEPW(object):
-    """Download the closest EPW file from the given Lat and Lon."""
-    _file_path_ = os.path.dirname(radutil.__file__)
-    epw_url = "epw_url.csv"
-    zip2latlon = "zip_latlon.txt"
-    epw_url_path = os.path.join(_file_path_, 'data', epw_url)
-    zip2latlon_path = os.path.join(_file_path_, 'data', zip2latlon)
-
-    def __init__(self, lat: str, lon: str):
-        self.lat = float(lat)
-        self.lon = float(lon)
-        distances = []
-        urls = []
-        with open(self.epw_url_path, 'r') as rdr:
-            csvreader = csv.DictReader(rdr, delimiter=',')
-            for row in csvreader:
-                distances.append(haversine(
-                    float(row['Latitude']), self.lat,
-                    float(row['Longitude']), self.lon))
-                urls.append(row['URL'])
-        min_idx = distances.index(min(distances))
-        url = urls[min_idx]
-        epw_fname = os.path.basename(url)
-        raw = util.request(url, {})
-        with open(epw_fname, 'w') as wtr:
-            wtr.write(raw)
-        self.fname = epw_fname
-
-
-    @classmethod
-    def from_zip(cls, zipcode):
-        zipcode = str(zipcode)
-        with open(cls.zip2latlon_path, 'r') as rdr:
-            csvreader = csv.DictReader(rdr, delimiter='\t')
-            for row in csvreader:
-                if row['GEOID'] == zipcode:
-                    lat = row['INTPTLAT']
-                    lon = row['INTPTLONG']
-                    break
-            else:
-                raise ValueError('zipcode not found in US')
-        return cls(lat, lon)
-
 
 def getwea():
     """Commandline program for generating a .wea file
@@ -497,8 +441,8 @@ def getwea():
     parser = argparse.ArgumentParser(
         prog='getwea',
         description="Download the EPW files and convert it to a wea file")
-    parser.add_argument('-a', help='latitude')
-    parser.add_argument('-o', help='longitude')
+    parser.add_argument('-a', type=float, help='latitude')
+    parser.add_argument('-o', type=float, help='longitude')
     parser.add_argument('-z', help='zipcode (U.S. only)')
     parser.add_argument('-dh', action="store_true",
                         help='output only for daylight hours')
@@ -509,16 +453,25 @@ def getwea():
     args = parser.parse_args()
     window_normals: Union[None, Set[radgeom.Vector]] = None
     if args.z is not None:
-        epw = getEPW.from_zip(args.z)
+        lat, lon = util.get_latlon_from_zipcode(args.z)
     elif None not in (args.a, args.o):
-        epw = getEPW(args.a, args.o)
+        lat, lon = args.a, args.o
     else:
         print("Exit: need either latitude and longitude or U.S. postcode")
         exit()
+    _, url = util.get_epw_url(lat, lon)
+    epw = util.request(url, {})
+    remove_zero = False
     if args.wpths is not None:
         window_normals = radutil.primitive_normal(args.wpths)
-    metadata, data = epw2wea(epw.fname, dhour=args.dh, shour=args.sh,
-                             ehour=args.eh, remove_zero=args.rz,
-                             window_normal=window_normals)
-    print(metadata.wea_header())
-    print('\n'.join(map(str, data)))
+        remove_zero = True
+    wea_metadata, wea_data = parse_epw(epw)
+    if None not in (args.sh, args.eh):
+        wea_data = start_end_hour(wea_data, args.sh, args.eh)
+    if args.dh:
+        wea_data = check_sun_above_horizon(wea_data, wea_metadata)
+    if remove_zero:
+        wea_data = remove_wea_zero_entry(
+            wea_data, wea_metadata, window_normals)
+    print(wea_metadata.wea_header())
+    print('\n'.join(map(str, wea_data)))

@@ -302,7 +302,7 @@ def merge_windows(primitive_list: List[Primitive]):
     if len(set(normals)) > 1:
         logger.warning("Windows Oriented Differently")
     points = [i for p in polygons for i in p.vertices]
-    hull_polygon = rg.Convexhull(points, normals[0]).hull
+    hull_polygon = rg.convexhull(points, normals[0])
     modifier = primitive_list[0].modifier
     identifier = primitive_list[0].identifier
     new_prim = radutil.polygon2prim(hull_polygon, modifier, identifier)
