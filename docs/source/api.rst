@@ -8,26 +8,14 @@ radgeom
 ----------
 This a module that handles the geometry
 
-.. module:: frads.radgeom
-
-Polygon
-^^^^^^^
-.. autoclass:: Polygon
-  :members:
-
-Vector
-^^^^^^^
-.. autoclass:: Vector
-  :members:
+.. automodule:: frads.radgeom
+   :members:
 
 radutil
 ---------
-.. module:: frads.radutil
-.. autofunction:: parse_primitive
-.. autofunction:: unpack_primitives
-.. autofunction:: samp_dir
-.. autofunction:: up_vector
-.. autofunction:: gen_grid
+.. automodule:: frads.radutil
+   :members:
+
 
 radmtx
 ---------
@@ -36,9 +24,8 @@ radmtx
 
 makesky
 ---------
-.. module:: frads.makesky
-.. autofunction:: gendaymtx
-.. autofunction:: Gensun
+.. automodule:: frads.makesky
+   :members:
 
 mtxmethod
 ---------
