@@ -207,7 +207,7 @@ def mtxstr2nparray(data_str):
     Returns:
         RGB numpy arrays
     """
-    raw = data_str.split(b'\n\n')
+    raw = data_str.split('{0}{0}'.format(os.linesep).encode())
     header = raw[0]
     if not header.startswith(b"#?RADIANCE"):
         raise ValueError("No header found")
