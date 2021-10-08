@@ -211,3 +211,5 @@ jobs:
         rtrace -version
         cd test
         python -m unittest -v
+        pip install numpy
+        python test_mrad.py
