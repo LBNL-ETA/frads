@@ -577,12 +577,16 @@ def calc_2phase_pt(model, datetime_stamps, dsmx, smx, config):
         xypos = [",".join(line.split()[:3]) for line in grid_lines]
         opath = os.path.join(
             config.resdir, f'grid_{config.name}_{grid_name}.txt')
-        res = mtxmult.mtxmult(dsmx[grid_name], smx).splitlines()
+        res = mtxmult.mtxmult(dsmx[grid_name], smx)
+        if isinstance(res, bytes):
+            res = res.decode().splitlines()
+        else:
+            res = ["\t".join(map(str, row)) for row in res.T.tolist()]
         with open(opath, 'w') as wtr:
             wtr.write("\t"+"\t".join(xypos)+"\n")
             for idx, _ in enumerate(res):
                 wtr.write(datetime_stamps[idx] + '\t')
-                wtr.write(res[idx].decode().rstrip() + '\n')
+                wtr.write(res[idx].rstrip() + '\n')
 
 
 def calc_2phase_vu(datetime_stamps, dsmx, smx, config):
@@ -663,16 +667,25 @@ def calc_5phase_pt(model, vmx, vmxd, dmx, dmxd, pcdsmx,
         presl = []
         pdresl = []
         mult_cds = mtxmult.mtxmult(pcdsmx[grid_name], smx_sun)
-        prescd = [list(map(float, l.decode().strip().split('\t')))
-                  for l in mult_cds.splitlines()]
+        if isinstance(mult_cds, bytes):
+            prescd = [list(map(float, l.decode().strip().split('\t')))
+                      for l in mult_cds.splitlines()]
+        else:
+            prescd = mult_cds.T.tolist()
         for wname in model.window_groups:
             _res = mtxmult.mtxmult(vmx[grid_name+wname], config.klems_bsdfs[wname], dmx[wname], smx)
             _resd = mtxmult.mtxmult(
                 vmxd[grid_name+wname], config.klems_bsdfs[wname], dmxd[wname], smxd)
-            presl.append([map(float, l.decode().strip().split('\t'))
-                          for l in _res.splitlines()])
-            pdresl.append([map(float, l.decode().strip().split('\t'))
-                           for l in _resd.splitlines()])
+            if isinstance(_res, bytes):
+                _res = [map(float, l.decode().strip().split('\t'))
+                        for l in _res.splitlines()]
+                _resd = [map(float, l.decode().strip().split('\t'))
+                         for l in _resd.splitlines()]
+            else:
+                _res = _res.T.tolist()
+                _resd = _resd.T.tolist()
+            presl.append(_res)
+            pdresl.append(_resd)
         pres3 = [[sum(tup) for tup in zip(*line)] for line in zip(*presl)]
         pres3d = [[sum(tup) for tup in zip(*line)] for line in zip(*pdresl)]
         res = [[x-y+z for x, y, z in zip(a, b, c)]
