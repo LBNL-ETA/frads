@@ -30,7 +30,7 @@ def parse_rad_header(header_str):
     nrow = int([mat[0] for mat in matches if mat[0] != ''][0])
     ncol = int([mat[1] for mat in matches if mat[1] != ''][0])
     ncomp = int([mat[2] for mat in matches if mat[2] != ''][0])
-    dtype = [mat[3] for mat in matches if mat[3] != ''][0]
+    dtype = [mat[3] for mat in matches if mat[3] != ''][0].strip()
     return nrow, ncol, ncomp, dtype
 
 

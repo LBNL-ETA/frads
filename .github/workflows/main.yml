@@ -81,6 +81,8 @@ jobs:
         rtrace -version
         cd test
         python -m unittest -v
+        pip install numpy
+        python test_mrad.py
 
   test_osx:
     # The type of runner that the job will run on
@@ -146,6 +148,8 @@ jobs:
         rtrace -version
         cd test
         python -m unittest -v
+        pip install numpy
+        python test_mrad.py
 
   test_windows:
     # The type of runner that the job will run on
