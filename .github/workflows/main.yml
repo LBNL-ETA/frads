@@ -216,4 +216,4 @@ jobs:
         cd test
         python -m unittest -v
         pip install numpy
-        python test_mrad.py
+        mrad -v run two_phase.cfg

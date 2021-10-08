@@ -212,9 +212,6 @@ def mtxstr2nparray(data_str):
     if not header.startswith(b"#?RADIANCE"):
         raise ValueError("No header found")
     nrow, ncol, ncomp, dtype = parse_rad_header(header)
-    print(dtype)
-    print(type(dtype))
-    print(dtype=='ascii')
     if dtype == 'ascii':
         data = np.array(
             [line.split() for line in raw[1].splitlines()], dtype=float)
