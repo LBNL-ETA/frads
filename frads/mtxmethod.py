@@ -275,12 +275,12 @@ def view_matrix_pt(model, config, direct=False):
             _name = grid_name + wname
             if direct:
                 _name += '_d'
-            vmxs[grid_name+wname] = os.path.join(
+            vmxs[grid_name + wname] = os.path.join(
                 config.mtxdir, f'pvmx_{_name}.mtx')
             receiver_windows += radmtx.Receiver.as_surface(
                 prim_list=window_prim, basis=config.vmx_basis,
                 offset=None, left=None, source='glow',
-                out=vmxs[grid_name+wname])
+                out=vmxs[grid_name + wname])
         files_exist = all([os.path.isfile(f) for f in vmxs.values()])
         if not files_exist or config.overwrite:
             logger.info("Generating vmx for %s", grid_name)
@@ -545,26 +545,24 @@ def direct_sun_matrix_vu(model, smx_path, vmap_oct, cdmap_oct, config):
                 f"Using rcontrib to generat direct sun f matrix for {view}...")
             radmtx.rcontrib(sender=sndr, modifier=rcvr_sun.modifier,
                             octree=sun_oct, out=tempf,
-                            opt=config.cdsmx_opt+' -n %s' % config.nprocess)
+                            opt=config.cdsmx_opt + ' -n %s' % config.nprocess)
             _files = [os.path.join(tempf, f) for f in sorted(os.listdir(tempf))
                       if f.endswith('.hdr')]
             util.mkdir_p(vcdfmx[view])
             for idx, val in enumerate(_files):
-                os.rename(val,
-                          os.path.join(vcdfmx[view], mod_names[idx]+'.hdr'))
+                shutil.move(val, os.path.join(vcdfmx[view], mod_names[idx] + '.hdr'))
             shutil.rmtree(tempf)
         if not os.path.isdir(vcdrmx[view]) or config.overwrite:
             logger.info(
                 f"Using rcontrib to generate direct sun r matrix for {view}")
             radmtx.rcontrib(sender=sndr, modifier=rcvr_sun.modifier,
                             octree=sun_oct, out=tempr,
-                            opt=config.cdsmx_opt+' -i -n %s' % config.nprocess)
+                            opt=config.cdsmx_opt + ' -i -n %s' % config.nprocess)
             _files = [os.path.join(tempr, f) for f in sorted(os.listdir(tempr))
                       if f.endswith('.hdr')]
             util.mkdir_p(vcdrmx[view])
             for idx, val in enumerate(_files):
-                os.rename(val,
-                          os.path.join(vcdrmx[view], mod_names[idx]+'.hdr'))
+                shutil.move(val, os.path.join(vcdrmx[view], mod_names[idx] + '.hdr'))
             shutil.rmtree(tempr)
     return vcdfmx, vcdrmx, vmap_paths, cdmap_paths
 
@@ -601,7 +599,7 @@ def calc_2phase_vu(datetime_stamps, dsmx, smx, config):
         ofiles = [os.path.join(opath, f) for f in sorted(os.listdir(opath))
                   if f.endswith('.hdr')]
         for idx, val in enumerate(ofiles):
-            os.rename(val, os.path.join(opath, datetime_stamps[idx]+'.hdr'))
+            shutil.move(val, os.path.join(opath, datetime_stamps[idx]+'.hdr'))
 
 
 def calc_3phase_pt(model, datetime_stamps, vmx, dmx, smx, config):
@@ -650,12 +648,12 @@ def calc_3phase_vu(model, datetime_stamps, vmx, dmx, smx, config):
                 if path != '+':
                     shutil.rmtree(path)
         else:
-            os.rename(vresl[0], opath)
+            shutil.move(vresl[0], opath)
         ofiles = [os.path.join(opath, f)
                   for f in sorted(os.listdir(opath))
                   if f.endswith('.hdr')]
         for idx, ofile in enumerate(ofiles):
-            os.rename(ofile, os.path.join(
+            shutil.move(ofile, os.path.join(
                 opath, datetime_stamps[idx]+'.hdr'))
 
 
@@ -738,28 +736,28 @@ def calc_5phase_vu(model, vmx, vmxd, dmx, dmxd, vcdrmx, vcdfmx,
                 mtxmult.pcombop(
                     vdresl, res3di, nproc=int(config.nprocess))
             else:
-                os.rename(vresl[0], res3)
-                os.rename(vdresl[0], res3di)
+                shutil.move(vresl[0], res3)
+                shutil.move(vdresl[0], res3di)
             logger.info("Applying mapterial reflectance map")
             mtxmult.pcombop([res3di, '*', vmap_paths[view]],
                             res3d, nproc=int(config.nprocess))
             mtxmult.pcombop([vrescdr, '*', cdmap_paths[view], '+', vrescdf],
                             vrescd, nproc=int(config.nprocess))
             opath = os.path.join(config.resdir, f"view_{config.name}_{view}")
-            if os.path.os.path.isdir(opath):
+            if os.path.isdir(opath):
                 shutil.rmtree(opath)
             logger.info("Assemble all phase results.")
             res3_path = [os.path.join(res3, f) for f in sorted(
                 os.listdir(res3)) if f.endswith('.hdr')]
-            [os.rename(file, os.path.join(res3, datetime_stamps[idx]+'.hdr'))
+            [shutil.move(file, os.path.join(res3, datetime_stamps[idx]+'.hdr'))
              for idx, file in enumerate(res3_path)]
             res3d_path = [os.path.join(res3d, f) for f in sorted(
                 os.listdir(res3d)) if f.endswith('.hdr')]
-            [os.rename(file, os.path.join(res3d, datetime_stamps[idx]+'.hdr'))
+            [shutil.move(file, os.path.join(res3d, datetime_stamps[idx]+'.hdr'))
              for idx, file in enumerate(res3d_path)]
             vrescd_path = [os.path.join(vrescd, f) for f in sorted(
                 os.listdir(vrescd)) if f.endswith('.hdr')]
-            [os.rename(file, os.path.join(vrescd, datetime_stamps_d6[idx]+'.hdr'))
+            [shutil.move(file, os.path.join(vrescd, datetime_stamps_d6[idx]+'.hdr'))
              for idx, file in enumerate(vrescd_path)]
             util.mkdir_p(opath)
             for hdr3 in os.listdir(res3):
