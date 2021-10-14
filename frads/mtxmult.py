@@ -20,11 +20,11 @@ from frads import util
 logger = logging.getLogger("frads.radutil")
 
 
-def parse_rad_header(header_str):
+def parse_rad_header(header_str: str) -> tuple:
     """Parse a Radiance matrix file header."""
     compiled = re.compile(
         r' NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ', flags=re.X)
-    matches = compiled.findall(header_str.decode())
+    matches = compiled.findall(header_str)
     if len(matches) != 4:
         raise ValueError("Can't find one of the header entries.")
     nrow = int([mat[0] for mat in matches if mat[0] != ''][0])
@@ -198,7 +198,7 @@ def combine_mtx(mtxs, out_dir):
     return stderr
 
 
-def mtxstr2nparray(data_str):
+def mtxstr2nparray(data_str: bytes):
     """Convert Radiance 3-channel matrix file to numpy array.
 
     Args:
@@ -207,19 +207,22 @@ def mtxstr2nparray(data_str):
     Returns:
         RGB numpy arrays
     """
-    raw = data_str.split('{0}{0}'.format(os.linesep).encode())
-    header = raw[0]
-    if not header.startswith(b"#?RADIANCE"):
+    if not data_str.startswith(b"#?RADIANCE"):
         raise ValueError("No header found")
-    nrow, ncol, ncomp, dtype = parse_rad_header(header)
+    if b"\r\n\r\n" in data_str:
+        linesep2 = b"\r\n\r\n"
+    else:
+        linesep2 = b"\n\n"
+    chunks = data_str.split(linesep2)
+    nrow, ncol, ncomp, dtype = parse_rad_header(chunks[0].decode())
     if dtype == 'ascii':
         data = np.array(
-            [line.split() for line in raw[1].splitlines()], dtype=float)
+            [line.split() for line in chunks[1].splitlines()], dtype=float)
     else:
         if dtype == 'float':
-            data = np.frombuffer(raw[1], np.single).reshape(nrow, ncol*ncomp)
+            data = np.frombuffer(chunks[1], np.single).reshape(nrow, ncol * ncomp)
         elif dtype == 'double':
-            data = np.frombuffer(raw[1], np.double).reshape(nrow, ncol*ncomp)
+            data = np.frombuffer(chunks[1], np.double).reshape(nrow, ncol * ncomp)
         else:
             raise ValueError("Unsupported data type %s" % dtype)
     rdata = data[:, ::ncomp]
@@ -233,12 +236,16 @@ def mtxstr2nparray(data_str):
 def smx2nparray(data_str):
     """Convert Radiance sky matrix file to numpy array.
     """
-    raw = data_str.split(b'\n\n')
-    header = raw[0]
-    content = raw[1:]
-    if not header.startswith(b"#?RADIANCE"):
+    if not data_str.startswith(b"#?RADIANCE"):
         raise ValueError("No header found")
-    nrow, ncol, ncomp, dtype = parse_rad_header(header)
+    if b"\r\n\r\n" in data_str:
+        linesep2 = b"\r\n\r\n"
+    else:
+        linesep2 = b"\n\n"
+    chunks = data_str.split(linesep2)
+    header_str = chunks[0].decode()
+    content = chunks[1:]
+    nrow, ncol, ncomp, dtype = parse_rad_header(header_str)
     if dtype == 'ascii':
         data = [i.splitlines() for i in content if i != b'']
         rdata = np.array([[i.split()[::ncomp][0] for i in row] for row in data],
@@ -249,9 +256,11 @@ def smx2nparray(data_str):
                          dtype=float)
     else:
         if dtype == 'float':
-            data = np.frombuffer(b'\n\n'.join(raw[1:]), np.single).reshape(nrow, ncol*ncomp)
+            data = np.frombuffer(b"\n\n".join(content), np.single).reshape(
+                nrow, ncol * ncomp)
         elif dtype == 'double':
-            data = np.frombuffer(b'\n\n'.join(raw[1:]), np.double).reshape(nrow, ncol*ncomp)
+            data = np.frombuffer(b"\n\n".join(content), np.double).reshape(
+                nrow, ncol * ncomp)
         else:
             raise ValueError("Unsupported data type %s" % dtype)
         rdata = data[:, 0::ncomp]
