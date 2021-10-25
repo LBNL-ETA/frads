@@ -1,0 +1,30 @@
+Standard Description : Consistent with ISO 9050:1990 (E)
+Standard Provides Methods: SOLAR, PHOTOPIC, TUV
+
+Name : SOLAR
+Description : ISO 9050:1990(E) Solar
+Source Spectrum : ISO 9050 Table 3.ssp
+Detector Spectrum : None
+Wavelength Set : Source
+Integration Rule : Pre-weighted Table (Normalized, k=1.0)
+Minimum Wavelength : Wavelength set
+Maximum Wavelength : Wavelength set
+
+Name : PHOTOPIC
+Description : ISO 9050:1990(E) Photopic
+Source Spectrum : ISO 9050 Table 1.ssp
+Detector Spectrum : None
+Wavelength Set : Source
+Integration Rule : Pre-weighted Table (Normalized, k=100.0)
+Minimum Wavelength : Wavelength set
+Maximum Wavelength : Wavelength set
+
+Name : TUV
+Description : ISO 9050:1990 (E) UV Transmittance
+Source Spectrum : ISO 9050 Table 4.ssp
+Detector Spectrum : None
+Wavelength Set : Source
+Integration Rule : Pre-weighted Table (Normalized, k=1.0)
+Minimum Wavelength : Wavelength set
+Maximum Wavelength : Wavelength set
+

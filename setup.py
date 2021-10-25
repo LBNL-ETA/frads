@@ -13,7 +13,7 @@ setuptools.setup(
     url="https://github.com/LBNL-ETA/frads",
     packages=['frads'],
     package_dir={'frads': 'frads'},
-    package_data={'frads': ['data/*.*']},
+    package_data={'frads': ['data/*.*', "data/standards/*.*"]},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: BSD License",
@@ -27,6 +27,7 @@ setuptools.setup(
                             'eprad=frads.eprad:main',
                             'genfmtx=frads.genfmtx:main',
                             'gengrid=frads.radutil:gengrid',
+                            'genglazing=frads.genglazing:main',
                             'getwea=frads.makesky:getwea',
                             'rpxop=frads.mtxmult:rpxop',
                             'varays=frads.radutil:varays',

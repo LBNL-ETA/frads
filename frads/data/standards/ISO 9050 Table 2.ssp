@@ -1,0 +1,23 @@
+Description: ISO 9050:1990(E) Table 2 - Relative Spectral Distribution of direct solar radiation (direct and diffuse) Slam for air mass 1 multiplied by the spectral bandwidth del.lam Normalized so that the sum = 1.0
+Type: Source
+Wavelength Units: nanometers 
+     300   0.005
+     340   0.024
+     380   0.032
+     420    0.05
+     460   0.065
+     500   0.063
+     540   0.058
+     580   0.054
+     620   0.055
+     660   0.049
+     700   0.046
+     740   0.041
+     780   0.037
+     900   0.139
+    1100   0.097
+    1300   0.058
+    1500   0.039
+    1700   0.026
+    1900   0.018
+    2500   0.044

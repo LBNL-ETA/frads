@@ -1,0 +1,84 @@
+Standard Description : Closest approx to WINDOW 4.1 methods
+Standard Provides Methods: SOLAR, PHOTOPIC, COLOR_TRISTIMX, COLOR_TRISTIMY, COLOR_TRISTIMZ, TUV, TDW, SPF, THERMAL IR
+
+Name : SOLAR
+Description : WINDOW 4.1 Solar (Approx) only agrees for files with NIR data
+Source Spectrum : ASTM E891 Table 1 Direct AM1_5.ssp
+Detector Spectrum : None
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.305
+Maximum Wavelength : 4.045
+
+Name : PHOTOPIC
+Description : WINDOW 4.1 Visible
+Source Spectrum : ASTM E891 Table 1 Direct AM1_5.ssp
+Detector Spectrum : ASTM E308 1931 Y.dsp
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : COLOR_TRISTIMX
+Description : WINDOW 4.1 Color
+Source Spectrum : ASTM E308 Illuminant D65.ssp
+Detector Spectrum : ASTM E308 1964 X.dsp
+Wavelength Set : Source
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : COLOR_TRISTIMY
+Description : WINDOW 4.1 Color
+Source Spectrum : ASTM E308 Illuminant D65.ssp
+Detector Spectrum : ASTM E308 1964 Y.dsp
+Wavelength Set : Source
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : COLOR_TRISTIMZ
+Description : WINDOW 4.1 Color
+Source Spectrum : ASTM E308 Illuminant D65.ssp
+Detector Spectrum : ASTM E308 1964 Z.dsp
+Wavelength Set : Source
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : TUV
+Description : WINDOW 4.1 UV Transmittance
+Source Spectrum : ASTM E891 Table 1 Direct AM1_5.ssp
+Detector Spectrum : None
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.31
+Maximum Wavelength : 0.38
+
+Name : TDW
+Description : WINDOW 4.1 UV Damage Weighted Transmittance
+Source Spectrum : ASTM E891 Table 1 Direct AM1_5.ssp
+Detector Spectrum : Krochmann
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.3
+Maximum Wavelength : 0.5
+
+Name : SPF
+Description : 
+Source Spectrum : ASTM E891 Table 1 Direct AM1_5.ssp
+Detector Spectrum : CIE SPF McKinlay UV.dsp
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.28
+Maximum Wavelength : 0.4
+
+Name : THERMAL IR
+Description : Infrared average weighted by a blackbody source function
+Source Spectrum : Blackbody (T=300.0K)
+Detector Spectrum : None
+Wavelength Set : Data
+Integration Rule : Trapezoidal
+Minimum Wavelength : 5
+Maximum Wavelength : Wavelength set
+
