@@ -77,13 +77,13 @@ def compose_blinds(spacing, width, angle, curve, material):
 
 
 def get_arg_parser():
-    """."""
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         prog='genglazing', usage='genglazing inp',
         description='Generate a glazing system using pwc')
 
     parser.add_argument("inp")
-    parser.add_argument("-M", '--mtx', action='store_true')
+    parser.add_argument("-M", '--mtx')
     parser.add_argument("-T", "--key")
     return parser
 
@@ -91,7 +91,6 @@ def get_arg_parser():
 def convert_config(cfg: configparser.ConfigParser) -> GlazingSystem:
     """."""
     config_dict = {}
-    # config_dict['optic_standards'] = cfg['Standards']['optic_standard']
     config_dict.update(dict(cfg['Blinds']))
     config_dict.update(dict(cfg['Shade']))
     config_dict.update(dict(cfg['Glazing']))
@@ -159,6 +158,7 @@ def main():
                 system_layer.append(pwc.parse_bsdf_xml_string(ret))
             elif layer.startswith('blind'):
                 spacing, depth, tilt, curve, material_id = layer_id.split()
+                xml = True
                 BSDF_calc = True
                 material = pwc.parse_json(get_igsdb_json(material_id, args.key))
                 system_layer.append(compose_blinds(
@@ -217,9 +217,5 @@ def main():
             cmd = ['wrapBSDF', '-W', '-a', 'kf', '-tf', 'tmp_tf', '-tb',
                    'tmp_tb', '-rf', 'tmp_rf', '-rb', 'tmp_rb', '-U']
             wrap_bsdf = sp.run(cmd, stdout=sp.PIPE)
-            with open('system.xml', 'wb') as wtr:
+            with open(args.mtx, 'wb') as wtr:
                 wtr.write(wrap_bsdf.stdout)
-
-
-if __name__ == "__main__":
-    main()
