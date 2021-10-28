@@ -146,7 +146,7 @@ def main():
             gap_layer.append(pwc.Gap(
                 getattr(pwc.PredefinedGasType, _layer[1].upper()),
                 float(thickness)))
-    BSDF_calc = False
+    BSDF_calc = False if not args.mtx else True
     for layer in glzsys.system[::2]:
         layer_id = getattr(glzsys, layer)
         if (not os.path.isfile(layer_id)) and (layer_id[0].isdigit()):
@@ -172,7 +172,6 @@ def main():
             system_layer.append(pwc.parse_bsdf_xml_file(layer_id))
         else:
             system_layer.append(pwc.parse_optics_file(layer_id))
-
 
     _file_path_ = os.path.dirname(__file__)
     standard_fname = "W5_NFRC_2003.std"
