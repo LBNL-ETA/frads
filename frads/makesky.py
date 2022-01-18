@@ -450,7 +450,25 @@ def getwea():
     parser.add_argument('-eh', type=float, help='end hour (float)')
     parser.add_argument('-rz', action='store_true', help='remove zero solar luminance entries')
     parser.add_argument('-wpths', nargs='+', help='window paths (.rad)')
+    parser.add_argument(
+        "-v", "--verbose", action="count", default=0,
+        help="Verbose mode: \n"
+        "\t-v=Debug\n"
+        "\t-vv=Info\n"
+        "\t-vvv=Warning\n"
+        "\t-vvvv=Error\n"
+        "\t-vvvvv=Critical\n"
+        "default=Warning")
     args = parser.parse_args()
+    # Setup logger
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    console_handler = logging.StreamHandler()
+    _level = args.verbose * 10
+    logger.setLevel(_level)
+    console_handler.setLevel(_level)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
     window_normals: Union[None, Set[radgeom.Vector]] = None
     if args.z is not None:
         lat, lon = util.get_latlon_from_zipcode(args.z)
@@ -460,6 +478,7 @@ def getwea():
         print("Exit: need either latitude and longitude or U.S. postcode")
         exit()
     _, url = util.get_epw_url(lat, lon)
+    logger.debug("EPW URL:" + url)
     epw = util.request(url, {})
     remove_zero = False
     if args.wpths is not None:
