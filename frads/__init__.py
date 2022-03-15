@@ -7,6 +7,9 @@ import shutil
 import subprocess as sp
 import sys
 
+
+__version__ = "0.2.3"
+
 logger = logging.getLogger('frads')
 
 # Check if Radiance is installed more or less
@@ -19,6 +22,7 @@ rad_progs = [
     'rmtxop',
     'gendaymtx',
 ]
+
 for prog in rad_progs:
     ppath = shutil.which(prog)
     if ppath is None:

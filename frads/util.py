@@ -4,17 +4,70 @@ from dataclasses import dataclass, field
 import logging
 import math
 import os
+import random
 import re
 import ssl
+import string
 import subprocess as sp
 import time
-from typing import Dict, List, Optional, NamedTuple, Tuple
+from typing import Dict, List, Optional, NamedTuple, Tuple, Union
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 
 
 logger = logging.getLogger("frads.util")
+
+COLOR_PRIMARIES = {}
+
+COLOR_PRIMARIES["radiance"] = {
+    "cie_x_r": 0.640, "cie_y_r": 0.330,
+    "cie_x_g": 0.290, "cie_y_g": 0.600,
+    "cie_x_b": 0.150, "cie_y_b": 0.060,
+    "cie_x_w": 1 / 3, "cie_y_w": 1 / 3
+}
+
+COLOR_PRIMARIES["sharp"] = {
+    "cie_x_r": 0.6898, "cie_y_r": 0.3206,
+    "cie_x_g": 0.0736, "cie_y_g": 0.9003,
+    "cie_x_b": 0.1166, "cie_y_b": 0.0374,
+    "cie_x_w": 1 / 3, "cie_y_w": 1 / 3
+}
+
+COLOR_PRIMARIES["adobe"] = {
+    "cie_x_r": 0.640, "cie_y_r": 0.330,
+    "cie_x_g": 0.210, "cie_y_g": 0.710,
+    "cie_x_b": 0.150, "cie_y_b": 0.060,
+    "cie_x_w": 0.3127, "cie_y_w": 0.3290
+}
+
+COLOR_PRIMARIES["rimm"] = {
+    "cie_x_r": 0.7347, "cie_y_r": 0.2653,
+    "cie_x_g": 0.1596, "cie_y_g": 0.8404,
+    "cie_x_b": 0.0366, "cie_y_b": 0.0001,
+    "cie_x_w": 0.3457, "cie_y_w": 0.3585
+}
+
+COLOR_PRIMARIES["709"] = {
+    "cie_x_r": 0.640, "cie_y_r": 0.330,
+    "cie_x_g": 0.300, "cie_y_g": 0.600,
+    "cie_x_b": 0.150, "cie_y_b": 0.060,
+    "cie_x_w": 0.3127, "cie_y_w": 0.3290
+}
+
+COLOR_PRIMARIES["p3"] = {
+    "cie_x_r": 0.680, "cie_y_r": 0.320,
+    "cie_x_g": 0.265, "cie_y_g": 0.690,
+    "cie_x_b": 0.150, "cie_y_b": 0.060,
+    "cie_x_w": 0.314, "cie_y_w": 0.351
+}
+
+COLOR_PRIMARIES["2020"] = {
+    "cie_x_r": 0.708, "cie_y_r": 0.292,
+    "cie_x_g": 0.170, "cie_y_g": 0.797,
+    "cie_x_b": 0.131, "cie_y_b": 0.046,
+    "cie_x_w": 0.3127, "cie_y_w": 0.3290
+}
 
 
 class PaneProperty(NamedTuple):
@@ -366,7 +419,66 @@ def get_igsdb_json(igsdb_id, token, xml=False):
     return response
 
 
-def spec2rgb(inp: str, cspace: str) -> list:
+def get_tristi_paths():
+    """Get CIE tri-stimulus file paths."""
+    _file_path_ = os.path.dirname(__file__)
+    standards_path = os.path.join(_file_path_, "data", "standards")
+    cie_path = {}
+    # 2° observer
+    cie_path["x2"] = os.path.join(standards_path, "CIE 1931 1nm X.dsp")
+    cie_path["y2"] = os.path.join(standards_path, "CIE 1931 1nm Y.dsp")
+    cie_path["z2"] = os.path.join(standards_path, "CIE 1931 1nm Z.dsp")
+    # 10° observer
+    cie_path["x10"] = os.path.join(standards_path, "CIE 1964 1nm X.dsp")
+    cie_path["y10"] = os.path.join(standards_path, "CIE 1964 1nm Y.dsp")
+    cie_path["z10"] = os.path.join(standards_path, "CIE 1964 1nm Z.dsp")
+
+    return cie_path
+
+
+
+def get_conversion_matrix(prims):
+    # The whole calculation is based on the CIE (x,y) chromaticities below
+
+    CIE_x_r = COLOR_PRIMARIES[prims]["cie_x_r"]
+    CIE_y_r = COLOR_PRIMARIES[prims]["cie_y_r"]
+    CIE_x_g = COLOR_PRIMARIES[prims]["cie_x_g"]
+    CIE_y_g = COLOR_PRIMARIES[prims]["cie_y_g"]
+    CIE_x_b = COLOR_PRIMARIES[prims]["cie_x_b"]
+    CIE_y_b = COLOR_PRIMARIES[prims]["cie_y_b"]
+    CIE_x_w = COLOR_PRIMARIES[prims]["cie_x_w"]
+    CIE_y_w = COLOR_PRIMARIES[prims]["cie_y_w"]
+
+
+    # CIE_D = CIE_x_r * (CIE_y_g - CIE_y_b) + CIE_x_g * (CIE_y_b - CIE_y_r) + CIE_x_b*(CIE_y_r - CIE_y_g)
+    CIE_C_rD = (1. / CIE_y_w) * (CIE_x_w * (CIE_y_g - CIE_y_b) - CIE_y_w * (CIE_x_g - CIE_x_b) + CIE_x_g * CIE_y_b - CIE_x_b * CIE_y_g)
+    CIE_C_gD = (1. / CIE_y_w) * (CIE_x_w * (CIE_y_b - CIE_y_r) - CIE_y_w * (CIE_x_b - CIE_x_r) - CIE_x_r * CIE_y_b + CIE_x_b * CIE_y_r)
+    CIE_C_bD = (1. / CIE_y_w) * (CIE_x_w * (CIE_y_r - CIE_y_g) - CIE_y_w * (CIE_x_r - CIE_x_g) + CIE_x_r * CIE_y_g - CIE_x_g * CIE_y_r)
+
+    # Convert CIE XYZ coordinates to RGB
+
+    coeff_00 = (CIE_y_g - CIE_y_b - CIE_x_b * CIE_y_g + CIE_y_b * CIE_x_g) / CIE_C_rD
+    coeff_01 = (CIE_x_b - CIE_x_g - CIE_x_b * CIE_y_g + CIE_x_g * CIE_y_b) / CIE_C_rD
+    coeff_02 = (CIE_x_g * CIE_y_b - CIE_x_b * CIE_y_g) / CIE_C_rD
+    coeff_10 = (CIE_y_b - CIE_y_r - CIE_y_b * CIE_x_r + CIE_y_r * CIE_x_b) / CIE_C_gD
+    coeff_11 = (CIE_x_r - CIE_x_b - CIE_x_r * CIE_y_b + CIE_x_b * CIE_y_r) / CIE_C_gD
+    coeff_12 = (CIE_x_b * CIE_y_r - CIE_x_r * CIE_y_b) / CIE_C_gD
+    coeff_20 = (CIE_y_r - CIE_y_g - CIE_y_r * CIE_x_g + CIE_y_g * CIE_x_r) / CIE_C_bD
+    coeff_21 = (CIE_x_g - CIE_x_r - CIE_x_g * CIE_y_r + CIE_x_r * CIE_y_g) / CIE_C_bD
+    coeff_22 = (CIE_x_r * CIE_y_g - CIE_x_g * CIE_y_r) / CIE_C_bD
+
+    return coeff_00, coeff_01, coeff_02, coeff_10, coeff_11, coeff_12, coeff_20, coeff_21, coeff_22
+
+
+def xyz2rgb(x, y, z, coeffs: tuple):
+    red = max(0, coeffs[0] * x + coeffs[1] * y + coeffs[2] * z)
+    green = max(0, coeffs[3] * x + coeffs[4] * y + coeffs[5] * z)
+    blue = max(0, coeffs[6] * x + coeffs[7] * y + coeffs[8] * z)
+
+    return red, green, blue
+
+
+def spec2rgb(inp: str, cspace: str, coeffs) -> list:
     """Convert spectral data to RGB.
 
     Convert wavelength and spectral data in visible
@@ -412,6 +524,7 @@ def spec2rgb(inp: str, cspace: str) -> list:
     avg_2 = sum([float(row[2]) for row in res]) / row_cnt
     avg_3 = sum([float(row[3]) for row in res]) / row_cnt
     XYZ = f"{avg_1 / avg_0} {avg_2 / avg_0} {avg_3 / avg_0}"
+    # return xyz2rgb(avg_1/avg_0, avg_2/avg_0, avg_3/avg_0, coeffs)
     proc2 = sp.run(cmd2, input=XYZ.encode(), stdout=sp.PIPE)
     return proc2.stdout.decode().split()
 
@@ -454,32 +567,41 @@ def write_square_matrix(opath, sdata):
             wt.write('\n')
 
 
-def parse_bsdf_xml(path: str) -> Optional[dict]:
+def parse_bsdf_xml(path: str) -> dict:
     """Parse BSDF file in XML format.
     TODO: validate xml first before parsing
     """
-    data_dict: Dict[str, Optional[Dict[str, str]]] = {}
+    error_msg = f"Error parsing {path}: "
+    data_dict: dict = {"Def": "", "Solar": {}, "Visible": {}}
     tree = ET.parse(path)
-    root = tree.getroot()
-    if root is None:
-        return None
+    if (root := tree.getroot()) is None:
+        raise Exception(error_msg + "Root not found")
     tag = root.tag.rstrip('WindowElement')
-    optical = root.find(tag+'Optical')
-    layer = optical.find(tag+'Layer')
-    datadef = layer.find(tag+'DataDefinition')\
-        .find(tag+'IncidentDataStructure')
-    dblocks = layer.findall(tag+'WavelengthData')
-    data_dict = {'def': datadef.text.strip(), 'Solar': {}, 'Visible': {}}
-    for block in dblocks:
-        wavelength = block.find(tag+'Wavelength').text
-        dblock = block.find(tag+'WavelengthDataBlock')
-        direction = dblock.find(tag+'WavelengthDataDirection').text
-        scattering_data = dblock.find(tag+'ScatteringData').text.strip()
-        if scattering_data.count('\n') == 21168:
-            data_string = scattering_data.replace('\n\t', ' ')
-        else:
-            data_string = scattering_data
-        data_dict[wavelength][direction] = data_string
+    if (optical := root.find(tag + 'Optical')) is None:
+        raise Exception(error_msg + "Optical not found")
+    if (layer := optical.find(tag + 'Layer')) is None:
+        raise Exception(error_msg + "Layer not found")
+    if (data_def := layer.find(tag + 'DataDefinition')) is None:
+        raise Exception(error_msg + "data definition not found")
+    if (data_struct_txt := data_def.findtext(tag + 'IncidentDataStructure')) is None:
+        raise Exception(error_msg + "data structure not found")
+    data_dict["Def"] = data_struct_txt.strip()
+    data_blocks = layer.findall(tag + 'WavelengthData')
+    for block in data_blocks:
+        if (wavelength_txt := block.findtext(tag + 'Wavelength')) is None:
+            raise Exception(error_msg + "wavelength not found")
+        if wavelength_txt not in ("Solar", "Visible"):
+            raise Exception("Unknown %s" % wavelength_txt)
+        if (dblock := block.find(tag + 'WavelengthDataBlock')) is None:
+            raise Exception(error_msg + "wavelength data block not found")
+        if (direction := dblock.findtext(tag + 'WavelengthDataDirection')) is None:
+            raise Exception(error_msg + "wavelength direction not found")
+        if (sdata_txt := dblock.findtext(tag + 'ScatteringData')) is None:
+            raise Exception(error_msg + "scattering data not found")
+        sdata_txt = sdata_txt.strip()
+        if sdata_txt.count('\n') == 21168:
+            sdata_txt = sdata_txt.replace('\n\t', ' ')
+        data_dict[wavelength_txt][direction] = sdata_txt
     return data_dict
 
 
@@ -528,6 +650,42 @@ def silent_remove(path):
         os.remove(path)
     except FileNotFoundError as e:
         logger.error(e)
+
+
+def square2disk(in_square_a: float, in_square_b: float) -> tuple:
+    """Shirley-Chiu square to disk mapping.
+    Args:
+        in_square_x: [0, 1]
+        in_square_y: [0, 1]
+    """
+    # in_square_a = 2 * in_square_x - 1
+    # in_square_b = 2 * in_square_y - 1
+    if in_square_a + in_square_b > 0:
+        if in_square_a > in_square_b:
+            in_square_rgn = 0
+        else:
+            in_square_rgn = 1
+    else:
+        if in_square_b > in_square_a:
+            in_square_rgn = 2
+        else:
+            in_square_rgn = 3
+    out_disk_r = [in_square_a, in_square_b,
+                  -in_square_a, -in_square_b][in_square_rgn]
+    if in_square_b * in_square_b > 0:
+        phi_select_4 = 6 - in_square_a / in_square_b
+    else:
+        phi_select_4 = 0
+    phi_select = [
+        in_square_b/in_square_a,
+        2 - in_square_a/in_square_b,
+        4 + in_square_b/in_square_a,
+        phi_select_4,
+    ]
+    out_disk_phi = math.pi / 4 * phi_select[in_square_rgn]
+    out_disk_x = out_disk_r * math.cos(out_disk_phi)
+    out_disk_y = out_disk_r * math.sin(out_disk_phi)
+    return out_disk_x, out_disk_y, out_disk_r, out_disk_phi
 
 
 def mkdir_p(path):
@@ -631,3 +789,10 @@ def request(url: str, header: dict) -> str:
     if raw == '':
         raise ValueError("Empty return from request")
     return raw
+
+
+def id_generator(size=3, chars=None):
+    """Generate random characters."""
+    if chars is None:
+        chars = string.ascii_uppercase + string.digits
+    return ''.join(random.choice(chars) for _ in range(size))
