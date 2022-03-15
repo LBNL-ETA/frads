@@ -90,7 +90,7 @@ def get_arg_parser():
 
 def convert_config(cfg: configparser.ConfigParser) -> GlazingSystem:
     """."""
-    config_dict = {}
+    config_dict: dict = {}
     config_dict.update(dict(cfg['Blinds']))
     config_dict.update(dict(cfg['Shade']))
     config_dict.update(dict(cfg['Glazing']))
@@ -162,7 +162,8 @@ def main():
                 BSDF_calc = True
                 material = pwc.parse_json(get_igsdb_json(material_id, args.key))
                 system_layer.append(compose_blinds(
-                    float(spacing), float(depth), float(tilt), float(curve), material))
+                    float(spacing), float(depth), float(tilt),
+                    float(curve), material))
             else:
                 ret = get_igsdb_json(layer_id, args.key, xml=xml)
                 system_layer.append(pwc.parse_json(ret))

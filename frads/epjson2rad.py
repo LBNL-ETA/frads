@@ -1,5 +1,5 @@
 """
-Convert an EnergyPlus model as a parsed dictionary
+import osn EnergyPlus model as a parsed dictionary
 to Radiance primitives.
 TODO:
     * Parse window data file for Constradutilction:WindowDataFile
@@ -90,7 +90,8 @@ def thicken(surface: radgeom.Polygon,
     """Thicken window-wall."""
     direction = surface.normal().scale(thickness)
     facade = surface.extrude(direction)[:2]
-    [facade.extend(window.extrude(direction)[2:]) for window in windows]
+    for window in windows:
+        facade.extend(window.extrude(direction)[2:])
     uniq = facade.copy()
     for idx, val in enumerate(facade):
         for rep in facade[:idx] + facade[idx + 1:]:
@@ -122,7 +123,7 @@ def check_outward(polygon: radgeom.Polygon, zone_center: radgeom.Vector) -> bool
 def eplus_surface2primitive(
         surfaces: dict, constructions, zone_center, materials) -> dict:
     """Conert EPlusOpaqueSurface (and its windows) to Radiance primitives."""
-    surface_primitives = {}
+    surface_primitives: dict = {}
     for _, surface in surfaces.items():
         name = surface.name
         surface_primitives[name] = {}
@@ -434,7 +435,7 @@ def parse_epjson(epjs: dict) -> tuple:
                       if (key in fene_hosts) and value.sun_exposed]
 
     # get secondary zones, but we don't do anything with it yet.
-    secondary_zones = {}
+    secondary_zones: dict = {}
     for key, value in opaque_surfaces.items():
         if (key in fene_hosts) and (value.zone not in exterior_zones):
             adjacent_zone = opaque_surfaces[value.boundary].zone
@@ -445,7 +446,7 @@ def parse_epjson(epjs: dict) -> tuple:
     # go through each exterior zone, update zone dictionary.
     for zname in exterior_zones:
         zone_name = zname.replace(" ", "_")
-        surface_map = {"Wall": {}, "Ceiling": {}, "Roof": {}, "Floor": {}}
+        surface_map: dict = {"Wall": {}, "Ceiling": {}, "Roof": {}, "Floor": {}}
         windows = {n: val for n, val in fenestrations.items()
                    if opaque_surfaces[val.host].zone == zname}
         for name, surface in opaque_surfaces.items():
