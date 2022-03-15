@@ -146,7 +146,7 @@ class Vector:
         """Convert cartesian to spherical coordinates."""
         r = self.distance_from(Vector())
         theta = math.atan(self.y / self.x)
-        phi = math.atan(math.sqrt(self.x**2 + self.y**2) / self.z)
+        phi = math.acos(self.z / r)
         return theta, phi, r
 
     def coplanar(self, other1, other2):
@@ -221,7 +221,7 @@ class Polygon:
 
     def centroid(self):
         """Return the geometric center point."""
-        return sum(self.vertices, Vector()).scale(1/self.vert_cnt)
+        return sum(self.vertices, Vector()).scale(1 / self.vert_cnt)
 
     def area(self):
         """Calculate the area of the polygon.
