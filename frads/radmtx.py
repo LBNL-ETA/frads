@@ -8,15 +8,13 @@ a surface, sky, or suns.
 """
 
 from __future__ import annotations
+import logging
 import os
-import copy
 import subprocess as sp
 import tempfile as tf
-import logging
-from frads import makesky
-from frads import radgeom
-from frads import radutil, util
 from typing import Optional
+from frads import makesky, radgeom, radutil, util
+
 
 logger = logging.getLogger('frads.radmtx')
 
@@ -238,6 +236,7 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
     if len(modifier_set) != 1:
         logger.warning("Primitives don't share modifier")
     src_mod = f"rflx{prims[0].modifier}"
+    src_mod += util.id_generator()
     header = f'#@rfluxmtx h={basis} u={upvector}\n'
     if out is not None:
         header += f'#@rfluxmtx o="{out}"\n\n'
