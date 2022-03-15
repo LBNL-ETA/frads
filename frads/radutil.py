@@ -266,6 +266,28 @@ def neutral_plastic_prim(mod: str, ident: str, refl: float,
     return Primitive(mod, 'plastic', ident, '0', real_args)
 
 
+def neutral_trans_prim(mod: str, ident: str, trans: float, refl: float,
+                         spec: float, rough: float) -> Primitive:
+    """Generate a neutral color plastic material.
+    Args:
+        mod(str): modifier to the primitive
+        ident(str): identifier to the primitive
+        refl (float): measured reflectance (0.0 - 1.0)
+        specu (float): material specularity (0.0 - 1.0)
+        rough (float): material roughness (0.0 - 1.0)
+
+    Returns:
+        A material primtive
+    """
+    color = trans + refl
+    t_diff = trans / color
+    tspec = 0
+    err_msg = 'reflectance, speculariy, and roughness have to be 0-1'
+    assert all(0 <= i <= 1 for i in [spec, refl, rough]), err_msg
+    real_args = "7 {0} {0} {0} {1} {2} {3} {4}".format(color, spec, rough, t_diff, tspec)
+    return Primitive(mod, 'trans', ident, '0', real_args)
+
+
 def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough):
     """Generate a colored plastic material.
     Args:
@@ -538,27 +560,30 @@ def gen_blinds(depth, width, height, spacing, angle, curve, movedown):
     return slat_cmd
 
 
-def analyze_window(window_prim, movedown):
-    """Parse window primitive and prepare for genBSDF."""
-    window_polygon = window_prim['polygon']
-    vertices = window_polygon.vertices
-    assert len(vertices) == 4, "4-sided polygon only"
-    window_center = window_polygon.centroid()
+def analyze_vert_polygon(window_polygon, movedown):
+    """Parse window primitive and prepare for genBSDF.
+    Window has to be verticle.
+    """
     window_normal = window_polygon.normal()
-    window_normal
+    if round(window_normal.z, 1) != 0:
+        raise Exception("Can only analyze vertical polygons")
+    vertices = window_polygon.vertices
+    if len(vertices) != 4:
+        raise Exception("4-sided polygon only")
+    window_center = window_polygon.centroid()
     dim1 = vertices[0] - vertices[1]
     dim2 = vertices[1] - vertices[2]
     if dim1.normalize() in (radgeom.Vector(0, 0, 1), radgeom.Vector(0, 0, -1)):
-        height = dim1.length
-        width = dim2.length
+        height = dim1.length()
+        width = dim2.length()
     else:
-        height = dim2.length
-        width = dim1.length
+        height = dim2.length()
+        width = dim1.length()
     _south = radgeom.Vector(0, -1, 0)
     angle2negY = window_normal.angle_from(_south)
     rotate_window = window_center.rotate_3d(
         radgeom.Vector(0, 0, 1), angle2negY).rotate_3d(
-            radgeom.Vector(1, 0, 0), math.pi/2)
+            radgeom.Vector(1, 0, 0), math.pi / 2)
     translate = radgeom.Vector(0, 0, -movedown) - rotate_window
     return height, width, angle2negY, translate
 
