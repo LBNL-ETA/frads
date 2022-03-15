@@ -313,6 +313,28 @@ def sky_cont(mon, day, hrs, lat, lon, mer, dni, dhi,
     return out_str
 
 
+def gendaylit_cmd(month: str, day: str, hours: str,
+                  lat: str, lon: str, tzone: str,
+                  year: str = None, dir_norm_ir: str = None,
+                  dif_hor_ir: str = None, dir_hor_ir: str = None,
+                  dir_norm_il: str = None, dif_hor_il: str = None,
+                  solar: bool = False) -> list:
+    """Get a gendaylit command as a list."""
+    cmd = ["gendaylit", month, day, hours]
+    cmd += ["-a", lat, "-o", lon, "-m", tzone]
+    if year is not None:
+        cmd += ["-y", year]
+    if None not in (dir_norm_ir, dif_hor_ir):
+        cmd += ["-W", dir_norm_ir, dif_hor_ir]
+    if None not in (dir_hor_ir, dif_hor_ir):
+        cmd += ["-G", dir_hor_ir, dif_hor_ir]
+    if None not in (dir_norm_il, dif_hor_il):
+        cmd += ["-L", dir_norm_il, dif_hor_il]
+    if solar:
+        cmd += ["-O", "1"]
+    return cmd
+
+
 def solar_angle(lat, lon, mer, month, day, hour):
     """Simplified translation from the Radiance sun.c and gensky.c code.
 
@@ -327,18 +349,9 @@ def solar_angle(lat, lon, mer, month, day, hour):
 
     solar_decline = 0.4093 * math.sin((2 * math.pi / 365) * (julian_date - 81))
 
-    solar_time = hour + (0.170 * math.sin((4 * math.pi / 373) * (julian_date - 80))
-                         - 0.129 * math.sin((2 * math.pi / 355)
-                                            * (julian_date - 8))
-                         + (12/math.pi) * (s_meridian - longitude_r))
-
-    altitude = math.asin(math.sin(latitude_r) * math.sin(solar_decline)
-                         - math.cos(latitude_r) * math.cos(solar_decline)
-                         * math.cos(solar_time * (math.pi / 12)))
-    azimuth = -math.atan2(math.cos(solar_decline)*math.sin(solar_time*(math.pi/12.)),
-                          - math.cos(latitude_r)*math.sin(solar_time)
-                          - math.sin(latitude_r)*math.cos(solar_decline)
-                          * math.cos(solar_time*(math.pi/12)))
+    solar_time = hour + (0.170 * math.sin((4 * math.pi / 373) * (julian_date - 80)) - 0.129 * math.sin((2 * math.pi / 355) * (julian_date - 8)) + (12/math.pi) * (s_meridian - longitude_r))
+    altitude = math.asin(math.sin(latitude_r) * math.sin(solar_decline) - math.cos(latitude_r) * math.cos(solar_decline) * math.cos(solar_time * (math.pi / 12)))
+    azimuth = -math.atan2(math.cos(solar_decline)*math.sin(solar_time*(math.pi/12.)), -math.cos(latitude_r)*math.sin(solar_time) - math.sin(latitude_r)*math.cos(solar_decline) * math.cos(solar_time*(math.pi/12)))
 
     return altitude, azimuth
 
