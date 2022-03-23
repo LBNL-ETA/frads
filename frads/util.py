@@ -10,7 +10,7 @@ import ssl
 import string
 import subprocess as sp
 import time
-from typing import Dict, List, Optional, NamedTuple, Tuple, Union
+from typing import Dict, List, Optional, NamedTuple, Tuple, Union, Generator
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -432,9 +432,24 @@ def get_tristi_paths():
     cie_path["x10"] = os.path.join(standards_path, "CIE 1964 1nm X.dsp")
     cie_path["y10"] = os.path.join(standards_path, "CIE 1964 1nm Y.dsp")
     cie_path["z10"] = os.path.join(standards_path, "CIE 1964 1nm Z.dsp")
-
     return cie_path
 
+
+def load_cie_tristi(inp_wvl, observer):
+    cie_path = get_tristi_paths()
+    with open(cie_path[f"x{observer}"]) as rdr:
+        lines = rdr.readlines()[3:]
+        trix = {float(row.split()[0]): float(row.split()[1]) for row in lines}
+    with open(cie_path[f"y{observer}"]) as rdr:
+        lines = rdr.readlines()[3:]
+        triy = {float(row.split()[0]): float(row.split()[1]) for row in lines}
+    with open(cie_path[f"z{observer}"]) as rdr:
+        lines = rdr.readlines()[3:]
+        triz = {float(row.split()[0]): float(row.split()[1]) for row in lines}
+    trix_i = [trix[wvl] for wvl in inp_wvl]
+    triy_i = [triy[wvl] for wvl in inp_wvl]
+    triz_i = [triz[wvl] for wvl in inp_wvl]
+    return trix_i, triy_i, triz_i
 
 
 def get_conversion_matrix(prims):
@@ -471,21 +486,15 @@ def get_conversion_matrix(prims):
 
 
 def xyz2rgb(x, y, z, coeffs: tuple):
-    red = max(0, coeffs[0] * x + coeffs[1] * y + coeffs[2] * z)
-    green = max(0, coeffs[3] * x + coeffs[4] * y + coeffs[5] * z)
-    blue = max(0, coeffs[6] * x + coeffs[7] * y + coeffs[8] * z)
-
-    return red, green, blue
-
-
-def spec2rgb(inp: str, cspace: str, coeffs) -> list:
     """Convert spectral data to RGB.
 
     Convert wavelength and spectral data in visible
     spectrum to red, green, and blue given a color space.
 
     Args:
-        inp: file path with wavelength spectral data
+        cie_x:
+        cie_y:
+        cie_z:
         cspace: Color space to transform the spectral data.
             { radiance | sharp | adobe | rimm | 709 | p3 | 2020 }
     Returns:
@@ -494,27 +503,32 @@ def spec2rgb(inp: str, cspace: str, coeffs) -> list:
     Raise:
         KeyError where cspace is not defined.
     """
+    red = max(0, coeffs[0] * x + coeffs[1] * y + coeffs[2] * z)
+    green = max(0, coeffs[3] * x + coeffs[4] * y + coeffs[5] * z)
+    blue = max(0, coeffs[6] * x + coeffs[7] * y + coeffs[8] * z)
+    return red, green, blue
 
-    color_primaries = {
-        'radiance': 'CIE_Radiance(i)', 'sharp': 'CIE_Sharp(i)',
-        'adobe': 'CIE_Adobe(i)', 'rimm': 'CIE_RIMM(i)',
-        '709': 'CIE_709(i)', 'p3': 'CIE_P3(i)', '2020': 'CIE_2020(i)'
-    }
-    try:
-        primaries = color_primaries[cspace]
-    except KeyError as key_error:
-        print(color_primaries.keys())
-        raise key_error
+
+def spec2xyz(inp: str) -> tuple:
+    """Convert spectral data to RGB.
+
+    Convert wavelength and spectral data in visible
+    spectrum to red, green, and blue given a color space.
+
+    Args:
+        inp: file path with wavelength spectral data
+    Returns:
+        Red, Green, Blue in a list.
+
+    Raise:
+        KeyError where cspace is not defined.
+    """
+
     cmd1 = [
         "rcalc", "-f", "cieresp.cal",
         "-e", "ty=triy($1);$1=ty",
         "-e", "$2=$2*trix($1);$3=$2*ty;$4=$2*triz($1)",
         "-e", "cond=if($1-359,831-$1,-1)"
-    ]
-    cmd2 = [
-        "rcalc", "-f", "xyz_rgb.cal",
-        "-e", f"CIE_pri(i)={primaries}",
-        "-e", "$1=R($1,$2,$3);$2=G($1,$2,$3);$3=B($1,$2,$3)"
     ]
     proc = sp.run(cmd1, input=inp.encode(), check=True, stdout=sp.PIPE)
     res = [row.split('\t') for row in proc.stdout.decode().splitlines()]
@@ -523,10 +537,20 @@ def spec2rgb(inp: str, cspace: str, coeffs) -> list:
     avg_1 = sum([float(row[1]) for row in res]) / row_cnt
     avg_2 = sum([float(row[2]) for row in res]) / row_cnt
     avg_3 = sum([float(row[3]) for row in res]) / row_cnt
-    XYZ = f"{avg_1 / avg_0} {avg_2 / avg_0} {avg_3 / avg_0}"
-    # return xyz2rgb(avg_1/avg_0, avg_2/avg_0, avg_3/avg_0, coeffs)
-    proc2 = sp.run(cmd2, input=XYZ.encode(), stdout=sp.PIPE)
-    return proc2.stdout.decode().split()
+    cie_X = avg_1 / avg_0
+    cie_Y = avg_2 / avg_0
+    cie_Z = avg_3 / avg_0
+    return cie_X, cie_Y, cie_Z
+
+
+def xyz2xy(cie_x: float, cie_y: float, cie_z: float) -> tuple:
+    """Convert CIE XYZ to xy chromaticity."""
+    _sum = cie_x + cie_y + cie_z
+    if _sum == 0:
+        return 0, 0
+    chrom_x = cie_x / _sum
+    chrom_y = cie_y / _sum
+    return chrom_x, chrom_y
 
 
 def unpack_idf(path: str) -> dict:
@@ -655,11 +679,9 @@ def silent_remove(path):
 def square2disk(in_square_a: float, in_square_b: float) -> tuple:
     """Shirley-Chiu square to disk mapping.
     Args:
-        in_square_x: [0, 1]
-        in_square_y: [0, 1]
+        in_square_a: [-1, 1]
+        in_square_b: [-1, 1]
     """
-    # in_square_a = 2 * in_square_x - 1
-    # in_square_b = 2 * in_square_y - 1
     if in_square_a + in_square_b > 0:
         if in_square_a > in_square_b:
             in_square_rgn = 0
@@ -796,3 +818,126 @@ def id_generator(size=3, chars=None):
     if chars is None:
         chars = string.ascii_uppercase + string.digits
     return ''.join(random.choice(chars) for _ in range(size))
+
+
+def tokenize(inp: str) -> Generator[str, None, None]:
+    """Generator for tokenizing a string that
+    is seperated by a space or a comma.
+    Args:
+       inp: input string
+    Yields:
+        next token
+    """
+    tokens = re.compile(
+        ' +|[-+]?(\d+([.,]\d*)?|[.,]\d+)([eE][-+]?\d+)+|[\d*\.\d+]+|[{}]')
+    for match in tokens.finditer(inp):
+        if match.group(0)[0] in " ,":
+            continue
+        else:
+            yield match.group(0)
+
+
+def parse_branch(token: Generator[str, None, None]) -> List[float]:
+    """Prase tensor tree branches recursively by opening and closing curly braces.
+    Args:
+        token: token generator object.
+    Return:
+        children: parsed branches as nexted list
+    """
+    children = []
+    while True:
+        value = next(token)
+        if value == "{":
+            children.append(parse_branch(token))
+        elif value == "}":
+            return children
+        else:
+            children.append(float(value))
+
+
+def parse_ttree(data_str: str) -> list:
+    """Parse a tensor tree.
+    Args:
+        data_str: input data string
+    Returns:
+        A nested list that is the tree
+    """
+    tokenized = tokenize(data_str)
+    if next(tokenized) != "{":
+        raise ValueError("Tensor tree data not starting with {")
+    return parse_branch(tokenized)
+
+
+def get_nested_list_levels(nested_list: list) -> int:
+    """Calculate the number of levels given a nested list."""
+    return isinstance(nested_list, list) and max(map(get_nested_list_levels, nested_list)) + 1
+
+
+class TensorTree:
+    """The tensor tree object.
+    Anisotropic tensor tree has should have 16 lists
+    Attributes:
+        parsed: parsed tensor tree object)
+        depth: number of tree levels
+    """
+
+    def __init__(self, parsed):
+        self.parsed = parsed
+        self.depth = get_nested_list_levels(parsed)
+
+    def lookup(self, xp, yp) -> list:
+        """Traverses a parsed tensor tree (a nexted list) given a input position."""
+        branch_idx = self.get_branch_index(xp, yp)
+        quads = [self.parsed[i] for i in branch_idx]
+        return [self.traverse(quad, xp, yp) for quad in quads]
+
+    def get_leaf_index(self, xp, yp):
+        if xp < 0:
+            if yp < 0:
+                return range(0, 4)
+            else:
+                return range(4, 8)
+        else:
+            if yp < 0:
+                return range(8, 12)
+            else:
+                return range(12, 16)
+
+    def get_branch_index(self, xp, yp):
+        """Gets a set of index."""
+        if xp < 0:
+            if yp < 0:
+                return range(0, 16, 4)
+            else:
+                return range(2, 16, 4)
+        else:
+            if yp < 0:
+                return range(1, 16, 4)
+            else:
+                return range(3, 16, 4)
+
+    def traverse(self, quad, xp, yp, n=1) -> list:
+        """Traverse a quadrant."""
+        if len(quad) == 1:  # single leaf
+            res = quad
+        else:
+            res = []
+            # get x, y signage in relation to branches
+            _x = xp + 1 / (2**n) if xp < 0 else xp - 1 / (2**n)
+            _y = yp + 1 / (2**n) if yp < 0 else yp - 1 / (2**n)
+            n += 1
+            # which four branches to get? get index for them
+            if n < self.depth:
+                ochild = self.get_branch_index(_x, _y)
+            else:
+                ochild = self.get_leaf_index(_x, _y)
+            sub_quad = [quad[i] for i in ochild]
+            if all(isinstance(i, float) for i in sub_quad):
+                res = sub_quad  # single leaf for each branch
+            else:  # branches within this quadrant
+                for sq in sub_quad:
+                    if len(sq) > 4:  # there is another branch
+                        res.append(self.traverse(sq, _x, _y, n=n))
+                    else:  # just a leaf
+                        res.append(sq)
+        return res
