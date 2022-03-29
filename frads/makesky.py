@@ -99,7 +99,7 @@ class Gensun(object):
         for i in range(1, self.runlen):
             dirs = self.rsrc.dir_calc(i)
             line = f"void light sol{i} 0 0 3 1 1 1 sol{i} "
-            line += "source sun 0 0 4 {:.6g} {:.6g} {:.6g} 0.533".format(*dirs)
+            line += "source sun 0 0 4 {:.6g} {:.6g} {:.6g} 0.533".format(*dirs[:-1])
             out_lines.append(line)
         return LSEP.join(out_lines)+LSEP
 
@@ -128,7 +128,7 @@ class Gensun(object):
         if window_normals is not None:
             win_norm = window_normals
             for i in range(1, self.runlen):
-                dirs = radgeom.Vector(*self.rsrc.dir_calc(i))
+                dirs = radgeom.Vector(*self.rsrc.dir_calc(i)[:-1])
                 _mod = 'sol'+str(i)
                 v = 0
                 if dtot[i - 1] > 0:
@@ -142,7 +142,7 @@ class Gensun(object):
                 out_lines.append(line)
         else:
             for i in range(1, self.runlen):
-                dirs = radgeom.Vector(*self.rsrc.dir_calc(i))
+                dirs = radgeom.Vector(*self.rsrc.dir_calc(i)[:-1])
                 _mod = 'sol'+str(i)
                 v = 0
                 if dtot[i - 1] > 0:
