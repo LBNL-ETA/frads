@@ -420,14 +420,11 @@ class Reinsrc:
             razi_width if rbin > 0.5 else 2 * math.pi * x2
         ralt = (rrow + x1) * rah if rbin > 0.5 else math.asin(-x1)
         cos_alt = math.cos(ralt)
-        # Romega = if(.5-Rbin, 2*PI, if(Rmax-.5-Rbin, ' .
-# 81	        '       Razi_width*(sin(RAH*(Rrow+1)) - sin(RAH*Rrow)),' .
-# 82	        '       2*PI*(1 - cos(RAH/2)) ) );' .
         if rbin < .5:
             romega = 2 * math.pi
         else:
             if self.rmax - .5 > rbin:
-                romega = razi_width * (sin(rah * (rrow+1)) - math.sin(rah * rrow))
+                romega = razi_width * (math.sin(rah * (rrow + 1)) - math.sin(rah * rrow))
             else:
                 romega = 2 * math.pi * (1 - math.cos(rah / 2))
         dx = math.sin(razi) * cos_alt
