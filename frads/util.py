@@ -182,6 +182,7 @@ class MradConfig:
                 self.sun_cfs = self.klems_bsdfs
             else:
                 cfs_paths = self.window_cfs.split()
+                self.sun_cfs = {}
                 for wname, control in zip(self.windows.keys(), static_control):
                     _cfs = cfs_paths[int(control)]
                     if _cfs.endswith('.xml'):
