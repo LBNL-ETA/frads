@@ -240,6 +240,51 @@ rglaze
 
 .. program-output:: rglaze -h
 
+gencolorsky
+-----------
+Gencolorsky uses `libRadtran <http://www.libradtran.org/>`_ to compute spatially- and spectrally-resolved sky radiation data based on an Earth’s spherical atmosphere radiative transfer model that includes Rayleigh scattering by air molecules, molecular absorption, aerosol, water, and ice clouds. One of the main command-line programs in libRadtran, uvspec, is invoked to compute the sky radiance at every r° (default 3°) in both the azimuth and altitude directions.  Within uvspec, the DISORT radiative transfer solver is used.  Extraterrestrial solar source data (200-800 nm) are used to generate spectrally-resolved sky radiation data at each sample point, which by default is computed at a 10 nm interval from 360 nm to 800 nm. This sky spectral data is then integrated between specified spectral limits using libRadtran’s integrate program, and also converted into CIE XYZ tristimulus using either the 2° or 10° standard observer, from which the CIE xy chromaticity is derived and used to compute the sky color in three-channel RGB form, using user defined color space (default: Radiance RGB). The output is a folder called cs_{datetime}_{lat}_{lon} in the current working directory, containing a sky.rad file along with associated color data.
+
+To generate a sky vector (for e.g., annual calculations), genskyvec can be used on the resulting sky.rad::
+
+   genskyvec < sky.rad > sky.vec
+
+The options to gencolorsky are:
+
+-a	Location latitude; positive is northern hemisphere (required)
+-o	Location longitude; positive is western (required)
+-m	Location standard meridian (required)
+-u	Location altitude in km, default = 0
+-r	Angular resolution at which the sky is sampled, default = 3°
+-s	Standard observer, 2° or 10°
+-c	Colorspace from which the sky is derived, choices are {radiance, sharp, adobe, rimm, 709, p3, 2020}, default=Radiance
+-e	Atmospheric composition file. Default to use AFGL data that came with libRadtran, automatically chosen depending on location and time of year.
+-l	Standard aerosol profile. This option overwrites the aerosol optical depth setting,defined below. The profile choices are:
+
+	* Continental_clean
+
+	* Continental_average
+
+	* Continental_polluted
+
+	* Urban
+
+	* Maritime_clean
+
+	* Maritime_polluted
+
+	* Maritime_tropical
+
+	* Desert
+
+	* Antarctic
+
+-b	Cloud cover, [0, 1], 1 is complete cover. Cloud cover data can be sourced from TMY data.
+-d	Aerosol optical depth, which can be sourced from TMY data.
+-g	Cloud profile file path. Space separated file, three columns: height (km), liquid water content (LWC) (g/m3), effective radius (R_eff) (um). Default: water clouds exist from 2-5 km in altitude with a LWC of 2.5 g/m3 and R_eff of 100 um
+-t	Compute GHI, DNI, and DHI, instead of full sky description. Handy for quick comparison against measurements.
+-v	Verbosity -v=Debug, -vv=Info, -vvv=Warning, -vvvv=Error, -vvvvv=Critical, default=Warning
+
+
 
 eprad
 -----
