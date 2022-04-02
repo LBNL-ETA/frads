@@ -153,6 +153,7 @@ def get_sender_view(config: util.MradConfig) -> Tuple[dict, dict]:
             xres=vdict['x'], yres=vdict['y'])
     return sender_view, view_dicts
 
+
 def assemble_model(config: util.MradConfig) -> Model:
     """Assemble all the pieces together."""
     material_primitives: List[radutil.Primitive]
@@ -293,9 +294,11 @@ def view_matrix_vu(model, config, direct=False):
     """Prepare matrices using three-phase methods."""
     _opt = config.vmx_opt
     _env = [model.material_path] + config.scene_paths
+    direct_msg = " "
     if direct:
         _opt += ' -i -ab 1'
         _env = [model.material_path, model.blackenvpath]
+        direct_msg = " direct-only matrix "
     vmxs = {}
     vrcvr_windows = {}
     for view in model.sender_view:
@@ -316,7 +319,7 @@ def view_matrix_vu(model, config, direct=False):
     for view, sender_view in model.sender_view.items():
         for wname in model.window_groups:
             if not os.path.isdir(vmxs[view+wname][:-8]) or config.overwrite:
-                logger.info("Generating for %s to %s", view, wname)
+                logger.info("Generating%sfor %s to %s", direct_msg, view, wname)
                 util.mkdir_p(os.path.dirname(vmxs[view+wname]))
                 radmtx.rfluxmtx(sender=sender_view,
                                 receiver=vrcvr_windows[view+wname],
@@ -729,15 +732,17 @@ def calc_5phase_vu(model, vmx, vmxd, dmx, dmxd, vcdrmx, vcdfmx,
             res3d = tf.mkdtemp(dir=td)
             logger.info("Combine results for each window groups.")
             if len(model.window_groups) > 1:
-                [vresl.insert(i*2-1, '+') for i in range(1, len(vresl))]
-                [vdresl.insert(i*2-1, '+') for i in range(1, len(vdresl))]
+                [vresl.insert(i * 2 - 1, '+') for i in range(1, len(vresl))]
+                [vdresl.insert(i * 2 - 1, '+') for i in range(1, len(vdresl))]
                 mtxmult.pcombop(
                     vresl, res3, nproc=int(config.nprocess))
                 mtxmult.pcombop(
                     vdresl, res3di, nproc=int(config.nprocess))
             else:
-                shutil.move(vresl[0], res3)
-                shutil.move(vdresl[0], res3di)
+                [shutil.move(os.path.join(vresl[0], file), res3)
+                 for file in os.listdir(vresl[0]) if file.endswith(".hdr")]
+                [shutil.move(os.path.join(vdresl[0], file), res3di)
+                 for file in os.listdir(vdresl[0]) if file.endswith(".hdr")]
             logger.info("Applying mapterial reflectance map")
             mtxmult.pcombop([res3di, '*', vmap_paths[view]],
                             res3d, nproc=int(config.nprocess))
@@ -749,26 +754,26 @@ def calc_5phase_vu(model, vmx, vmxd, dmx, dmxd, vcdrmx, vcdfmx,
             logger.info("Assemble all phase results.")
             res3_path = [os.path.join(res3, f) for f in sorted(
                 os.listdir(res3)) if f.endswith('.hdr')]
-            [shutil.move(file, os.path.join(res3, datetime_stamps[idx]+'.hdr'))
+            [shutil.move(file, os.path.join(res3, datetime_stamps[idx] + '.hdr'))
              for idx, file in enumerate(res3_path)]
             res3d_path = [os.path.join(res3d, f) for f in sorted(
                 os.listdir(res3d)) if f.endswith('.hdr')]
-            [shutil.move(file, os.path.join(res3d, datetime_stamps[idx]+'.hdr'))
+            [shutil.move(file, os.path.join(res3d, datetime_stamps[idx] + '.hdr'))
              for idx, file in enumerate(res3d_path)]
             vrescd_path = [os.path.join(vrescd, f) for f in sorted(
                 os.listdir(vrescd)) if f.endswith('.hdr')]
-            [shutil.move(file, os.path.join(vrescd, datetime_stamps_d6[idx]+'.hdr'))
+            [shutil.move(file, os.path.join(vrescd, datetime_stamps_d6[idx] + '.hdr'))
              for idx, file in enumerate(vrescd_path)]
             util.mkdir_p(opath)
             for hdr3 in os.listdir(res3):
                 _hdr3 = os.path.join(res3, hdr3)
                 _hdr3d = os.path.join(res3d, hdr3)
-                cmd = f"pcomb -o {_hdr3} -s -1 -o {_hdr3d}"
+                cmd = ["pcomb", "-o", _hdr3, "-s", "-1", "-o", _hdr3d]
                 if hdr3 in os.listdir(vrescd):
-                    cmd += ' -o ' + os.path.join(vrescd, hdr3)
-                process = sp.run(cmd.split(), stdout=sp.PIPE)
+                    cmd += ['-o', os.path.join(vrescd, hdr3)]
+                stdout = util.spcheckout(cmd)
                 with open(os.path.join(opath, hdr3), 'wb') as wtr:
-                    wtr.write(process.stdout)
+                    wtr.write(stdout)
             logger.info(f"Done computing for {view}")
 
 

@@ -13,6 +13,22 @@ from frads import util
 
 logger = logging.getLogger("frads")
 
+cwd = os.getcwd()
+default_config = util.MradConfig()
+sim_ctrl = {
+    "vmx_basis": default_config.vmx_basis,
+    "vmx_opt": default_config.vmx_opt,
+    "fmx_basis": default_config.fmx_basis,
+    "smx_basis": default_config.smx_basis,
+    "dmx_opt": default_config.dmx_opt,
+    "dsmx_opt": default_config.dsmx_opt,
+    "cdsmx_opt": default_config.cdsmx_opt,
+    "cdsmx_basis": default_config.cdsmx_basis,
+    "separate_direct": default_config.separate_direct,
+    "overwrite": default_config.overwrite,
+    "method": default_config.method,
+}
+
 
 def mkdirs(cfg: util.MradConfig) -> None:
     """Silently make directories based on configuration."""
@@ -20,6 +36,91 @@ def mkdirs(cfg: util.MradConfig) -> None:
     util.mkdir_p(cfg.mtxdir)
     util.mkdir_p(cfg.resdir)
     util.mkdir_p(cfg.rsodir)
+
+
+def interactive_init() -> None:
+    """Initiate mrad interactively."""
+
+    wea_path = input("What's the project wea_path?")
+    if wea_path == "":
+        locale = input("What's the project latitude & longitude(west+), e.g. 37.7 122.2, or zipcode(US)?")
+        if locale == "":
+            raise ValueError("Site not defined")
+        else:
+            if len(locale.split()) > 1:
+                lat, lon = local.split()
+                guess_timezone = 15 * round(lon / 15)
+                timezone = input(f"What's the project timezone? (guessed: {guess_timezone})")
+                if timezone == "":
+                    timezone = guess_timezone
+            elif len(local) == 5:
+                zipcode = local
+
+    objdir = input("Where are all the objects(.rad) files? (default: Objects)")
+    mtxdir = input("Where are do you want put all the matrix files? (default: Matrices)")
+    resdir = input("Where are all the results files? (default: Results)")
+
+    cwd = os.getcwd()
+    default_config = util.MradConfig()
+    sim_ctrl = {
+        "vmx_basis": default_config.vmx_basis,
+        "vmx_opt": default_config.vmx_opt,
+        "fmx_basis": default_config.fmx_basis,
+        "smx_basis": default_config.smx_basis,
+        "dmx_opt": default_config.dmx_opt,
+        "dsmx_opt": default_config.dsmx_opt,
+        "cdsmx_opt": default_config.cdsmx_opt,
+        "cdsmx_basis": default_config.cdsmx_basis,
+        "separate_direct": default_config.separate_direct,
+        "overwrite": default_config.overwrite,
+        "method": default_config.method,
+    }
+    file_struct = {
+        "base": args.base, "objects": args.objdir,
+        "matrices": args.mtxdir, "resources": args.rsodir,
+        "results": args.resdir
+    }
+    model = {
+        "material": "", "scene": "", "window_paths": "",
+        "window_xml": "", "window_cfs": "", "window_control": "",
+    }
+    raysender = {
+        "grid_surface": args.grid[0], "grid_spacing": args.grid[1],
+        "grid_height": args.grid[2], "view": ""
+    }
+    site = {
+        "wea_path": args.wea_path, "latitude": args.latlon[0],
+        "longitude": args.latlon[1], "zipcode": args.zipcode,
+        "start_hour": None, "end_hour": None,
+        "daylight_hours_only": False
+    }
+    object_pattern: str = args.object if args.object is not None else "*.rad"
+    window_pattern: str = args.window if args.window is not None else "window*.rad"
+    material_pattern: str = args.material if args.material is not None else "*.mat"
+    if args.objdir in os.listdir(args.base):
+        os.chdir(os.path.join(args.base, args.objdir))
+        window_files = sorted(glob.glob(window_pattern))
+        all_obj_files = glob.glob(object_pattern)
+        obj_files = [f for f in all_obj_files if f not in window_files]
+        material_files = glob.glob(material_pattern)
+        model["scene"] = " ".join(obj_files)
+        model["material"] = " ".join(material_files)
+        model["window_paths"] = " ".join(window_files)
+    else:
+        logger.warning("No %s directory found at %s, making so",
+                       args.objdir, args.base)
+        util.mkdir_p(os.path.join(args.base, args.objdir))
+    util.mkdir_p(os.path.join(args.base, args.mtxdir))
+    util.mkdir_p(os.path.join(args.base, args.resdir))
+    util.mkdir_p(os.path.join(args.base, args.rsodir))
+    cfg = ConfigParser(allow_no_value=True)
+    templ_config = {"Simulation Control": sim_ctrl,
+                    "File Structure": file_struct, "Site": site,
+                    "Model": model, "Ray Sender": raysender}
+    cfg.read_dict(templ_config)
+    os.chdir(cwd)
+    with open("default.cfg", "w") as rdr:
+        cfg.write(rdr)
 
 
 def initialize(args: argparse.Namespace) -> None:
@@ -40,11 +141,11 @@ def initialize(args: argparse.Namespace) -> None:
         "smx_basis": default_config.smx_basis,
         "dmx_opt": default_config.dmx_opt,
         "dsmx_opt": default_config.dsmx_opt,
-        "cdsmx_opt":  default_config.cdsmx_opt,
-        "cdsmx_basis":  default_config.cdsmx_basis,
-        "separate_direct":  default_config.separate_direct,
-        "overwrite":  default_config.overwrite,
-        "method":  default_config.method,
+        "cdsmx_opt": default_config.cdsmx_opt,
+        "cdsmx_basis": default_config.cdsmx_basis,
+        "separate_direct": default_config.separate_direct,
+        "overwrite": default_config.overwrite,
+        "method": default_config.method,
     }
     file_struct = {
         "base": args.base, "objects": args.objdir,
@@ -101,7 +202,7 @@ def convert_config(cfg: ConfigParser) -> util.MradConfig:
     Returns:
         MradConfig object (dataclass)
     """
-    cfg_dict = {}
+    cfg_dict: dict = {}
     sections = cfg.sections()
     for sec in sections:
         cfg_dict.update(dict(cfg[sec]))
