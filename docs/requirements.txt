@@ -1,5 +1,5 @@
-sphinx==3.5.4
-sphinxcontrib-programoutput==0.17
-git+git://github.com/LBNL-ETA/frads.git
-furo==2021.4.11b34
+sphinx
+sphinxcontrib-programoutput
+git+https://github.com/LBNL-ETA/frads.git
+furo
 numpy

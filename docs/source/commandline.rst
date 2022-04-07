@@ -242,7 +242,7 @@ rglaze
 
 gencolorsky
 -----------
-Gencolorsky uses `libRadtran <http://www.libradtran.org/>`_ to compute spatially- and spectrally-resolved sky radiation data based on an Earth’s spherical atmosphere radiative transfer model that includes Rayleigh scattering by air molecules, molecular absorption, aerosol, water, and ice clouds. One of the main command-line programs in libRadtran, uvspec, is invoked to compute the sky radiance at every r° (default 3°) in both the azimuth and altitude directions.  Within uvspec, the DISORT radiative transfer solver is used.  Extraterrestrial solar source data (200-800 nm) are used to generate spectrally-resolved sky radiation data at each sample point, which by default is computed at a 10 nm interval from 360 nm to 800 nm. This sky spectral data is then integrated between specified spectral limits using libRadtran’s integrate program, and also converted into CIE XYZ tristimulus using either the 2° or 10° standard observer, from which the CIE xy chromaticity is derived and used to compute the sky color in three-channel RGB form, using user defined color space (default: Radiance RGB). The output is a folder called cs_{datetime}_{lat}_{lon} in the current working directory, containing a sky.rad file along with associated color data.
+Gencolorsky uses `libRadtran <http://www.libradtran.org/>`_ to compute spatially- and spectrally-resolved sky radiation data based on an Earth’s spherical atmosphere radiative transfer model that includes Rayleigh scattering by air molecules, molecular absorption, aerosol, water, and ice clouds. One of the main command-line programs in libRadtran, uvspec, is invoked to compute the sky radiance at every r° (default 3°) in both the azimuth and altitude directions.  Within uvspec, the DISORT radiative transfer solver is used.  Extraterrestrial solar source data (280-800 nm), at 1nm interval, are used to generate spectrally-resolved sky radiation data at each sample point, which by default is computed at a 10 nm interval from 360 nm to 800 nm. By default, this sky spectral data is converted to Radiance RGB using CIE XYZ tristimulus with either the 2° or 10° standard observer, using user defined color space (default: Radiance RGB). If -i setting is used, the resulting three channels become photopic (CIE-Y), melanopic equivalent daylight il/luminance (EDI), and solar ir/radiance, respectively. The output is a folder called cs_{datetime}_{lat}_{lon} in the current working directory, containing a sky.rad file along with associated color data.
 
 To generate a sky vector (for e.g., annual calculations), genskyvec can be used on the resulting sky.rad::
 
@@ -254,6 +254,7 @@ The options to gencolorsky are:
 -o	Location longitude; positive is western (required)
 -m	Location standard meridian (required)
 -u	Location altitude in km, default = 0
+-i  Compute for photopic, melanopic, and solar for each of the three channels, instead of RGB.
 -r	Angular resolution at which the sky is sampled, default = 3°
 -s	Standard observer, 2° or 10°
 -c	Colorspace from which the sky is derived, choices are {radiance, sharp, adobe, rimm, 709, p3, 2020}, default=Radiance
