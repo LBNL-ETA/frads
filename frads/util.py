@@ -18,6 +18,10 @@ import xml.etree.ElementTree as ET
 
 logger = logging.getLogger("frads.util")
 
+LEMAX = 683
+# Melanopic luminous efficacy for D65
+MLEMAX = 754
+
 COLOR_PRIMARIES = {}
 
 COLOR_PRIMARIES["radiance"] = {
@@ -421,7 +425,9 @@ def get_igsdb_json(igsdb_id, token, xml=False):
 
 
 def get_tristi_paths():
-    """Get CIE tri-stimulus file paths."""
+    """Get CIE tri-stimulus file paths.
+    In addition, also getmelanopic action spetra path
+    """
     _file_path_ = os.path.dirname(__file__)
     standards_path = os.path.join(_file_path_, "data", "standards")
     cie_path = {}
@@ -433,10 +439,20 @@ def get_tristi_paths():
     cie_path["x10"] = os.path.join(standards_path, "CIE 1964 1nm X.dsp")
     cie_path["y10"] = os.path.join(standards_path, "CIE 1964 1nm Y.dsp")
     cie_path["z10"] = os.path.join(standards_path, "CIE 1964 1nm Z.dsp")
+    # melanopic action spectra
+    cie_path["mlnp"] = os.path.join(standards_path, "CIE S 026 1nm.dsp")
     return cie_path
 
 
-def load_cie_tristi(inp_wvl, observer):
+def load_cie_tristi(inp_wvl: list, observer: str) -> tuple:
+    """Load CIE tristimulus data according to input wavelength.
+    Also load melanopic action spectra data as well.
+    Args:
+        inp_wvl: input wavelength in nm
+        observer: 2° or 10° observer for the colar matching function.
+    Returns:
+        Tristimulus XYZ and melanopic action spectra
+    """
     cie_path = get_tristi_paths()
     with open(cie_path[f"x{observer}"]) as rdr:
         lines = rdr.readlines()[3:]
@@ -447,43 +463,52 @@ def load_cie_tristi(inp_wvl, observer):
     with open(cie_path[f"z{observer}"]) as rdr:
         lines = rdr.readlines()[3:]
         triz = {float(row.split()[0]): float(row.split()[1]) for row in lines}
+    with open(cie_path["mlnp"]) as rdr:
+        lines = rdr.readlines()[1:]
+        mlnp = {float(row.split()[0]): float(row.split()[1]) for row in lines}
+
     trix_i = [trix[wvl] for wvl in inp_wvl]
     triy_i = [triy[wvl] for wvl in inp_wvl]
     triz_i = [triz[wvl] for wvl in inp_wvl]
-    return trix_i, triy_i, triz_i
+    mlnp_i = [mlnp[wvl] for wvl in inp_wvl]
+    return trix_i, triy_i, triz_i, mlnp_i
 
 
 def get_conversion_matrix(prims):
     # The whole calculation is based on the CIE (x,y) chromaticities below
 
-    CIE_x_r = COLOR_PRIMARIES[prims]["cie_x_r"]
-    CIE_y_r = COLOR_PRIMARIES[prims]["cie_y_r"]
-    CIE_x_g = COLOR_PRIMARIES[prims]["cie_x_g"]
-    CIE_y_g = COLOR_PRIMARIES[prims]["cie_y_g"]
-    CIE_x_b = COLOR_PRIMARIES[prims]["cie_x_b"]
-    CIE_y_b = COLOR_PRIMARIES[prims]["cie_y_b"]
-    CIE_x_w = COLOR_PRIMARIES[prims]["cie_x_w"]
-    CIE_y_w = COLOR_PRIMARIES[prims]["cie_y_w"]
+    cie_x_r = COLOR_PRIMARIES[prims]["cie_x_r"]
+    cie_y_r = COLOR_PRIMARIES[prims]["cie_y_r"]
+    cie_x_g = COLOR_PRIMARIES[prims]["cie_x_g"]
+    cie_y_g = COLOR_PRIMARIES[prims]["cie_y_g"]
+    cie_x_b = COLOR_PRIMARIES[prims]["cie_x_b"]
+    cie_y_b = COLOR_PRIMARIES[prims]["cie_y_b"]
+    cie_x_w = COLOR_PRIMARIES[prims]["cie_x_w"]
+    cie_y_w = COLOR_PRIMARIES[prims]["cie_y_w"]
 
+    cie_y_w_inv = 1 / cie_y_w
 
-    # CIE_D = CIE_x_r * (CIE_y_g - CIE_y_b) + CIE_x_g * (CIE_y_b - CIE_y_r) + CIE_x_b*(CIE_y_r - CIE_y_g)
-    CIE_C_rD = (1. / CIE_y_w) * (CIE_x_w * (CIE_y_g - CIE_y_b) - CIE_y_w * (CIE_x_g - CIE_x_b) + CIE_x_g * CIE_y_b - CIE_x_b * CIE_y_g)
-    CIE_C_gD = (1. / CIE_y_w) * (CIE_x_w * (CIE_y_b - CIE_y_r) - CIE_y_w * (CIE_x_b - CIE_x_r) - CIE_x_r * CIE_y_b + CIE_x_b * CIE_y_r)
-    CIE_C_bD = (1. / CIE_y_w) * (CIE_x_w * (CIE_y_r - CIE_y_g) - CIE_y_w * (CIE_x_r - CIE_x_g) + CIE_x_r * CIE_y_g - CIE_x_g * CIE_y_r)
+    cie_d = (cie_x_r * (cie_y_g - cie_y_b) +
+            cie_x_g * (cie_y_b - cie_y_r) + cie_x_b*(cie_y_r - cie_y_g))
+    cie_c_rd = (cie_y_w_inv * (cie_x_w * (cie_y_g - cie_y_b) -
+        cie_y_w * (cie_x_g - cie_x_b) + cie_x_g * cie_y_b - cie_x_b * cie_y_g))
+    cie_c_gd = (cie_y_w_inv * (cie_x_w * (cie_y_b - cie_y_r) -
+        cie_y_w * (cie_x_b - cie_x_r) - cie_x_r * cie_y_b + cie_x_b * cie_y_r))
+    cie_c_bd = (cie_y_w_inv * (cie_x_w * (cie_y_r - cie_y_g) -
+        cie_y_w * (cie_x_r - cie_x_g) + cie_x_r * cie_y_g - cie_x_g * cie_y_r))
 
-    # Convert CIE XYZ coordinates to RGB
+    coeff_00 = (cie_y_g - cie_y_b - cie_x_b * cie_y_g + cie_y_b * cie_x_g) / cie_c_rd
+    coeff_01 = (cie_x_b - cie_x_g - cie_x_b * cie_y_g + cie_x_g * cie_y_b) / cie_c_rd
+    coeff_02 = (cie_x_g * cie_y_b - cie_x_b * cie_y_g) / cie_c_rd
+    coeff_10 = (cie_y_b - cie_y_r - cie_y_b * cie_x_r + cie_y_r * cie_x_b) / cie_c_gd
+    coeff_11 = (cie_x_r - cie_x_b - cie_x_r * cie_y_b + cie_x_b * cie_y_r) / cie_c_gd
+    coeff_12 = (cie_x_b * cie_y_r - cie_x_r * cie_y_b) / cie_c_gd
+    coeff_20 = (cie_y_r - cie_y_g - cie_y_r * cie_x_g + cie_y_g * cie_x_r) / cie_c_bd
+    coeff_21 = (cie_x_g - cie_x_r - cie_x_g * cie_y_r + cie_x_r * cie_y_g) / cie_c_bd
+    coeff_22 = (cie_x_r * cie_y_g - cie_x_g * cie_y_r) / cie_c_bd
 
-    coeff_00 = (CIE_y_g - CIE_y_b - CIE_x_b * CIE_y_g + CIE_y_b * CIE_x_g) / CIE_C_rD
-    coeff_01 = (CIE_x_b - CIE_x_g - CIE_x_b * CIE_y_g + CIE_x_g * CIE_y_b) / CIE_C_rD
-    coeff_02 = (CIE_x_g * CIE_y_b - CIE_x_b * CIE_y_g) / CIE_C_rD
-    coeff_10 = (CIE_y_b - CIE_y_r - CIE_y_b * CIE_x_r + CIE_y_r * CIE_x_b) / CIE_C_gD
-    coeff_11 = (CIE_x_r - CIE_x_b - CIE_x_r * CIE_y_b + CIE_x_b * CIE_y_r) / CIE_C_gD
-    coeff_12 = (CIE_x_b * CIE_y_r - CIE_x_r * CIE_y_b) / CIE_C_gD
-    coeff_20 = (CIE_y_r - CIE_y_g - CIE_y_r * CIE_x_g + CIE_y_g * CIE_x_r) / CIE_C_bD
-    coeff_21 = (CIE_x_g - CIE_x_r - CIE_x_g * CIE_y_r + CIE_x_r * CIE_y_g) / CIE_C_bD
-    coeff_22 = (CIE_x_r * CIE_y_g - CIE_x_g * CIE_y_r) / CIE_C_bD
-
-    return coeff_00, coeff_01, coeff_02, coeff_10, coeff_11, coeff_12, coeff_20, coeff_21, coeff_22
+    return (coeff_00, coeff_01, coeff_02, coeff_10,
+            coeff_11, coeff_12, coeff_20, coeff_21, coeff_22)
 
 
 def xyz2rgb(x, y, z, coeffs: tuple):
@@ -504,6 +529,8 @@ def xyz2rgb(x, y, z, coeffs: tuple):
     Raise:
         KeyError where cspace is not defined.
     """
+    if len(coeffs) != 9:
+        raise ValueError("%s coefficients found, expected 9", len(coeffs))
     red = max(0, coeffs[0] * x + coeffs[1] * y + coeffs[2] * z)
     green = max(0, coeffs[3] * x + coeffs[4] * y + coeffs[5] * z)
     blue = max(0, coeffs[6] * x + coeffs[7] * y + coeffs[8] * z)

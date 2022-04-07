@@ -7,36 +7,6 @@ import os
 import subprocess as sp
 import tempfile
 from frads import makesky, util, radutil
-try:
-    import numpy as np
-    NUMPY_FOUND = True
-except ModuleNotFoundError:
-    NUMPY_FOUND = False
-
-
-def spec2xy(ip, triy_mean, trix, triy, triz) -> tuple:
-    """Convert spectral data to CIE xy chromiticity.
-    This is the numpy version of the spec2xy in frads.util.
-    args:
-        ip (numpy array): spectral power data
-        trix (numpy array): tristimulus x
-        triy (numpy array): tristimulus y
-        triz (numpy array): tristimulus z
-    return:
-        chromiticity x
-        chromiticity y
-    """
-    r_tx = (ip * trix).mean()
-    r_ty = (ip * triy).mean()
-    r_tz = (ip * triz).mean()
-    cie_X = r_tx / triy_mean
-    cie_Y = r_ty / triy_mean
-    cie_Z = r_tz / triy_mean
-    if cie_X + cie_Y + cie_Z == 0:
-        return 0, 0
-    chrom_x = cie_X / (cie_X + cie_Y + cie_Z)
-    chrom_y = cie_Y / (cie_X + cie_Y + cie_Z)
-    return chrom_x, chrom_y
 
 
 def get_local_input(dt: str, latitude: float, longitude: float,
@@ -114,32 +84,6 @@ def get_uniform_samples(step: int) -> tuple:
     return cos_thetas, phis
 
 
-def load_cie_tristi(inp, observer_deg) -> tuple:
-    """Load CIE tristimulus data into numpy arrays, which is then interpolated
-    with input spectral power data.
-    args:
-        inp: input spectral power data
-        observer_deg: observer view anlges in deg, used to select the
-                    corresponding CIE tristimulus data.
-    return:
-        interpolated CIE_x, CIE_y, and CIE_z
-    """
-    cie_path = util.get_tristi_paths()
-    cie_x = np.loadtxt(cie_path[f"x{observer_deg}"], skiprows=3)
-    cie_y = np.loadtxt(cie_path[f"y{observer_deg}"], skiprows=3)
-    cie_z = np.loadtxt(cie_path[f"z{observer_deg}"], skiprows=3)
-    cie_x_i = np.interp(inp[:, 0], cie_x[:, 0], cie_x[:, 1],
-                        left=np.nan, right=np.nan)
-    cie_y_i = np.interp(inp[:, 0], cie_y[:, 0], cie_y[:, 1],
-                        left=np.nan, right=np.nan)
-    cie_z_i = np.interp(inp[:, 0], cie_z[:, 0], cie_z[:, 1],
-                        left=np.nan, right=np.nan)
-    cie_x_i = cie_x_i[~np.isnan(cie_x_i)]
-    cie_y_i = cie_y_i[~np.isnan(cie_y_i)]
-    cie_z_i = cie_z_i[~np.isnan(cie_z_i)]
-    return cie_x_i, cie_y_i, cie_z_i
-
-
 def get_solar(year: str, month: str, day: str, hours: str,
               lat: str, lon: str, tzone: str):
     """Call gendaylit to get solar angles."""
@@ -152,6 +96,28 @@ def get_solar(year: str, month: str, day: str, hours: str,
     zenith_angle = math.degrees(math.acos(source_dir[2]))
     azimuth_angle = math.degrees(math.atan2(-source_dir[0], -source_dir[1])) % 360
     return source_prim, source_dir, zenith_angle, azimuth_angle
+
+
+def gen_rad_template() -> str:
+    """Generate sky.rad file template.
+    This function generates a static string for now.
+    """
+    sky_template = "void colordata skyfunc\n"
+    sky_template += "9 noop noop noop red.dat green.dat blue.dat . "
+    sky_template += '"Acos(Dz)/DEGREE" "mod(atan2(-Dx, -Dy)/DEGREE,360)"\n'
+    sky_template += "0\n0\n\n"
+    sky_template += "skyfunc glow skyglow 0 0 4 1 1 1 0\n"
+    sky_template += "skyglow source skydome 0 0 4 0 0 1 180\n"
+    return sky_template
+
+
+def gen_header(anglestep: int) -> str:
+    """Generate header for colordata data files."""
+    theta_interval = 90 / anglestep
+    phi_interval = 360 / anglestep + 1
+    header = "# Theta and phi dimensions\n2\n0 90 "
+    header += f"{theta_interval:.0f}\n0 360 {phi_interval:.0f}\n"
+    return header
 
 
 def get_logger(verbosity: int):
@@ -203,6 +169,7 @@ def parse_cli_args():
                                  "maritime_tropical",
                                  "desert",
                                  "antarctic"])
+    parser.add_argument("-i", "--pmt", action="store_true")
     parser.add_argument(
         "-v", "--verbose", action="count", default=0,
         help="Verbose mode: \n"
@@ -219,34 +186,31 @@ def parse_cli_args():
 def main():
     """gencolorsky entry point."""
     # Solar disk solid angle
-    SOLAR_SA = 6.7967e-5
+    solar_sa = 6.7967e-5
+    start_wvl = 360
+    end_wvl = 800
+    wvl_step = 10
+    direct_sun = True
+    try:
+        lib_path = os.environ["LIBRADTRAN_DATA_FILES"]
+    except KeyError as ke:
+        raise KeyError("Can't find LIBRADTRAN_DATA_FILES in environment")
     args = parse_cli_args()
     logger = get_logger(args.verbose)
     verbose = True if args.verbose < 3 else False
-    theta_interval = 90 / args.anglestep
-    phi_interval = 360 / args.anglestep + 1
-    header = "# Theta and phi dimensions\n2\n0 90 "
-    header += f"{theta_interval:.0f}\n0 360 {phi_interval:.0f}\n"
-    sky_template = "void colordata skyfunc\n"
-    sky_template += "9 noop noop noop red.dat green.dat blue.dat . "
-    sky_template += '"Acos(Dz)/DEGREE" "mod(atan2(-Dx, -Dy)/DEGREE,360)"\n'
-    sky_template += "0\n0\n\n"
-    sky_template += "skyfunc glow skyglow 0 0 4 1 1 1 0\n"
-    sky_template += "skyglow source skydome 0 0 4 0 0 1 180\n"
-    lib_path = os.environ["LIBRADTRAN_DATA_FILES"]
     hours = args.hour + args.minute / 60.0
-    wavelengths = range(360, 801, 10)
+    wavelengths = range(start_wvl, end_wvl + 1, wvl_step)
     dt = datetime(args.year, args.month, args.day, args.hour, args.minute)
     dt_str = (dt + timedelta(hours=int(args.tzone / (-15)))).strftime(
         "%Y %m %d %H %M %S")
-    direct_sun = True
     ct, phis = get_uniform_samples(args.anglestep)
     source_prim, source_dir, zenith_angle, azimuth_angle = get_solar(
         args.year, args.month, args.day, hours,
         args.latitude, args.longitude, args.tzone)
-    # Input to uvspec
+    # Generate input to uvspec
     model = f"data_files_path {lib_path}\n"
     model += f"source solar {lib_path}solar_flux/apm_1nm\n"
+    model += "pseudospherical\n"
     model += "aerosol_default\n"
     model += get_local_input(dt_str, args.latitude, args.longitude,
                              args.altitude, zenith_angle, azimuth_angle)
@@ -268,13 +232,12 @@ def main():
     if args.aod:
         model += f"aerosol_modify tau set {args.aod}\n"
     if args.total:
-        model += "mol_abs_param kato2\n"
-        model += get_output_input(None, None, output="edir edn", verbose=verbose)
-        model += "pseudospherical\n"
-        model += "output_process sum\n"
-        model += "quiet\n"
-        logger.info(model)
-        proc = sp.run("uvspec", input=model.encode(), stderr=sp.PIPE, stdout=sp.PIPE)
+        inp = model
+        inp += "mol_abs_param kato2\n"
+        inp += get_output_input(None, None, output="edir edn", verbose=verbose)
+        inp += "output_process sum\n"
+        logger.info(inp)
+        proc = sp.run("uvspec", input=inp.encode(), stderr=sp.PIPE, stdout=sp.PIPE)
         direct_hor, diff_hor = list(map(float, proc.stdout.decode().strip().split()))
         direct_normal = direct_hor / source_dir[2]
         print(f"DNI: {direct_normal:.2f} W/m2")
@@ -286,67 +249,57 @@ def main():
     else:
         model += get_output_input(ct, phis)
     result = []
-    with tempfile.TemporaryDirectory() as td:
-        tout = os.path.join(td, "temp.txt")
-        with open(tout, "wb") as wtr:
-            for wvl in wavelengths:
-                inp = model
-                inp += f"wavelength {wvl}\n"
-                inp += "pseudospherical\n"
-                logger.info(inp)
-                proc = sp.run("uvspec", input=inp.encode(), stdout=sp.PIPE)
-                wtr.write(proc.stdout)
-                result.append(proc.stdout.decode().strip().split())
-        int_proc = sp.run(["integrate", "-p", tout], stdout=sp.PIPE)
-        integral = int_proc.stdout.decode().strip().split()
-    coeffs = util.get_conversion_matrix(args.colorspace)
-    if NUMPY_FOUND:
-        result_array = np.array(result, dtype=float)
-        cie_x_i, cie_y_i, cie_z_i = load_cie_tristi(result_array, args.observer)
-        angular_xy = np.apply_along_axis(
-            spec2xy, 0, result_array[:, 1:], cie_y_i.mean(),
-            cie_x_i, cie_y_i, cie_z_i).T
-        int_array = np.array(integral, dtype=float) / 1e3  # mW -> W
-        xx = int_array * angular_xy[:, 0] / angular_xy[:, 1]
-        zz = int_array * (1 - angular_xy[:, 0] - angular_xy[:, 1]) / angular_xy[:, 1]
-        red = xx * coeffs[0] + int_array * coeffs[1] + zz * coeffs[2]
-        green = xx * coeffs[3] + int_array * coeffs[4] + zz * coeffs[5]
-        blue = xx * coeffs[6] + int_array * coeffs[7] + zz * coeffs[8]
+    for wvl in wavelengths:
+        inp = model
+        inp += f"wavelength {wvl}\n"
+        logger.info(inp)
+        proc = sp.run("uvspec", input=inp.encode(), stdout=sp.PIPE)
+        result.append(proc.stdout.decode().strip().split())
+    wvl_range = end_wvl - start_wvl + wvl_step
+    wavelengths = list(wavelengths)
+    wvl_length = len(wavelengths)
+    trix, triy, triz, mlnp = util.load_cie_tristi(wavelengths, args.observer)
+    columns = [col for col in zip(*result)]
+    # Carry out additional full solar spectra run if pmt requested
+    if args.pmt:
+        inp = model
+        inp += "mol_abs_param kato2\n"
+        inp += get_output_input(ct, phis, output="lambda edir edn uu", verbose=verbose)
+        inp += "output_process sum\n"
+        logger.info(inp)
+        proc = sp.run("uvspec", input=inp.encode(), stderr=sp.PIPE, stdout=sp.PIPE)
+        blue = [i / 1e3 for i in map(float, proc.stdout.decode().strip().split())]
+        pfact = util.LEMAX * wvl_range / wvl_length / 1e3
+        mfact = util.MLEMAX * wvl_range / wvl_length / 1e3
+        red = []
+        green = []
+        for col in columns[1:]:
+            col = list(map(float, col))
+            cieys = [i * j for i, j in zip(col, triy)]
+            edis = [i * j for i,j in zip(col, mlnp)]
+            cie_y = pfact * sum(cieys)
+            edi = mfact * sum(edis)
+            red.append(cie_y)
+            green.append(edi)
     else:
-        integral = [f / 1e3 for f in map(float, integral)]  # mW -> W
-        wavelengths = list(wavelengths)
-        wvl_length = len(wavelengths)
-        trix, triy, triz = util.load_cie_tristi(wavelengths, args.observer)
-        avg_0 = sum(triy) / wvl_length
-        columns = [col for col in zip(*result)]
-        chrom_xs = []
-        chrom_ys = []
-        # Get chromticity for each sampled point from sky
+        coeffs = util.get_conversion_matrix(args.colorspace)
+        pfact = util.LEMAX * wvl_range / wvl_length / 1e3 / 179
+        # Get RGB for each sampled point from sky
+        red = []
+        green = []
+        blue = []
         for col in columns[1:]:
             col = list(map(float, col))
             ciexs = [i * j for i, j in zip(col, trix)]
             cieys = [i * j for i, j in zip(col, triy)]
             ciezs = [i * j for i, j in zip(col, triz)]
-            avg_1 = sum(ciexs) / wvl_length
-            avg_2 = sum(cieys) / wvl_length
-            avg_3 = sum(ciezs) / wvl_length
-            cie_x = avg_1 / avg_0
-            cie_y = avg_2 / avg_0
-            cie_z = avg_3 / avg_0
-            chrom_x, chrom_y = util.xyz2xy(cie_x, cie_y, cie_z)
-            chrom_xs.append(chrom_x)
-            chrom_ys.append(chrom_y)
-        xx = [i * x / y for i, x, y in zip(integral, chrom_xs, chrom_ys)]
-        zz = [i * (1 - x - y) / y
-              for i, x, y in zip(integral, chrom_xs, chrom_ys)]
-        red = []
-        green = []
-        blue = []
-        for x, y, z in zip(xx, integral, zz):
-            _red, _green, _blue = util.xyz2rgb(x, y, z, coeffs)
-            red.append(_red)
-            green.append(_green)
-            blue.append(_blue)
+            cie_x = pfact * sum(ciexs)
+            cie_y = pfact * sum(cieys)
+            cie_z = pfact * sum(ciezs)
+            _r, _g, _b = util.xyz2rgb(cie_x, cie_y, cie_z, coeffs)
+            red.append(_r)
+            green.append(_g)
+            blue.append(_b)
 
     out_dir = f"cs_{args.month:02d}{args.day:02d}{args.hour:02d}"
     out_dir += f"{args.minute:02d}_{args.latitude}_{args.longitude}"
@@ -355,6 +308,7 @@ def main():
         sidx = 2
     else:
         sidx = 0
+    header = gen_header(args.anglestep)
     with open(os.path.join(out_dir, "red.dat"), "w") as wtr:
         wtr.write(header)
         wtr.write("\n".join([str(value) for value in red[sidx:]]))
@@ -364,15 +318,12 @@ def main():
     with open(os.path.join(out_dir, "blue.dat"), "w") as wtr:
         wtr.write(header)
         wtr.write("\n".join([str(value) for value in blue[sidx:]]))
+    sky_template = gen_rad_template()
     with open(os.path.join(out_dir, "sky.rad"), "w") as wtr:
         if direct_sun:
             wtr.write("void light solar\n0\n0\n3 ")
-            wtr.write(f"{red[0]/SOLAR_SA/source_dir[2]} ")
-            wtr.write(f"{green[0]/SOLAR_SA/source_dir[2]} ")
-            wtr.write(f"{blue[0]/SOLAR_SA/source_dir[2]}\n")
+            wtr.write(f"{red[0]/solar_sa/source_dir[2]} ")
+            wtr.write(f"{green[0]/solar_sa/source_dir[2]} ")
+            wtr.write(f"{blue[0]/solar_sa/source_dir[2]}\n")
             wtr.write(str(source_prim) + "\n")
         wtr.write(sky_template)
-
-
-if __name__ == "__main__":
-    main()
