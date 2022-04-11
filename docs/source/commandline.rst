@@ -246,7 +246,7 @@ Gencolorsky uses `libRadtran <http://www.libradtran.org/>`_ to compute spatially
 
 To generate a sky vector (for e.g., annual calculations), genskyvec can be used on the resulting sky.rad::
 
-   genskyvec < sky.rad > sky.vec
+   $ genskyvec < sky.rad > sky.vec
 
 The options to gencolorsky are:
 
@@ -284,6 +284,23 @@ The options to gencolorsky are:
 -g	Cloud profile file path. Space separated file, three columns: height (km), liquid water content (LWC) (g/m3), effective radius (R_eff) (um). Default: water clouds exist from 2-5 km in altitude with a LWC of 2.5 g/m3 and R_eff of 100 um
 -t	Compute GHI, DNI, and DHI, instead of full sky description. Handy for quick comparison against measurements.
 -v	Verbosity -v=Debug, -vv=Info, -vvv=Warning, -vvvv=Error, -vvvvv=Critical, default=Warning
+
+Examples:
+
+1. Compute direct normal, diffuse horizontal, and global horizontal irradiance in solar spectrum for 2022-06-21 10:00 in Berkeley CA USA, with clear sky and continental_average aerosol profile::
+
+   $ gencolorsky 2022 6 21 10 0 -a 37.7 -o 122.2 -m 120 -l continental_average -t
+   
+   Outputs:
+       DNI: 864.40 W/m2; DHI: 124.47 W/m2; GHI: 862.96 W/m2
+
+2. Compute RGB sky for 2022-12-21 16:30 in Berkeley, CA, USA, with .2 cloud cover and .3 aerosol optical depth::
+
+   $ gencolorsky 2022 12 21 16 30 -a 37.7 -o 122.2 -m 120 -b .2 -d .3
+
+3. Compute photopic, melanopic, and solar for each of the three-channel for the same sky::
+
+   $ gencolorsky 2022 12 21 16 30 -a 37.7 -o 122.2 -m 120 -b .2 -d .3 -i
 
 
 

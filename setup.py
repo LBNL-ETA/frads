@@ -35,6 +35,7 @@ setuptools.setup(
                             'geombsdf=frads.geombsdf:main',
                             'dctsnp=frads.mtxmult:dctsnp',
                             'rglaze=frads.radutil:glaze',
+                            'gencolorsky=frads.gencolorsky:main',
                             ],
     }
 )
