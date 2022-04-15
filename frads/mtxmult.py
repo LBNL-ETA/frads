@@ -164,10 +164,14 @@ def pcombop(inputs, out_dir, nproc=1):
     if not equal_len:
         logger.warning("Input directories don't the same number of files")
     grouped = [list(i) for i in zip(*inp_lists_full)]
-    [sub.insert(i, ops[int((i-1)/2)])
-     for sub in grouped for i in range(1, len(sub)+1, 2)]
-    [sub.append(out_dir) for sub in grouped]
-    process.map(pcomb, grouped)
+    grouped_op = []
+    for group in grouped:
+        result = group + ops
+        result[::2] = group
+        result[1::2] = ops
+        result.append(out_dir)
+        grouped_op.append(result)
+    process.map(pcomb, grouped_op)
 
 
 def rpxop():
