@@ -62,19 +62,6 @@ def interactive_init() -> None:
 
     cwd = os.getcwd()
     default_config = util.MradConfig()
-    sim_ctrl = {
-        "vmx_basis": default_config.vmx_basis,
-        "vmx_opt": default_config.vmx_opt,
-        "fmx_basis": default_config.fmx_basis,
-        "smx_basis": default_config.smx_basis,
-        "dmx_opt": default_config.dmx_opt,
-        "dsmx_opt": default_config.dsmx_opt,
-        "cdsmx_opt": default_config.cdsmx_opt,
-        "cdsmx_basis": default_config.cdsmx_basis,
-        "separate_direct": default_config.separate_direct,
-        "overwrite": default_config.overwrite,
-        "method": default_config.method,
-    }
     file_struct = {
         "base": args.base, "objects": args.objdir,
         "matrices": args.mtxdir, "resources": args.rsodir,
@@ -134,19 +121,6 @@ def initialize(args: argparse.Namespace) -> None:
         raise ValueError("Site not defined, use --wea_path | --latlon | --zipcode")
     cwd = os.getcwd()
     default_config = util.MradConfig()
-    sim_ctrl = {
-        "vmx_basis": default_config.vmx_basis,
-        "vmx_opt": default_config.vmx_opt,
-        "fmx_basis": default_config.fmx_basis,
-        "smx_basis": default_config.smx_basis,
-        "dmx_opt": default_config.dmx_opt,
-        "dsmx_opt": default_config.dsmx_opt,
-        "cdsmx_opt": default_config.cdsmx_opt,
-        "cdsmx_basis": default_config.cdsmx_basis,
-        "separate_direct": default_config.separate_direct,
-        "overwrite": default_config.overwrite,
-        "method": default_config.method,
-    }
     file_struct = {
         "base": args.base, "objects": args.objdir,
         "matrices": args.mtxdir, "resources": args.rsodir,
