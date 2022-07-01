@@ -1,7 +1,12 @@
 .. rst-class:: hide-header
 
-Welcome to frads
+frads documentation
 ================
+
+**Date**: 2022-04-13  **Version**: 0.1.4
+
+**Useful links**:
+`Source Repository <https://github.com/LBNL-ETA/frads>`__ |
 
 *frads* is an open-source library providing high-level abstraction (wrapper) of Radiance matrix-based simulation workflows.
 
