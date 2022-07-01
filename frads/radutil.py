@@ -9,7 +9,9 @@ import os
 import subprocess as sp
 from typing import List, NamedTuple, Set
 
-from frads import radgeom, radmtx, util
+from frads import radgeom
+from frads import util
+
 logger = logging.getLogger("frads.radutil")
 
 
@@ -567,32 +569,6 @@ def gen_blinds(depth, width, height, spacing, angle, curve, movedown):
     return slat_cmd
 
 
-def analyze_vert_polygon(window_polygon, movedown):
-    """Parse window primitive and prepare for genBSDF.
-    Window has to be verticle.
-    """
-    window_normal = window_polygon.normal()
-    if round(window_normal.z, 1) != 0:
-        raise Exception("Can only analyze vertical polygons")
-    vertices = window_polygon.vertices
-    if len(vertices) != 4:
-        raise Exception("4-sided polygon only")
-    window_center = window_polygon.centroid()
-    dim1 = vertices[0] - vertices[1]
-    dim2 = vertices[1] - vertices[2]
-    if dim1.normalize() in (radgeom.Vector(0, 0, 1), radgeom.Vector(0, 0, -1)):
-        height = dim1.length()
-        width = dim2.length()
-    else:
-        height = dim2.length()
-        width = dim1.length()
-    _south = radgeom.Vector(0, -1, 0)
-    angle2negY = window_normal.angle_from(_south)
-    rotate_window = window_center.rotate_3d(
-        radgeom.Vector(0, 0, 1), angle2negY).rotate_3d(
-            radgeom.Vector(1, 0, 0), math.pi / 2)
-    translate = radgeom.Vector(0, 0, -movedown) - rotate_window
-    return height, width, angle2negY, translate
 
 
 def varays():
@@ -643,7 +619,7 @@ def get_glazing_primitive(panes: List[util.PaneRGB]) -> Primitive:
             s3r_rgb = panes[1].coated_rgb
         str_arg = "10\nif(Rdot,"
         str_arg += f"cr(fr({s4r_rgb[0]}),ft({s34t_rgb[0]}),fr({s2r_rgb[0]})),"
-        str_arg += f"cr(fr({s1r_rgb[0]}),ft({s12t_rgb[0]}),ft({s3r_rgb[0]})))\n"
+        str_arg += f"cr(fr({s1r_rgb[0]}),ft({s12t_rgb[0]}),fr({s3r_rgb[0]})))\n"
         str_arg += "if(Rdot,"
         str_arg += f"cr(fr({s4r_rgb[1]}),ft({s34t_rgb[1]}),fr({s2r_rgb[1]})),"
         str_arg += f"cr(fr({s1r_rgb[1]}),ft({s12t_rgb[1]}),fr({s3r_rgb[1]})))\n"
@@ -666,6 +642,8 @@ def glaze():
     aparser.add_argument('-X', '--optics', nargs='+', help='Optics file path')
     aparser.add_argument('-C', '--cspace', default='radiance',
                          help='Color space to determine primaries')
+    aparser.add_argument('-V', '--observer', default='2',
+                         help='CIE Obvserver 2° or 10°')
     aparser.add_argument('-D', '--igsdb', nargs="+",
                          help='IGSDB json file path or ID')
     aparser.add_argument('-T', '--token', help='IGSDB token')
@@ -689,10 +667,16 @@ def glaze():
     else:
         raise ValueError("Need to specify either optics or igsdb file")
     pane_rgb = []
+    coeffs = util.get_conversion_matrix(args.cspace, )
     for pane in panes:
-        tf_rgb = util.spec2rgb(pane.get_tf_str(), args.cspace)
-        rf_rgb = util.spec2rgb(pane.get_rf_str(), args.cspace)
-        rb_rgb = util.spec2rgb(pane.get_rb_str(), args.cspace)
+        trix, triy, triz, mlnp = util.load_cie_tristi(
+                pane.wavelength, args.observer)
+        tf_x, tf_y, tf_z = util.spec2xyz(trix, triy, triz, mlnp, pane.transmittance)
+        rf_x, rf_y, rf_z = util.spec2xyz(trix, triy, triz, mlnp, pane.reflectance_front)
+        rb_x, rb_y, rb_z = util.spec2xyz(trix, triy, triz, mlnp, pane.reflectance_back)
+        tf_rgb = util.xyz2rgb(tf_x, tf_y, tf_z, coeffs)
+        rf_rgb = util.xyz2rgb(rf_x, rf_y, rf_z, coeffs)
+        rb_rgb = util.xyz2rgb(rb_x, rb_y, rb_z, coeffs)
         if pane.coated_side == 'front':
             coated_rgb = rf_rgb
             glass_rgb = rb_rgb
