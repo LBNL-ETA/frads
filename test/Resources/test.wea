@@ -1,10 +1,8 @@
-place Oakland Metropolitan Arpt_USA
+place Oakland Metropolitan Arpt_USA_____________________
 latitude 37.72
 longitude 122.22
 time_zone 120
 site_elevation 2.0
 weather_data_file_units 1
-
-1 1 9.500 573.0 81.0
-1 1 10.500 712.0 95.0
-1 1 11.500 655.0 129.0
+1 1 10.5 712.0 95.0
+1 1 11.5 655.0 129.0

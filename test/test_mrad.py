@@ -12,16 +12,14 @@ class TestMrad(unittest.TestCase):
         self.assertEqual(process.stderr, b'')
 
     def test_1_init(self):
-        cmd = ["mrad", "init", "-W", "test.wea"]
+        cmd = ["mrad", "init", "-n", "test", "-W", "Resources/test.wea"]
         process = sp.run(cmd, check=True, stderr=sp.PIPE)
-        self.assertEqual(process.stderr, b'')
-        self.assertTrue(os.path.isfile("default.cfg"))
-        os.remove("default.cfg")
+        self.assertTrue(os.path.isfile("test.cfg"))
+        os.remove("test.cfg")
 
     def test_1_init2(self):
-        cmd = ["mrad", "init", "--latlon", "37.72", "-122.22"]
+        cmd = ["mrad", "init", "--epw_path", "Resources/USA_CA_Oakland.Intl.AP.724930_TMY3.epw"]
         process = sp.run(cmd, check=True, stderr=sp.PIPE)
-        self.assertEqual(process.stderr, b'')
         self.assertTrue(os.path.isfile("default.cfg"))
         os.remove("default.cfg")
 
@@ -29,14 +27,14 @@ class TestMrad(unittest.TestCase):
         cmd = ['mrad', '-vvvv', 'run', 'two_phase.cfg']
         proc = sp.run(cmd, check=True, stderr=sp.PIPE)
         self.assertEqual(proc.stderr, b'')
-        self.assertTrue(os.path.isfile("./Matrices/pdsmx_floor"))
+        self.assertTrue(os.path.isfile("./Matrices/pdsmx_floor.mtx"))
         dsmx_size = os.stat("./Matrices/pdsmx_floor").st_size
         self.assertGreaterEqual(dsmx_size, 2.5e6)
         self.assertTrue(os.path.isdir("./Matrices/vdsmx_view_00"))
         vsmx_size = len(os.listdir("./Matrices/vdsmx_view_00"))
         self.assertEqual(vsmx_size, 146)
         view_results = glob.glob('Results/view_two_phase_view_00/*.hdr')
-        self.assertEqual(len(view_results), 3)
+        self.assertEqual(len(view_results), 2)
         shutil.rmtree("Matrices")
         shutil.rmtree("Results")
 
@@ -45,7 +43,7 @@ class TestMrad(unittest.TestCase):
         proc = sp.run(cmd, check=True, stderr=sp.PIPE)
         self.assertEqual(proc.stderr, b'')
         view_results = glob.glob("Results/view_three_phase_view_00/*.hdr")
-        self.assertEqual(len(view_results), 3)
+        self.assertEqual(len(view_results), 2)
         shutil.rmtree("Matrices")
         shutil.rmtree("Results")
 
@@ -54,7 +52,7 @@ class TestMrad(unittest.TestCase):
         proc = sp.run(cmd, check=True, stderr=sp.PIPE)
         self.assertEqual(proc.stderr, b'')
         view_results = glob.glob("Results/view_five_phase_view_00/*.hdr")
-        self.assertEqual(len(view_results), 4385)
+        self.assertEqual(len(view_results), 4387)
         shutil.rmtree("Matrices")
         shutil.rmtree("Results")
 
@@ -63,7 +61,7 @@ class TestMrad(unittest.TestCase):
         proc = sp.run(cmd, check=True, stderr=sp.PIPE)
         self.assertEqual(proc.stderr, b'')
         view_results = glob.glob("Results/view_five_phase2_view_00/*.hdr")
-        self.assertEqual(len(view_results), 4385)
+        self.assertEqual(len(view_results), 4387)
         shutil.rmtree("Matrices")
         shutil.rmtree("Results")
 

@@ -14,12 +14,12 @@ class TestEpjson2Rad(unittest.TestCase):
         cmd = ["ep2rad", "./CmplxGlz_SingleZone_DoubleClearAir.idf"]
         process = sp.run(cmd, check=True, stderr=sp.PIPE)
         self.assertTrue(os.path.isfile("./CmplxGlz_SingleZone_DoubleClearAir.epJSON"))
-        self.assertTrue(os.path.isfile("Room 102.cfg"))
+        self.assertTrue(os.path.isfile("Room_102.cfg"))
         self.assertTrue(os.path.isfile("./Objects/Room102_South_Wall.rad"))
         self.assertTrue(os.path.isfile("./Objects/Room102_South_Wall_window.rad"))
         self.assertTrue(os.path.isfile("./Objects/Room102_Ceiling.rad"))
         os.remove("./CmplxGlz_SingleZone_DoubleClearAir.epJSON")
-        os.remove("Room 102.cfg")
+        os.remove("Room_102.cfg")
         obj_files = glob.glob("./Objects/Room_102*.rad")
         for file in obj_files:
             os.remove(file)

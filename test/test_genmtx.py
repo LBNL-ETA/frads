@@ -16,8 +16,8 @@ class TestGenmtx(unittest.TestCase):
     def test_sun_mtx(self):
         window_path = os.path.join("Objects", "upper_glass.rad")
         window_normals = radutil.primitive_normal([window_path])
-        _, url = util.get_epw_url(37, 122)
-        epw = util.request(url, {})
+        with open("Resources/USA_CA_Oakland.Intl.AP.724930_TMY3.epw") as rdr:
+            epw = rdr.read()
         wea_metadata, wea_data = makesky.epw2wea(
             epw, dhour=True, shour=6, ehour=20,
             remove_zero=True, window_normal=window_normals)
@@ -32,13 +32,13 @@ class TestGenmtx(unittest.TestCase):
         print(process.stderr)
         self.assertEqual(process.stderr, b'')
         self.assertTrue(os.path.isdir("test_genmtx_sun_mtx"))
-        self.assertEqual(len(glob.glob('test_genmtx_sun_mtx/*.hdr')), 555)
+        self.assertEqual(len(glob.glob('test_genmtx_sun_mtx/*.hdr')), 542)
         shutil.rmtree("test_genmtx_sun_mtx")
         os.remove('test.smx')
 
     def test_sun_mtx2(self):
-        _, url = util.get_epw_url(32.6056027, 114.712143)
-        epw = util.request(url, {})
+        with open("Resources/USA_CA_Oakland.Intl.AP.724930_TMY3.epw") as rdr:
+            epw = rdr.read()
         wea_metadata, wea_data = makesky.epw2wea(
             epw, dhour=True, shour=6, ehour=20,
             remove_zero=True)
@@ -53,7 +53,7 @@ class TestGenmtx(unittest.TestCase):
         print(process.stderr)
         self.assertEqual(process.stderr, b'')
         self.assertTrue(os.path.isdir("test_genmtx_sun_mtx2"))
-        self.assertEqual(len(glob.glob('test_genmtx_sun_mtx2/*.hdr')), 657)
+        self.assertEqual(len(glob.glob('test_genmtx_sun_mtx2/*.hdr')), 615)
         shutil.rmtree("test_genmtx_sun_mtx2")
         os.remove('test.smx')
 
