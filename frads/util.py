@@ -4,15 +4,13 @@ from dataclasses import dataclass, field
 import logging
 import math
 import os
+from pathlib import Path
 import random
 import re
-import ssl
 import string
 import subprocess as sp
 import time
-from typing import Dict, List, Optional, NamedTuple, Tuple, Union, Generator
-import urllib.error
-import urllib.request
+from typing import Dict, List, Optional, NamedTuple, Tuple, Union, Generator, Any
 import xml.etree.ElementTree as ET
 
 
@@ -33,8 +31,6 @@ COLOR_PRIMARIES["radiance"] = {
 
 COLOR_PRIMARIES["sharp"] = {
     "cie_x_r": 0.6898, "cie_y_r": 0.3206,
-    "cie_x_g": 0.0736, "cie_y_g": 0.9003,
-    "cie_x_b": 0.1166, "cie_y_b": 0.0374,
     "cie_x_w": 1 / 3, "cie_y_w": 1 / 3
 }
 
@@ -104,150 +100,6 @@ class PaneRGB(NamedTuple):
     trans_rgb: List[float]
 
 
-@dataclass
-class MradConfig:
-    name: str = ''
-    vmx_basis: str = 'kf'
-    vmx_opt: str = '-ab 5 -ad 65536 -lw 1e-5'
-    fmx_basis: str = 'kf'
-    fmx_opt: str = '-ab 3 -ad 65536 -lw 5e-5'
-    smx_basis: str = 'r4'
-    dmx_opt: str = '-ab 2 -ad 128 -c 5000'
-    dsmx_opt: str = '-ab 7 -ad 8196 -lw 5e-5'
-    cdsmx_opt: str = '-ab 1'
-    cdsmx_basis: str = 'r6'
-    ray_count: int = 1
-    pixel_jitter: float = .7
-    separate_direct: bool = False
-    nprocess: int = 1
-    overwrite: bool = False
-    method: str = field(default_factory=str)
-    no_multiply: bool = False
-    base: str = os.getcwd()
-    matrices: str = 'Matrices'
-    results: str = 'Results'
-    objects: str = 'Objects'
-    resources: str = 'Resources'
-    wea_path: str = field(default_factory=str)
-    latitude: float = field(default_factory=float)
-    longitude: float = field(default_factory=float)
-    zipcode: str = field(default_factory=str)
-    daylight_hours_only: bool = True
-    start_hour: float = field(default_factory=float)
-    end_hour: float = field(default_factory=float)
-    orientation: int = 0
-    material: str = "materials.mat"
-    scene: str = field(default_factory=str)
-    window_xml: str = ''
-    window_paths: str = ''
-    window_cfs: str = ''
-    window_control: str = ''
-    ncp_shade: str = ''
-    grid_surface: str = ''
-    grid_spacing: float = 0.67
-    grid_height: float = .76
-    view: str = ''
-    objdir: str = field(init=False)
-    mtxdir: str = field(init=False)
-    resdir: str = field(init=False)
-    rsodir: str = field(init=False)
-    scene_paths: List[str] = field(init=False)
-    grid_surface_paths: Dict[str, str] = field(init=False)
-    windows: dict = field(init=False)
-    klems_bsdfs: dict = field(init=False)
-    sun_cfs: dict = field(init=False)
-
-    def __post_init__(self):
-        ""","""
-        self.objdir = os.path.join(self.base, self.objects)
-        self.mtxdir = os.path.join(self.base, self.matrices)
-        self.resdir = os.path.join(self.base, self.results)
-        self.rsodir = os.path.join(self.base, self.resources)
-        self.scene_paths = [os.path.join(self.objdir, path)
-                            for path in self.scene.split()]
-        self.material_paths = [os.path.join(self.objdir, path)
-                               for path in self.material.split()]
-        self.windows = {basename(path): os.path.join(self.objdir, path)
-                        for path in self.window_paths.split()}
-        self.grid_surface_paths = {basename(path):os.path.join(self.objdir, path)
-                                   for path in self.grid_surface.split()}
-        window_xml = self.window_xml.split()
-        if self.window_control.startswith('@'):
-            # Load control schedule
-            pass
-        else:
-            static_control = self.window_control.split()
-
-            if len(window_xml) > 0 and (len(static_control) != len(self.windows)):
-                raise ValueError("Need a control for each window")
-            self.klems_bsdfs = {wname: os.path.join(self.rsodir, self.window_xml.split()[int(control)])
-                                for wname, control in zip(self.windows.keys(), static_control)}
-            if (self.window_cfs == '') or (self.window_cfs == self.window_xml):
-                self.sun_cfs = self.klems_bsdfs
-            else:
-                cfs_paths = self.window_cfs.split()
-                self.sun_cfs = {}
-                for wname, control in zip(self.windows.keys(), static_control):
-                    _cfs = cfs_paths[int(control)]
-                    if _cfs.endswith('.xml'):
-                        self.sun_cfs[wname] = os.path.join(self.rsodir, _cfs)
-                    elif _cfs.endswith('.rad'):
-                        self.sun_cfs[wname] = os.path.join(self.objdir, _cfs)
-                    else:
-                        raise NameError("Unknow file type for dbsdf")
-
-    def to_dict(self):
-        sim_ctrl = {
-            "vmx_basis": self.vmx_basis,
-            "vmx_opt": self.vmx_opt,
-            "fmx_basis": self.fmx_basis,
-            "smx_basis": self.smx_basis,
-            "dmx_opt": self.dmx_opt,
-            "dsmx_opt": self.dsmx_opt,
-            "cdsmx_opt":  self.cdsmx_opt,
-            "cdsmx_basis":  self.cdsmx_basis,
-            "separate_direct":  self.separate_direct,
-            "overwrite":  self.overwrite,
-            "method":  self.method,
-        }
-        file_struct = {
-            "base": self.base,
-            "objects": self.objects,
-            "matrices": self.matrices,
-            "resources": self.resources,
-            "results": self.results
-        }
-        model = {
-            "material": self.material,
-            "scene": self.scene,
-            "window_paths": self.window_paths,
-            "window_xml": self.window_xml,
-            "window_cfs": self.window_cfs,
-            "window_control": self.window_control,
-        }
-        raysender = {
-            "grid_surface": self.grid_surface,
-            "grid_spacing": self.grid_spacing,
-            "grid_height": self.grid_height,
-            "view": self.view
-        }
-        site = {
-            "wea_path": self.wea_path,
-            "latitude": self.latitude,
-            "longitude": self.longitude,
-            "zipcode": self.zipcode,
-            "start_hour": self.start_hour,
-            "end_hour": self.end_hour,
-            "daylight_hours_only": self.daylight_hours_only
-        }
-        return {"Simulation Control": sim_ctrl,
-                "File Structure": file_struct,
-                "Site": site,
-                "Model": model,
-                "Ray Sender": raysender}
-
-
-
 def parse_vu(vu_str: str) -> dict:
     """Parse view string into a dictionary.
 
@@ -293,8 +145,24 @@ def parse_opt(opt_str: str) -> dict:
 
     args_list = opt_str.strip().split()
     oparser = argparse.ArgumentParser()
-    oparser.add_argument('-I', action='store_const', const='', default=None)
-    oparser.add_argument('-V', action='store_const', const='', default=None)
+    oparser.add_argument('-I', action='store_true', dest="I", default=None)
+    oparser.add_argument('-I+', action='store_true', dest="I", default=None)
+    oparser.add_argument('-I-', action='store_false', dest="I", default=None)
+    oparser.add_argument('-i', action='store_true', dest='i', default=None)
+    oparser.add_argument('-i+', action='store_true', dest='i', default=None)
+    oparser.add_argument('-i-', action='store_false', dest='i', default=None)
+    oparser.add_argument('-V', action='store_true', dest="V", default=None)
+    oparser.add_argument('-V+', action='store_true', dest="V", default=None)
+    oparser.add_argument('-V-', action='store_false', dest="V", default=None)
+    oparser.add_argument('-u', action='store_true', dest='u', default=None)
+    oparser.add_argument('-u+', action='store_true', dest='u', default=None)
+    oparser.add_argument('-u-', action='store_false', dest='u', default=None)
+    oparser.add_argument('-ld', action='store_true', dest='ld', default=None)
+    oparser.add_argument('-ld+', action='store_true', dest='ld', default=None)
+    oparser.add_argument('-ld-', action='store_false', dest='ld', default=None)
+    oparser.add_argument('-w', action='store_true', dest='w', default=None)
+    oparser.add_argument('-w+', action='store_true', dest='w', default=None)
+    oparser.add_argument('-w-', action='store_false', dest='w', default=None)
     oparser.add_argument('-aa', type=float)
     oparser.add_argument('-ab', type=int)
     oparser.add_argument('-ad', type=int)
@@ -309,13 +177,11 @@ def parse_opt(opt_str: str) -> dict:
     oparser.add_argument('-dt', type=int)
     oparser.add_argument('-f', action='store')
     oparser.add_argument('-hd', action='store_const', const='', default=None)
-    oparser.add_argument('-i', action='store_const', const='', default=None)
     oparser.add_argument('-lr', type=int)
     oparser.add_argument('-lw', type=float)
     oparser.add_argument('-n', type=int)
     oparser.add_argument('-ss', type=int)
     oparser.add_argument('-st', type=int)
-    oparser.add_argument('-u', action='store_const', const='', default=None)
     args, _ = oparser.parse_known_args(args_list)
     opt_dict = vars(args)
     opt_dict = {k: v for (k, v) in opt_dict.items() if v is not None}
@@ -453,28 +319,29 @@ def load_cie_tristi(inp_wvl: list, observer: str) -> tuple:
     Returns:
         Tristimulus XYZ and melanopic action spectra
     """
+    header_lines = 3
     cie_path = get_tristi_paths()
     with open(cie_path[f"x{observer}"]) as rdr:
-        lines = rdr.readlines()[3:]
+        lines = rdr.readlines()[header_lines:]
         trix = {float(row.split()[0]): float(row.split()[1]) for row in lines}
     with open(cie_path[f"y{observer}"]) as rdr:
-        lines = rdr.readlines()[3:]
+        lines = rdr.readlines()[header_lines:]
         triy = {float(row.split()[0]): float(row.split()[1]) for row in lines}
     with open(cie_path[f"z{observer}"]) as rdr:
-        lines = rdr.readlines()[3:]
+        lines = rdr.readlines()[header_lines:]
         triz = {float(row.split()[0]): float(row.split()[1]) for row in lines}
     with open(cie_path["mlnp"]) as rdr:
-        lines = rdr.readlines()[1:]
+        lines = rdr.readlines()[header_lines:]
         mlnp = {float(row.split()[0]): float(row.split()[1]) for row in lines}
 
-    trix_i = [trix[wvl] for wvl in inp_wvl]
-    triy_i = [triy[wvl] for wvl in inp_wvl]
-    triz_i = [triz[wvl] for wvl in inp_wvl]
-    mlnp_i = [mlnp[wvl] for wvl in inp_wvl]
+    trix_i = [trix[wvl] for wvl in inp_wvl if wvl in trix]
+    triy_i = [triy[wvl] for wvl in inp_wvl if wvl in triy]
+    triz_i = [triz[wvl] for wvl in inp_wvl if wvl in triz]
+    mlnp_i = [mlnp[wvl] for wvl in inp_wvl if wvl in mlnp]
     return trix_i, triy_i, triz_i, mlnp_i
 
 
-def get_conversion_matrix(prims):
+def get_conversion_matrix(prims, reverse=False):
     # The whole calculation is based on the CIE (x,y) chromaticities below
 
     cie_x_r = COLOR_PRIMARIES[prims]["cie_x_r"]
@@ -507,27 +374,57 @@ def get_conversion_matrix(prims):
     coeff_21 = (cie_x_g - cie_x_r - cie_x_g * cie_y_r + cie_x_r * cie_y_g) / cie_c_bd
     coeff_22 = (cie_x_r * cie_y_g - cie_x_g * cie_y_r) / cie_c_bd
 
+    if reverse:
+        coeff_00 = cie_x_r * cie_c_rd / cie_d
+        coeff_01 = cie_x_g * cie_c_gd / cie_d
+        coeff_02 = cie_x_b * cie_c_bd / cie_d
+        coeff_10 = cie_y_r * cie_c_rd / cie_d
+        coeff_11 = cie_y_g * cie_c_gd / cie_d
+        coeff_12 = cie_y_b * cie_c_bd / cie_d
+        coeff_20 = (1 - cie_x_r - cie_y_r) * cie_c_rd / cie_d
+        coeff_21 = (1 - cie_x_g - cie_y_g) * cie_c_gd / cie_d
+        coeff_22 = (1 - cie_x_b - cie_y_b) * cie_c_bd / cie_d
+
+
     return (coeff_00, coeff_01, coeff_02, coeff_10,
             coeff_11, coeff_12, coeff_20, coeff_21, coeff_22)
 
 
-def xyz2rgb(x, y, z, coeffs: tuple):
-    """Convert spectral data to RGB.
-
-    Convert wavelength and spectral data in visible
-    spectrum to red, green, and blue given a color space.
+def rgb2xyz(r, g, b, coeffs: tuple):
+    """Convert RGB to CIE XYZ.
 
     Args:
-        cie_x:
-        cie_y:
-        cie_z:
-        cspace: Color space to transform the spectral data.
-            { radiance | sharp | adobe | rimm | 709 | p3 | 2020 }
+        r: red
+        g: green
+        b: blue
+        coeffs: coversion matrix.
     Returns:
-        Red, Green, Blue in a list.
+        CIE X, Y, Z.
 
     Raise:
-        KeyError where cspace is not defined.
+        ValueError with invalid coeffs.
+    """
+    if len(coeffs) != 9:
+        raise ValueError("%s coefficients found, expected 9", len(coeffs))
+    x = coeffs[0] * r + coeffs[1] * g + coeffs[2] * b
+    y = coeffs[3] * r + coeffs[4] * g + coeffs[5] * b
+    z = coeffs[6] * r + coeffs[7] * g + coeffs[8] * b
+    return x, y, z
+
+
+def xyz2rgb(x, y, z, coeffs: tuple):
+    """Convert CIE XYZ to RGB.
+
+    Args:
+        x: cie_x
+        y: cie_y
+        z: cie_z
+        coeffs: conversion matrix
+    Returns:
+        Red, Green, Blue
+
+    Raise:
+        ValueError for invalid coeffs.
     """
     if len(coeffs) != 9:
         raise ValueError("%s coefficients found, expected 9", len(coeffs))
@@ -537,37 +434,39 @@ def xyz2rgb(x, y, z, coeffs: tuple):
     return red, green, blue
 
 
-def spec2xyz(inp: str) -> tuple:
-    """Convert spectral data to RGB.
-
-    Convert wavelength and spectral data in visible
-    spectrum to red, green, and blue given a color space.
+def spec2xyz(trix: List[float], triy: List[float], triz: List[float],
+        mlnp: List[float], sval: List[float], emis=False) -> tuple:
+    """Convert spectral data to CIE XYZ.
 
     Args:
-        inp: file path with wavelength spectral data
+        trix: tristimulus x function
+        triy: tristimulus y function
+        triz: tristimulus z function
+        mlnp: melanopic activation function
+        sval: input spectral data, either emissive or refl/trans.
+        emis: flag whether the input data is emissive
     Returns:
-        Red, Green, Blue in a list.
+        CIE X, Y, Z
 
     Raise:
-        KeyError where cspace is not defined.
+        ValueError if input data are not of equal length.
     """
+    if ((len(trix) != len(triy)) or (len(trix) != len(triz)) 
+            or (len(trix) != len(sval)) or (len(mlnp) != len(sval))):
+        raise ValueError("Input data not of equal length")
 
-    cmd1 = [
-        "rcalc", "-f", "cieresp.cal",
-        "-e", "ty=triy($1);$1=ty",
-        "-e", "$2=$2*trix($1);$3=$2*ty;$4=$2*triz($1)",
-        "-e", "cond=if($1-359,831-$1,-1)"
-    ]
-    proc = sp.run(cmd1, input=inp.encode(), check=True, stdout=sp.PIPE)
-    res = [row.split('\t') for row in proc.stdout.decode().splitlines()]
-    row_cnt = len(res)
-    avg_0 = sum([float(row[0]) for row in res]) / row_cnt
-    avg_1 = sum([float(row[1]) for row in res]) / row_cnt
-    avg_2 = sum([float(row[2]) for row in res]) / row_cnt
-    avg_3 = sum([float(row[3]) for row in res]) / row_cnt
-    cie_X = avg_1 / avg_0
-    cie_Y = avg_2 / avg_0
-    cie_Z = avg_3 / avg_0
+    xs = [x * v for x, v in zip(trix, sval)] 
+    ys = [y * v for y, v in zip(triy, sval)]
+    zs = [z * v for z, v in zip(triz, sval)]
+    ms = [m * v for m, v in zip(mlnp, sval)]
+    cie_X = sum(xs) / len(xs)
+    cie_Y = sum(ys) / len(ys)
+    cie_Z = sum(zs) / len(zs)
+    if not emis:
+        avg_y = sum(triy) / len(triy)
+        cie_X /= avg_y
+        cie_Y /= avg_y
+        cie_Z /= avg_y
     return cie_X, cie_Y, cie_Z
 
 
@@ -627,29 +526,29 @@ def parse_bsdf_xml(path: str) -> dict:
     data_dict: dict = {"Def": "", "Solar": {}, "Visible": {}}
     tree = ET.parse(path)
     if (root := tree.getroot()) is None:
-        raise Exception(error_msg + "Root not found")
+        raise ValueError(error_msg + "Root not found")
     tag = root.tag.rstrip('WindowElement')
     if (optical := root.find(tag + 'Optical')) is None:
-        raise Exception(error_msg + "Optical not found")
+        raise ValueError(error_msg + "Optical not found")
     if (layer := optical.find(tag + 'Layer')) is None:
-        raise Exception(error_msg + "Layer not found")
+        raise ValueError(error_msg + "Layer not found")
     if (data_def := layer.find(tag + 'DataDefinition')) is None:
-        raise Exception(error_msg + "data definition not found")
+        raise ValueError(error_msg + "data definition not found")
     if (data_struct_txt := data_def.findtext(tag + 'IncidentDataStructure')) is None:
-        raise Exception(error_msg + "data structure not found")
+        raise ValueError(error_msg + "data structure not found")
     data_dict["Def"] = data_struct_txt.strip()
     data_blocks = layer.findall(tag + 'WavelengthData')
     for block in data_blocks:
         if (wavelength_txt := block.findtext(tag + 'Wavelength')) is None:
-            raise Exception(error_msg + "wavelength not found")
+            raise ValueError(error_msg + "wavelength not found")
         if wavelength_txt not in ("Solar", "Visible"):
-            raise Exception("Unknown %s" % wavelength_txt)
+            raise ValueError("Unknown %s" % wavelength_txt)
         if (dblock := block.find(tag + 'WavelengthDataBlock')) is None:
-            raise Exception(error_msg + "wavelength data block not found")
+            raise ValueError(error_msg + "wavelength data block not found")
         if (direction := dblock.findtext(tag + 'WavelengthDataDirection')) is None:
-            raise Exception(error_msg + "wavelength direction not found")
+            raise ValueError(error_msg + "wavelength direction not found")
         if (sdata_txt := dblock.findtext(tag + 'ScatteringData')) is None:
-            raise Exception(error_msg + "scattering data not found")
+            raise ValueError(error_msg + "scattering data not found")
         sdata_txt = sdata_txt.strip()
         if sdata_txt.count('\n') == 21168:
             sdata_txt = sdata_txt.replace('\n\t', ' ')
@@ -765,82 +664,6 @@ def spcheckout(cmd, inp=None):
     return proc.stdout
 
 
-def get_latlon_from_zipcode(zipcode: str) -> Tuple[float, float]:
-    """Get latitude and longitude from US zipcode."""
-    _file_path_ = os.path.dirname(__file__)
-    zip2latlon = "zip_latlon.txt"
-    zip2latlon_path = os.path.join(_file_path_, 'data', zip2latlon)
-    with open(zip2latlon_path, 'r') as rdr:
-        csvreader = csv.DictReader(rdr, delimiter='\t')
-        for row in csvreader:
-            if row['GEOID'] == zipcode:
-                lat = float(row['INTPTLAT'])
-                lon = float(row['INTPTLONG'])
-                break
-        else:
-            raise ValueError('zipcode not found in US')
-    return lat, lon
-
-
-def haversine(lat1: float, lat2: float, lon1: float, lon2: float) -> float:
-    """Calculate distance between two points on earth."""
-    earth_radius = 6371e3
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    delta_phi = math.radians(lat2 - lat1)
-    delta_lam = math.radians(lon2 - lon1)
-    a = (math.sin(delta_phi / 2) * math.sin(delta_phi / 2)
-         + (math.cos(phi1) * math.cos(phi2)
-            * math.sin(delta_lam / 2) * math.sin(delta_lam / 2)))
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return earth_radius * c
-
-
-def get_epw_url(lat: float, lon: float) -> Tuple[str, str]:
-    """Get EPW name and url given latitude and longitude."""
-    lon = lon * -1
-    _file_path_ = os.path.dirname(__file__)
-    epw_url = "epw_url.csv"
-    epw_url_path = os.path.join(_file_path_, 'data', epw_url)
-    distances = []
-    urls = []
-    with open(epw_url_path, 'r') as rdr:
-        csvreader = csv.DictReader(rdr, delimiter=',')
-        for row in csvreader:
-            distances.append(haversine(
-                float(row['Latitude']), float(lat),
-                float(row['Longitude']), float(lon)))
-            urls.append(row['URL'])
-    min_idx = distances.index(min(distances))
-    url = urls[min_idx]
-    epw_fname = os.path.basename(url)
-    return epw_fname, url
-
-
-def request(url: str, header: dict) -> str:
-    user_agents = 'Mozilla/5.0 (Windows NT 6.1) '
-    user_agents += 'AppleWebKit/537.36 (KHTML, like Gecko) '
-    user_agents += 'Chrome/41.0.2228.0 Safari/537.3'
-    header['User-Agent'] = user_agents
-    request = urllib.request.Request(
-        url, headers=header
-    )
-    tmpctx = ssl.SSLContext()
-    raw = ''
-    for _ in range(3):  # try 3 times
-        try:
-            with urllib.request.urlopen(request, context=tmpctx) as resp:
-                raw = resp.read().decode()
-                break
-        except urllib.error.HTTPError:
-            time.sleep(1)
-    if raw.startswith('404'):
-        raise Exception(urllib.error.URLError)
-    if raw == '':
-        raise ValueError("Empty return from request")
-    return raw
-
-
 def id_generator(size=3, chars=None):
     """Generate random characters."""
     if chars is None:
@@ -865,7 +688,7 @@ def tokenize(inp: str) -> Generator[str, None, None]:
             yield match.group(0)
 
 
-def parse_branch(token: Generator[str, None, None]) -> List[float]:
+def parse_branch(token: Generator[str, None, None]) -> Any:
     """Prase tensor tree branches recursively by opening and closing curly braces.
     Args:
         token: token generator object.
