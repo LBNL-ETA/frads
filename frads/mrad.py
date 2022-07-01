@@ -7,107 +7,13 @@ import argparse
 import glob
 import logging
 import os
+from pathlib import Path
 from frads import mtxmethod
 from frads import util
 
 
 logger = logging.getLogger("frads")
 
-cwd = os.getcwd()
-default_config = util.MradConfig()
-sim_ctrl = {
-    "vmx_basis": default_config.vmx_basis,
-    "vmx_opt": default_config.vmx_opt,
-    "fmx_basis": default_config.fmx_basis,
-    "smx_basis": default_config.smx_basis,
-    "dmx_opt": default_config.dmx_opt,
-    "dsmx_opt": default_config.dsmx_opt,
-    "cdsmx_opt": default_config.cdsmx_opt,
-    "cdsmx_basis": default_config.cdsmx_basis,
-    "separate_direct": default_config.separate_direct,
-    "overwrite": default_config.overwrite,
-    "method": default_config.method,
-}
-
-
-def mkdirs(cfg: util.MradConfig) -> None:
-    """Silently make directories based on configuration."""
-    util.mkdir_p(cfg.objdir)
-    util.mkdir_p(cfg.mtxdir)
-    util.mkdir_p(cfg.resdir)
-    util.mkdir_p(cfg.rsodir)
-
-
-def interactive_init() -> None:
-    """Initiate mrad interactively."""
-
-    wea_path = input("What's the project wea_path?")
-    if wea_path == "":
-        locale = input("What's the project latitude & longitude(west+), e.g. 37.7 122.2, or zipcode(US)?")
-        if locale == "":
-            raise ValueError("Site not defined")
-        else:
-            if len(locale.split()) > 1:
-                lat, lon = local.split()
-                guess_timezone = 15 * round(lon / 15)
-                timezone = input(f"What's the project timezone? (guessed: {guess_timezone})")
-                if timezone == "":
-                    timezone = guess_timezone
-            elif len(local) == 5:
-                zipcode = local
-
-    objdir = input("Where are all the objects(.rad) files? (default: Objects)")
-    mtxdir = input("Where are do you want put all the matrix files? (default: Matrices)")
-    resdir = input("Where are all the results files? (default: Results)")
-
-    cwd = os.getcwd()
-    default_config = util.MradConfig()
-    file_struct = {
-        "base": args.base, "objects": args.objdir,
-        "matrices": args.mtxdir, "resources": args.rsodir,
-        "results": args.resdir
-    }
-    model = {
-        "material": "", "scene": "", "window_paths": "",
-        "window_xml": "", "window_cfs": "", "window_control": "",
-    }
-    raysender = {
-        "grid_surface": args.grid[0], "grid_spacing": args.grid[1],
-        "grid_height": args.grid[2], "view": ""
-    }
-    site = {
-        "wea_path": args.wea_path, "latitude": args.latlon[0],
-        "longitude": args.latlon[1], "zipcode": args.zipcode,
-        "start_hour": None, "end_hour": None,
-        "daylight_hours_only": False
-    }
-    object_pattern: str = args.object if args.object is not None else "*.rad"
-    window_pattern: str = args.window if args.window is not None else "window*.rad"
-    material_pattern: str = args.material if args.material is not None else "*.mat"
-    if args.objdir in os.listdir(args.base):
-        os.chdir(os.path.join(args.base, args.objdir))
-        window_files = sorted(glob.glob(window_pattern))
-        all_obj_files = glob.glob(object_pattern)
-        obj_files = [f for f in all_obj_files if f not in window_files]
-        material_files = glob.glob(material_pattern)
-        model["scene"] = " ".join(obj_files)
-        model["material"] = " ".join(material_files)
-        model["window_paths"] = " ".join(window_files)
-    else:
-        logger.warning("No %s directory found at %s, making so",
-                       args.objdir, args.base)
-        util.mkdir_p(os.path.join(args.base, args.objdir))
-    util.mkdir_p(os.path.join(args.base, args.mtxdir))
-    util.mkdir_p(os.path.join(args.base, args.resdir))
-    util.mkdir_p(os.path.join(args.base, args.rsodir))
-    cfg = ConfigParser(allow_no_value=True)
-    templ_config = {"Simulation Control": sim_ctrl,
-                    "File Structure": file_struct, "Site": site,
-                    "Model": model, "Ray Sender": raysender}
-    cfg.read_dict(templ_config)
-    os.chdir(cwd)
-    with open("default.cfg", "w") as rdr:
-        cfg.write(rdr)
 
 
 def initialize(args: argparse.Namespace) -> None:
@@ -117,113 +23,134 @@ def initialize(args: argparse.Namespace) -> None:
     Args:
         args: argparse.Namespace
     """
-    if (args.latlon == ("", "")) and (args.wea_path == "") and (args.zipcode == ""):
-        raise ValueError("Site not defined, use --wea_path | --latlon | --zipcode")
-    cwd = os.getcwd()
-    default_config = util.MradConfig()
-    file_struct = {
-        "base": args.base, "objects": args.objdir,
-        "matrices": args.mtxdir, "resources": args.rsodir,
-        "results": args.resdir
+    if args.wea_path != Path(""):
+        if not args.wea_path.is_file():
+            raise FileNotFoundError(args.wea_path)
+    elif args.epw_path != Path(""):
+        if not args.epw_path.is_file():
+            raise FileNotFoundError(args.epw_path)
+    else:
+        raise ValueError("Site not defined")
+
+    config = ConfigParser(allow_no_value=False)
+    config["SimControl"] = {
+        "vmx_basis": "kf",
+        "vmx_opt": "-ab 5 -ad 65536 -lw 1e-5",
+        "fmx_basis": "kf",
+        "smx_basis": "r4",
+        "dmx_opt": "-ab 2 -ad 128 -c 5000",
+        "dsmx_opt": "-ab 7 -ad 16384 -lw 5e-5",
+        "cdsmx_opt": "-ab 1",
+        "cdsmx_basis": "r6",
+        "ray_count": 1,
+        "nprocess": 1,
+        "separate_direct": False,
+        "overwrite": False,
+        "method": "",
+    }
+    site = {
+        "wea_path": args.wea_path, "epw_path": args.epw_path,
+        "start_hour": "", "end_hour": "",
+        "daylight_hours_only": ""
     }
     model = {
-        "material": "", "scene": "", "window_paths": "",
+        "name": args.name, "material": "", "scene": "", "window_paths": "",
         "window_xml": "", "window_cfs": "", "window_control": "",
     }
     raysender = {
         "grid_surface": args.grid[0], "grid_spacing": args.grid[1],
         "grid_height": args.grid[2], "view": ""
     }
-    site = {
-        "wea_path": args.wea_path, "latitude": args.latlon[0],
-        "longitude": args.latlon[1], "zipcode": args.zipcode,
-        "start_hour": None, "end_hour": None,
-        "daylight_hours_only": False
-    }
-    object_pattern: str = args.object if args.object is not None else "*.rad"
-    window_pattern: str = args.window if args.window is not None else "window*.rad"
-    material_pattern: str = args.material if args.material is not None else "*.mat"
-    if args.objdir in os.listdir(args.base):
-        os.chdir(os.path.join(args.base, args.objdir))
-        window_files = sorted(glob.glob(window_pattern))
-        all_obj_files = glob.glob(object_pattern)
-        obj_files = [f for f in all_obj_files if f not in window_files]
-        material_files = glob.glob(material_pattern)
-        model["scene"] = " ".join(obj_files)
-        model["material"] = " ".join(material_files)
-        model["window_paths"] = " ".join(window_files)
+    material_list = []
+    window_list = []
+    object_list = []
+    if args.object is not None:
+        for obj in args.object:
+            if obj.is_dir():
+                object_list.extend(glob.glob(str(obj/"*")))
+            else:
+                object_list.extend(glob.glob(str(obj)))
     else:
-        logger.warning("No %s directory found at %s, making so",
-                       args.objdir, args.base)
-        util.mkdir_p(os.path.join(args.base, args.objdir))
-    util.mkdir_p(os.path.join(args.base, args.mtxdir))
-    util.mkdir_p(os.path.join(args.base, args.resdir))
-    util.mkdir_p(os.path.join(args.base, args.rsodir))
-    cfg = ConfigParser(allow_no_value=True)
-    templ_config = {"Simulation Control": sim_ctrl,
-                    "File Structure": file_struct, "Site": site,
-                    "Model": model, "Ray Sender": raysender}
-    cfg.read_dict(templ_config)
-    os.chdir(cwd)
-    with open("default.cfg", "w") as rdr:
-        cfg.write(rdr)
-
-
-def convert_config(cfg: ConfigParser) -> util.MradConfig:
-    """Convert a configparser object into a dictionary.
-    Args:
-        cfg: SafeConfigParser
-    Returns:
-        MradConfig object (dataclass)
-    """
-    cfg_dict: dict = {}
-    sections = cfg.sections()
-    for sec in sections:
-        cfg_dict.update(dict(cfg[sec]))
-    for key, value in cfg_dict.items():
-        if value is not None:
-            if value.lower() == "true":
-                cfg_dict[key] = True
-            elif value.lower() == "false":
-                cfg_dict[key] = False
-        else:
-            cfg_dict[key] = ""
-    if cfg_dict["scene"] is None:
-        raise ValueError("No scene description")
-    return util.MradConfig(**cfg_dict)
+        logger.warning("Object files not set")
+    if args.material is not None:
+        for mat in args.material:
+            if mat.is_dir():
+                material_list.extend(glob.glob(str(mat/"*")))
+            else:
+                material_list.extend(glob.glob(str(mat)))
+    else:
+        logger.warning("Material files not set")
+    if args.window is not None:
+        for win in args.window:
+            if win.is_dir():
+                window_list.extend(glob.glob(str(win/"*")))
+            else:
+                window_list.extend(glob.glob(str(win)))
+    else:
+        logger.warning("Window files not set")
+    if args.xmls is not None:
+        xml_list = []
+        for xml in args.xmls:
+            if xml.is_dir():
+                xml_list.extend(glob.glob(str(xml/"*")))
+            else:
+                xml_list.extend(glob.glob(str(xml)))
+        if (len(window_list) != len(xml_list)):
+            raise ValueError("Number of window and xml files not the same")
+        model["window_xmls"] = "\n".join(xml_list)
+    model["scene"] = "\n".join(object_list)
+    model["material"] = "\n".join(material_list)
+    model["window_paths"] = "\n".join(window_list)
+    templ_config = {"Site": site, "Model": model, "RaySender": raysender}
+    config.read_dict(templ_config)
+    with open(f"{args.name}.cfg", "w") as rdr:
+        config.write(rdr)
 
 
 def run(args: argparse.Namespace) -> None:
     """Call mtxmethod to carry out the actual simulation."""
-    cfg = ConfigParser(allow_no_value=True, inline_comment_prefixes="#")
+    cfg = ConfigParser(allow_no_value=False, inline_comment_prefixes="#")
     with open(args.cfg) as rdr:
         cfg.read_string(rdr.read())
-    config = convert_config(cfg)
-    config.name = util.basename(args.cfg)
-    mkdirs(config)
-    model = mtxmethod.assemble_model(config)
-    if config.method != "":
-        _method = getattr(mtxmethod, config.method)
-        _method(model, config, direct=config.separate_direct)
+    try:
+        name = cfg["Model"]["name"]
+    except KeyError:
+        name = args.cfg.stem
+        cfg["Model"]["name"] = name
+    util.mkdir_p("Matrices")
+    util.mkdir_p("Results")
+    model = mtxmethod.assemble_model(cfg)
+    method = cfg["SimControl"]["method"]
+    if method != "":
+        _direct = False
+        if method.startswith(("2", "two")):
+            _method = mtxmethod.two_phase
+        elif method.startswith(("3", "three")):
+            _method = mtxmethod.three_phase
+        elif method.startswith(("5", "five")):
+            _method = mtxmethod.three_phase
+        _method(model,
+                cfg,
+                direct=cfg["SimControl"]["separate_direct"])
     else:
-        if "" in (config.window_xml, config.windows):
+        if "" in (cfg["Model"]["window_xml"], cfg["Model"]["window_paths"]):
             logger.info("Using two-phase method")
-            mtxmethod.two_phase(model, config)
+            mtxmethod.two_phase(model, cfg)
         else:
-            if config.ncp_shade != "" and len(config.ncp_shade.split()) > 1:
-                if config.separate_direct:
+            if len(cfg["Model"]["ncp_shade"].split()) > 1:
+                if cfg.getboolean("SimControl", "separate_direct"):
                     logger.info("Using six-phase simulation")
-                    mtxmethod.four_phase(model, config, direct=True)
+                    mtxmethod.four_phase(model, cfg, direct=True)
                 else:
                     logger.info("Using four-phase simulation")
-                    mtxmethod.four_phase(model, config)
+                    mtxmethod.four_phase(model, cfg)
             else:
-                if config.separate_direct:
+                if cfg.getboolean("SimControl", "separate_direct"):
                     logger.info("Using five-phase simulation")
-                    mtxmethod.three_phase(model, config, direct=True)
+                    mtxmethod.three_phase(model, cfg, direct=True)
                 else:
                     logger.info("Using three-phase simulation")
-                    mtxmethod.three_phase(model, config)
+                    mtxmethod.three_phase(model, cfg)
 
 
 def main() -> None:
@@ -236,21 +163,19 @@ def main() -> None:
     # Parse arguments for init subprogram
     parser_init = subparser.add_parser("init")
     parser_init.set_defaults(func=initialize)
-    parser_init.add_argument("-B", "--base", default=os.getcwd())
-    parser_init.add_argument("-O", "--objdir", default="Objects")
-    parser_init.add_argument("-M", "--mtxdir", default="Matrices")
-    parser_init.add_argument("-S", "--rsodir", default="Resources")
-    parser_init.add_argument("-R", "--resdir", default="Results")
-    parser_init.add_argument("-W", "--wea_path", default="")
-    parser_init.add_argument("-Z", "--zipcode", default="")
-    parser_init.add_argument("-L", "--latlon", nargs=2, default=("", ""))
-    parser_init.add_argument("-o", "--object")
-    parser_init.add_argument("-m", "--material")
-    parser_init.add_argument("-w", "--window")
+    parser_init.add_argument("-W", "--wea_path", type=Path, default=Path(""))
+    parser_init.add_argument("-E", "--epw_path", type=Path, default=Path(""))
+    parser_init.add_argument("-n", "--name", default="default")
+    # parser_init.add_argument("-Z", "--zipcode", default="")
+    # parser_init.add_argument("-L", "--latlon", nargs=2, default=("", ""))
+    parser_init.add_argument("-o", "--object", nargs="+", type=Path)
+    parser_init.add_argument("-m", "--material", nargs="+", type=Path)
+    parser_init.add_argument("-w", "--window", nargs="+", type=Path)
+    parser_init.add_argument("-x", "--xmls", nargs="+", type=Path)
     parser_init.add_argument("-g", "--grid", nargs=3, default=("", 0, 0))
     # Parse arguments for run subprogram
     parser_run = subparser.add_parser("run")
-    parser_run.add_argument("cfg", help="configuration file path")
+    parser_run.add_argument("cfg", type=Path, help="configuration file path")
     parser.add_argument(
         "-v", "--verbose", action="count", default=0,
         help="Verbose mode: \n"
