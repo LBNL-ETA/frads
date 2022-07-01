@@ -42,8 +42,8 @@ except FileNotFoundError as err:
     logger.info(err)
 
 
-if not sys.platform.startswith('win'):
-    import resource
-    slimit, hlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-    if slimit < 10000 or hlimit < 10000:
-        resource.setrlimit(resource.RLIMIT_NOFILE, (131072, 131072))
+# if not sys.platform.startswith('win'):
+    # import resource
+    # slimit, hlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    # if slimit < 10000 or hlimit < 10000:
+        # resource.setrlimit(resource.RLIMIT_NOFILE, (131072, 131072))

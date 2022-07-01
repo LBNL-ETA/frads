@@ -1,4 +1,6 @@
 ﻿# CIE S 026 Melanopic action spectra, wavelength in nm
+# wavelength in nm
+# 2022-04
 360     0
 361     0
 362     0
