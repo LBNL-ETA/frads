@@ -321,11 +321,13 @@ def rad_mtxmult3(*mtxs, weights: tuple = (), no_header=True):
             str(weights[1]), str(weights[2]), '-', '-t']
     out1 = sp.Popen(cmd1, stdin=inp1, stdout=sp.PIPE)
     out2 = sp.Popen(cmd2, stdin=out1.stdout, stdout=sp.PIPE)
-    out1.stdout.close()
+    if out1 is not None:
+        out1.stdout.close() # type: ignore
     if no_header:
         cmd3 = ['getinfo', '-']
         out3 = sp.Popen(cmd3, stdin=out2.stdout, stdout=sp.PIPE)
-        out2.stdout.close()
+        if out2 is not None:
+            out2.stdout.close() # type: ignore
         out = out3.communicate()[0]
     else:
         out = out2.communicate()[0]
@@ -335,7 +337,7 @@ def rad_mtxmult3(*mtxs, weights: tuple = (), no_header=True):
 def mtxmult(*mtxs):
     if NUMPY_FOUND:
         def mtx_parser(fpath):
-            if fpath.endswith('.xml'):
+            if fpath.endswith('xml'):
                 raw = util.spcheckout(['rmtxop', fpath])
             else:
                 with open(fpath, 'rb') as rdr:

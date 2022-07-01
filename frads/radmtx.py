@@ -197,7 +197,7 @@ class Receiver:
         return cls(receiver=sky_str, basis=basis)
 
     @classmethod
-    def as_surface(cls, prim_list: list, basis: str, out: str,
+    def as_surface(cls, prim_list: list, basis: str, out: Optional[str],
                    offset=None, left=False, source='glow') -> Receiver:
         """Instantiate a surface receiver object.
         Args:

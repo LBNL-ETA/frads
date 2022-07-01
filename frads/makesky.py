@@ -11,7 +11,7 @@ import os
 import subprocess as sp
 import tempfile as tf
 from frads import radutil, util, radgeom
-from typing import List, Union, Set, NamedTuple
+from typing import List, Union, Set, NamedTuple, Optional
 
 LSEP = os.linesep
 
@@ -67,20 +67,20 @@ def basis_glow(sky_basis):
 
 
 def skyglow(basis: str, upvect='+Y') -> str:
-    sky_string = f"#@rfluxmtx u={upvect} h={basis}{LSEP*2}"
-    sky_string += f"void glow skyglow{LSEP}"
-    sky_string += f"0{LSEP}0{LSEP}4 1 1 1 0{LSEP*2}"
-    sky_string += f"skyglow source sky{LSEP}"
-    sky_string += f"0{LSEP}0{LSEP}4 0 0 1 180{LSEP}"
+    sky_string = f"#@rfluxmtx u={upvect} h={basis}\n\n"
+    sky_string += "void glow skyglow\n"
+    sky_string += "0\n0\n4 1 1 1 0\n\n"
+    sky_string += "skyglow source sky\n"
+    sky_string += "0\n0\n4 0 0 1 180\n"
     return sky_string
 
 
 def grndglow(basis='u') -> str:
-    ground_string = f"#@rfluxmtx h={basis}{LSEP*2}"
-    ground_string += f"void glow groundglow{LSEP}"
-    ground_string += f"0{LSEP}0{LSEP}4 1 1 1 0{LSEP*2}"
-    ground_string += f"groundglow source ground{LSEP}"
-    ground_string += f"0{LSEP}0{LSEP}4 0 0 -1 180{LSEP*2}"
+    ground_string = f"#@rfluxmtx h={basis}\n\n"
+    ground_string += "void glow groundglow\n"
+    ground_string += "0\n0\n4 1 1 1 0\n\n"
+    ground_string += "groundglow source ground\n"
+    ground_string += "0\n0\n4 0 0 -1 180\n\n"
     return ground_string
 
 
@@ -316,8 +316,8 @@ def sky_cont(mon, day, hrs, lat, lon, mer, dni, dhi,
 def gendaylit_cmd(month: str, day: str, hours: str,
                   lat: str, lon: str, tzone: str,
                   year: str = None, dir_norm_ir: str = None,
-                  dif_hor_ir: str = None, dir_hor_ir: str = None,
-                  dir_norm_il: str = None, dif_hor_il: str = None,
+                  dif_hor_ir: Optional[str] = None, dir_hor_ir: Optional[str] = None,
+                  dir_norm_il: Optional[str] = None, dif_hor_il: str = None,
                   solar: bool = False) -> list:
     """Get a gendaylit command as a list."""
     cmd = ["gendaylit", month, day, hours]
@@ -325,11 +325,11 @@ def gendaylit_cmd(month: str, day: str, hours: str,
     if year is not None:
         cmd += ["-y", year]
     if None not in (dir_norm_ir, dif_hor_ir):
-        cmd += ["-W", dir_norm_ir, dif_hor_ir]
+        cmd += ["-W", str(dir_norm_ir), str(dif_hor_ir)]
     if None not in (dir_hor_ir, dif_hor_ir):
-        cmd += ["-G", dir_hor_ir, dif_hor_ir]
+        cmd += ["-G", str(dir_hor_ir), str(dif_hor_ir)]
     if None not in (dir_norm_il, dif_hor_il):
-        cmd += ["-L", dir_norm_il, dif_hor_il]
+        cmd += ["-L", str(dir_norm_il), str(dif_hor_il)]
     if solar:
         cmd += ["-O", "1"]
     return cmd
@@ -405,6 +405,32 @@ def remove_wea_zero_entry(data, metadata: WeaMetaData, window_normal=None):
                 else:
                     new_dataline.append(row)
     return new_dataline
+
+
+def parse_wea(wea_str: str):
+    lines = wea_str.splitlines()
+    place = lines[0].split(" ", 1)[1]
+    lat = float(lines[1].split(" ", 1)[1])
+    lon = float(lines[2].split(" ", 1)[1])
+    tz = int(float(lines[3].split(" ", 1)[1]))
+    ele = float(lines[4].split(" ", 1)[1])
+    meta_data = WeaMetaData(place, "", lat, lon, tz, ele)
+    data = []
+    for li in lines[6:]:
+        if li.strip() == "":
+            continue
+        line = li.split()
+        month = int(line[0])
+        day = int(line[1])
+        hours = float(line[2])
+        hour = int(hours)
+        minute = int((hours - hour) * 60)
+        dir_norm = float(line[3])
+        dif_hor = float(line[4])
+        data.append(WeaDataRow(
+            month, day, hour, minute, 0, hours, dir_norm, dif_hor))
+    return meta_data, data
+    
 
 
 def parse_epw(epw_str: str) -> tuple:
