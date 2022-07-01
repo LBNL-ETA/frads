@@ -458,13 +458,13 @@ def parse_epjson(epjs: dict) -> tuple:
 
 def write_config(config):
     cfg = ConfigParser(allow_no_value=True)
-    templ_config = config.to_dict()
-    cfg.read_dict(templ_config)
+    #templ_config = config.to_dict()
+    cfg.read_dict(config)
     with open(f"{config.name}.cfg", "w") as rdr:
         cfg.write(rdr)
 
 
-def epjson2rad(epjs: dict) -> dict:
+def epjson2rad(epjs: dict) -> None:
     """Command-line program to convert a energyplus model into a Radiance model."""
     # Setup file structure
     util.mkdir_p("Objects")
@@ -475,8 +475,8 @@ def epjson2rad(epjs: dict) -> dict:
     building_name = epjs["Building"].popitem()[0].replace(" ", "_")
 
     # Write material file
-    material_name = f"materials{building_name}.mat"
-    with open(os.path.join("Objects", material_name), 'w') as wtr:
+    material_path = os.path.join("Objects", f"materials{building_name}.mat")
+    with open(material_path, 'w') as wtr:
         for material in materials.values():
             wtr.write(str(material.primitive))
 
@@ -498,14 +498,33 @@ def epjson2rad(epjs: dict) -> dict:
             wtr.write(wb_process.stdout)
         xml_paths[key] = opath
 
-    zone_config = {}
     # For each zone write primitves to files and create a config file
     for name, zone in zones.items():
-        mrad_config = util.MradConfig(
-            latitude=site["latitude"],
-            longitude=site["longitude"],
-            material=material_name,
-        )
+        mrad_config = ConfigParser(allow_no_value=False)
+        mrad_config["SimControl"] = {
+            "vmx_basis": "kf",
+            "vmx_opt": "-ab 5 -ad 65536 -lw 1e-5",
+            "fmx_basis": "kf",
+            "smx_basis": "r4",
+            "dmx_opt": "-ab 2 -ad 128 -c 5000",
+            "dsmx_opt": "-ab 7 -ad 16384 -lw 5e-5",
+            "cdsmx_opt": "-ab 1",
+            "cdsmx_basis": "r6",
+            "ray_count": "1",
+            "nprocess": "1",
+            "separate_direct": False,
+            "overwrite": False,
+            "method": "",
+        }
+        mrad_config["Site"] = {
+            "wea_path": "",
+            "zipcode": "",
+            "latitude": site["latitude"],
+            "longitude": site["longitude"],
+            "start_hour": "",
+            "end_hour": "",
+            "daylight_hours_only": True,
+        }
         primitives = epluszone2rad(zone, constructions, materials)
         scene = []
         windows = []
@@ -516,25 +535,30 @@ def epjson2rad(epjs: dict) -> dict:
             write_primitives(primitive, "Objects")
             for _name, item in primitive.items():
                 if item["surface"] != []:
-                    scene.append(_name + ".rad")
+                    scene.append(os.path.join("Objects", _name + ".rad"))
                 if item["window"] != []:
-                    windows.append(_name + "_window.rad")
+                    windows.append(os.path.join("Objects", _name + "_window.rad"))
                 if item["xml"] != []:
-                    window_xmls.extend(item['xml'])
-                    window_controls.append("0")
+                    window_xmls.extend([os.path.join("Resources", xml)
+                                        for xml in item['xml']])
         # Get floors
         for primitive in primitives[-1]:
-            floors.append(primitive + ".rad")
+            floors.append(os.path.join("Objects", primitive + ".rad"))
 
-        mrad_config.scene = " ".join(scene)
-        mrad_config.window_paths = " ".join(windows)
-        mrad_config.window_xml = " ".join(window_xmls)
-        mrad_config.window_control = " ".join(window_controls)
-        mrad_config.grid_surface = " ".join(floors)
-        mrad_config.name = name
-        mrad_config.__post_init__()
-        zone_config[name] = mrad_config
-    return zone_config
+        mrad_config["Model"] = {
+            "material": material_path,
+            "scene": "\n".join(scene),
+            "window_paths": " ".join(windows),
+            "window_xml": " ".join(window_xmls),
+            "ncp_shade": ""
+        }
+        mrad_config["RaySender"] = {
+            "grid_surface": " ".join(floors),
+            "grid_spacing": 1,
+            "grid_height": 0.75
+        }
+        with open(f"{name.replace(' ', '_')}.cfg", "w") as wtr:
+            mrad_config.write(wtr)
 
 
 def read_ep_input(fpath: str) -> dict:
@@ -568,6 +592,6 @@ def epjson2rad_cmd():
     epjs = read_ep_input(args.fpath)
     if "FenestrationSurface:Detailed" not in epjs:
         raise ValueError("No windows found in this model")
-    configs = epjson2rad(epjs)
-    for config in configs.values():
-        write_config(config)
+    epjson2rad(epjs)
+    # for config in configs.values():
+        # write_config(config)
