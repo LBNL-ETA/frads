@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, 3.9, 3.10]
+        python-version: [3.8, 3.9, "3.10"]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -32,7 +32,7 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Download Release Asset
+    - name: Download latest Radiance binaries
       id: download_release_asset
       uses: i3h/download-release-asset@v1
       with:
@@ -41,7 +41,7 @@ jobs:
         tag: latest
         file: /Linux.zip$/
 
-    - name: Download EnergyPlus
+    - name: Download latest EnergyPlus
       id: download_energyplus_asset
       uses: i3h/download-release-asset@v1
       with:
@@ -90,7 +90,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, 3.9]
+        python-version: [3.8, 3.9, "3.10"]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -100,7 +100,7 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Download Radiance
+    - name: Download latest Radiance binaries
       id: download_release_asset
       uses: i3h/download-release-asset@v1
       with:
@@ -157,7 +157,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, 3.9]
+        python-version: [3.8, 3.9, "3.10"]
     defaults:
       run:
         shell: cmd
@@ -170,7 +170,7 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Download Release Asset
+    - name: Download latest Radiance binaries
       id: download_release_asset
       uses: i3h/download-release-asset@v1
       with:
