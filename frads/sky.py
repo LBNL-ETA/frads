@@ -2,55 +2,24 @@
 Routines for generating sky models
 """
 
-import argparse
-import csv
-import datetime
 import logging
 import math
 import os
+from pathlib import Path
 import subprocess as sp
-import tempfile as tf
-from frads import radutil, util, radgeom
-from typing import List, Union, Set, NamedTuple, Optional
+from typing import List
+from typing import Optional
+from typing import Sequence
+from typing import Tuple
+from typing import Union
 
-LSEP = os.linesep
+from frads import geom
+from frads import parsers
+from frads.types import WeaMetaData
+from frads.types import WeaDataRow
+from frads import utils
 
-logger = logging.getLogger("frads.makesky")
-
-
-class WeaMetaData(NamedTuple):
-    city: str
-    country: str
-    latitude: float
-    longitude: float
-    timezone: int
-    elevation: float
-
-    def wea_header(self) -> str:
-        header = f"place {self.city}_{self.country}\n"
-        header += f"latitude {self.latitude}\n"
-        header += f"longitude {self.longitude}\n"
-        header += f"time_zone {self.timezone}\n"
-        header += f"site_elevation {self.elevation}\n"
-        header += "weather_data_file_units 1\n"
-        return header
-
-
-class WeaDataRow(NamedTuple):
-    month: int
-    day: int
-    hour: int
-    minute: int
-    second: int
-    hours: float
-    dni: float
-    dhi: float
-
-    def __str__(self):
-        return f"{self.month} {self.day} {self.hours} {self.dni} {self.dhi}"
-
-    def dt_string(self):
-        return f"{self.month:02d}{self.day:02d}_{self.hour:02d}30"
+logger = logging.getLogger("frads.sky")
 
 
 def basis_glow(sky_basis):
@@ -90,8 +59,8 @@ class Gensun(object):
     def __init__(self, mf: int):
         """."""
         self.runlen = 144 * mf**2 + 3
-        self.rsrc = radutil.Reinsrc(mf)
-        self.mod_str = LSEP.join([f'sol{i}' for i in range(1, self.runlen)])
+        self.rsrc = utils.Reinsrc(mf)
+        self.mod_str = os.linesep.join([f'sol{i}' for i in range(1, self.runlen)])
 
     def gen_full(self):
         """Generate full treganza based sun sources."""
@@ -101,7 +70,7 @@ class Gensun(object):
             line = f"void light sol{i} 0 0 3 1 1 1 sol{i} "
             line += "source sun 0 0 4 {:.6g} {:.6g} {:.6g} 0.533".format(*dirs[:-1])
             out_lines.append(line)
-        return LSEP.join(out_lines)+LSEP
+        return os.linesep.join(out_lines)+os.linesep
 
     def gen_cull(self, smx_path=None, window_normals=None):
         """Generate culled sun sources based on window orientation and
@@ -128,7 +97,7 @@ class Gensun(object):
         if window_normals is not None:
             win_norm = window_normals
             for i in range(1, self.runlen):
-                dirs = radgeom.Vector(*self.rsrc.dir_calc(i)[:-1])
+                dirs = geom.Vector(*self.rsrc.dir_calc(i)[:-1])
                 _mod = 'sol'+str(i)
                 v = 0
                 if dtot[i - 1] > 0:
@@ -142,7 +111,7 @@ class Gensun(object):
                 out_lines.append(line)
         else:
             for i in range(1, self.runlen):
-                dirs = radgeom.Vector(*self.rsrc.dir_calc(i)[:-1])
+                dirs = geom.Vector(*self.rsrc.dir_calc(i)[:-1])
                 _mod = 'sol'+str(i)
                 v = 0
                 if dtot[i - 1] > 0:
@@ -153,59 +122,43 @@ class Gensun(object):
                 out_lines.append(line)
         logger.debug(out_lines)
         logger.debug(mod_str)
-        return LSEP.join(out_lines), LSEP.join(mod_str)
+        return os.linesep.join(out_lines), os.linesep.join(mod_str)
 
 
-def epw2sunmtx(epw_path: str) -> str:
-    """Generate reinhart 6 sun matrix file from a epw file."""
-    smx_path = util.basename(epw_path) + ".smx"
-    with tf.NamedTemporaryFile() as wea:
-        cmd = f"epw2wea {epw_path} {wea.name}"
-        sp.call(cmd, shell=True)
-        cmd = f"gendaymtx -od -u -m 6 -d -5 .533 {wea.name} > {smx_path}"
-        sp.call(cmd, shell=True)
-    return smx_path
-
-
-def loc2sunmtx(basis, lat, lon, ele):
-    """Generate a psuedo reinhart 6 sun matrix file given lat, lon, etc..."""
-    tz = int(5 * round(lon / 5))
-    metadata = WeaMetaData('city', 'country', lat, lon, tz, ele)
-    header = metadata.wea_header()
-    header = str.encode(header)
-    string = ""
-    mday = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    for mo in range(12):
-        for da in range(mday[mo]):
-            for ho in range(24):
-                string += f"{mo+1} {da+1} {ho+.5} 100 100"
-    string = str.encode(string)
-    smx_path = f"sun_{lat}_{lon}_{basis}.smx"
-    with tf.NamedTemporaryFile() as wea:
-        wea.write(header)
-        wea.write(string)
-        cmd = f"gendaymtx -od -m 6 -u -d -5 .533 {wea.name} > {smx_path}"
-        sp.call(cmd, shell=True)
-    return smx_path
-
-
-def gendaymtx(data_entry: List[WeaDataRow], metadata: WeaMetaData,
-              mf=4, direct=False, solar=False, onesun=False,
-              rotate=0, binary=False):
-    """."""
-    cmd = ['gendaymtx', '-r', str(rotate), '-m', str(mf)]
-    if direct:
-        cmd.append('-d')
-    if solar:
-        cmd.append('-O1')
-    if onesun:
-        cmd.append('-5')
-        cmd.append('.533')
+def gendaymtx(out: Union[str, Path],
+              mf: int,
+              data: Optional[Sequence[WeaDataRow]]=None,
+              meta: Optional[WeaMetaData]=None,
+              wpath: Optional[Path]=None,
+              direct=False,
+              solar=False,
+              onesun=False,
+              rotate: Optional[float]=None,
+              binary=False) -> None:
+    """
+    Call gendaymtx to generate a sky/sun matrix and write results to out.
+    """
+    stdin = None
+    cmd = ['gendaymtx', "-m", str(mf)]
     if binary:
         cmd.append('-of')
-    wea_input = metadata.wea_header() + "\n".join(map(str, data_entry))
-    sky_matrix = util.spcheckout(cmd, inp=wea_input.encode())
-    return sky_matrix
+    if direct:
+        cmd.append('-d')
+    if onesun:
+        cmd.extend(['-5', '.533'])
+    if rotate is not None:
+        cmd.extend(["-r", str(rotate)])
+    if solar:
+        cmd.append('-O1')
+    if wpath is not None:
+        cmd.append(str(wpath))
+    elif (data is not None) and (meta is not None):
+        wea_input = meta.wea_header() + "\n".join(map(str, data))
+        stdin = wea_input.encode('utf-8')
+    else:
+        raise ValueError("Need to specify either .wea path or wea data.")
+    with open(out, 'wb') as wtr:
+        sp.run(cmd, input=stdin, stdout=wtr)
 
 
 def gendaymtx_cmd(data_entry: List[str], metadata: WeaMetaData,
@@ -216,7 +169,7 @@ def gendaymtx_cmd(data_entry: List[str], metadata: WeaMetaData,
     spect = ' -O1' if solar else ' -O0'
     _five = ' -5 .533' if onesun else ''
     bi = '' if binary is False or os.name == 'nt' else ' -o' + binary
-    linesep = r'& echo' if os.name == 'nt' else LSEP
+    linesep = r'& echo' if os.name == 'nt' else os.linesep
     wea_head = f"place test{linesep}latitude {metadata.latitude}{linesep}"
     wea_head += f"longitude {metadata.longitude}{linesep}"
     wea_head += f"time_zone {metadata.timezone}{linesep}site_elevation "
@@ -232,84 +185,19 @@ def gendaymtx_cmd(data_entry: List[str], metadata: WeaMetaData,
     return cmd
 
 
-def parse_csv(csv_path, ftype='csv', dt_col="date_time",
-              dt_format="%Y%m%d %H:%M:%S", dni_col='DNI',
-              dhi_col='DHI', stime=None, etime=None):
-    """Parse a csv file containing direct normal
-    and diffuse horizontal data, ignoring NULL
-    and zero values.
-
-    Parameters:
-        csv_path: str
-            Path to the csv/tsv file.
-        ftype: str, default csv
-            File type to choose between csv and tsv.
-        dt_col: str, default date_time
-            name of the datetime column.
-        dt_format: str, default %Y%m%d %H:%M:%S
-            Python datetime format.
-        dni_col: str, default DNI
-            Column name containing direct normal
-            irradiation data.
-        dhi_col: str, default DHI
-            Column name containing diffuse horizontal
-            irradiation data.
-        stime: str, default None
-            Exclude the data before this time. e.g.'09:00'
-        etime: str, default None
-            Exclude the data after this time. e.g.'17:00'
-    Returns: list object
-        a list of strings containing datetime
-        and solar radiation values
-    """
-
-    data_entry = []
-    if None not in (stime, etime):
-        stime = datetime.datetime.strptime(stime, "%H:%M")
-        etime = datetime.datetime.strptime(etime, "%H:%M")
-        shours = stime.hour + stime.minute / 60.0
-        ehours = etime.hour + etime.minute / 60.0
-    else:
-        shours = 0
-        ehours = 24
-    ftypes = {'csv': 'excel', 'tsv': 'excel-tab'}
-    with open(csv_path, encoding='utf-8-sig') as csvfile:
-        reader = csv.DictReader(csvfile, dialect=ftypes[ftype])
-        for row in reader:
-            _dt = datetime.datetime.strptime(row[dt_col], dt_format)
-            _year = str(_dt.year)
-            _month = str(_dt.month)
-            _day = str(_dt.day)
-            _hour = _dt.hour
-            _minute = _dt.minute
-            _hours = round(_hour + _minute / 60.0, 2)
-            if _hours < shours or _hours > ehours:
-                continue
-            try:
-                _dni = float(row[dni_col])
-                _dhi = float(row[dhi_col])
-            except ValueError:
-                continue
-            if int(_dni) == 0 and int(_dhi) == 0:
-                continue
-            data_entry.append(
-                [_year, _month, _day, _hour, _minute, _hours, _dni, _dhi])
-    return data_entry
-
-
 def sky_cont(mon, day, hrs, lat, lon, mer, dni, dhi,
              year=None, grefl=.2, spect='0', rotate=None):
     out_str = f'!gendaylit {mon} {day} {hrs} '
     out_str += f'-a {lat} -o {lon} -m {mer} '
     if year is not None:
         out_str += f'-y {year} '
-    out_str += f'-W {dni} {dhi} -g {grefl} -O {spect}{LSEP*2}'
+    out_str += f'-W {dni} {dhi} -g {grefl} -O {spect}{os.linesep*2}'
     if rotate is not None:
         out_str += f"| xform -rz {rotate}"
-    out_str += f'skyfunc glow skyglow 0 0 4 1 1 1 0{LSEP*2}'
-    out_str += f'skyglow source sky 0 0 4 0 0 1 180{LSEP*2}'
-    out_str += f'skyfunc glow groundglow 0 0 4 1 1 1 0{LSEP*2}'
-    out_str += f'groundglow source ground 0 0 4 0 0 -1 180{LSEP}'
+    out_str += f'skyfunc glow skyglow 0 0 4 1 1 1 0{os.linesep*2}'
+    out_str += f'skyglow source sky 0 0 4 0 0 1 180{os.linesep*2}'
+    out_str += f'skyfunc glow groundglow 0 0 4 1 1 1 0{os.linesep*2}'
+    out_str += f'groundglow source ground 0 0 4 0 0 -1 180{os.linesep}'
     return out_str
 
 
@@ -336,9 +224,8 @@ def gendaylit_cmd(month: str, day: str, hours: str,
 
 
 def solar_angle(lat, lon, mer, month, day, hour):
-    """Simplified translation from the Radiance sun.c and gensky.c code.
-
-    This function test if the solar altitude is greater than zero
+    """
+    Simplified translation from the Radiance sun.c and gensky.c code.
     """
     latitude_r = math.radians(lat)
     longitude_r = math.radians(lon)
@@ -356,15 +243,13 @@ def solar_angle(lat, lon, mer, month, day, hour):
     return altitude, azimuth
 
 
-def start_end_hour(data: list, sh: float, eh: float):
+def start_end_hour(data: Sequence[WeaDataRow], sh: float, eh: float):
     """Remove wea data entries outside of the
     start and end hour."""
     if sh == 0 and eh == 0:
         return data
 
-    def filter_hour(dataline):
-        return sh <= float(dataline[2]) <= eh
-    return filter(filter_hour, data)
+    return [row for row in data if sh <= row.hours <= eh]
 
 
 def check_sun_above_horizon(data, metadata):
@@ -374,10 +259,11 @@ def check_sun_above_horizon(data, metadata):
                              metadata.timezone, row.month,
                              row.day, row.hours)
         return alt > 0
-    return filter(solar_altitude_check, data)
+    return [row for row in data if solar_altitude_check(row)]
 
 
-def remove_wea_zero_entry(data, metadata: WeaMetaData, window_normal=None):
+def remove_wea_zero_entry(data, metadata: WeaMetaData,
+        window_normal: Optional[Sequence[geom.Vector]]=None) -> List[WeaDataRow]:
     """Remove wea data entries with zero solar luminance.
     If window normal supplied, eliminate entries not seen by window.
     Solar luminance determined using Perez sky model.
@@ -391,15 +277,15 @@ def remove_wea_zero_entry(data, metadata: WeaMetaData, window_normal=None):
                '-a', str(metadata.latitude), '-o', str(metadata.longitude),
                '-m', str(metadata.timezone), '-W', str(row.dni), str(row.dhi)]
         process = sp.run(cmd, stderr=sp.PIPE, stdout=sp.PIPE)
-        primitives = radutil.parse_primitive(
+        primitives = parsers.parse_primitive(
             process.stdout.decode().splitlines())
         if process.stderr == b'':
             light = float(primitives[0].real_arg.split()[2])
-            dirs = radgeom.Vector(*list(map(float, primitives[1].real_arg.split()[1:4])))
+            dirs = geom.Vector(*list(map(float, primitives[1].real_arg.split()[1:4])))
             if light > 0:
                 if check_window_normal:
                     for normal in window_normal:
-                        if normal * dirs < -0.035: # 2deg tolerance
+                        if normal * dirs < -0.035:  # 2deg tolerance
                             new_dataline.append(row)
                             break
                 else:
@@ -407,63 +293,11 @@ def remove_wea_zero_entry(data, metadata: WeaMetaData, window_normal=None):
     return new_dataline
 
 
-def parse_wea(wea_str: str):
-    lines = wea_str.splitlines()
-    place = lines[0].split(" ", 1)[1]
-    lat = float(lines[1].split(" ", 1)[1])
-    lon = float(lines[2].split(" ", 1)[1])
-    tz = int(float(lines[3].split(" ", 1)[1]))
-    ele = float(lines[4].split(" ", 1)[1])
-    meta_data = WeaMetaData(place, "", lat, lon, tz, ele)
-    data = []
-    for li in lines[6:]:
-        if li.strip() == "":
-            continue
-        line = li.split()
-        month = int(line[0])
-        day = int(line[1])
-        hours = float(line[2])
-        hour = int(hours)
-        minute = int((hours - hour) * 60)
-        dir_norm = float(line[3])
-        dif_hor = float(line[4])
-        data.append(WeaDataRow(
-            month, day, hour, minute, 0, hours, dir_norm, dif_hor))
-    return meta_data, data
-    
-
-
-def parse_epw(epw_str: str) -> tuple:
-    """Parse epw file and return wea header and data."""
-    raw = epw_str.splitlines()
-    epw_header = raw[0].split(',')
-    content = raw[8:]
-    data = []
-    for li in content:
-        line = li.split(',')
-        month = int(line[1])
-        day = int(line[2])
-        hour = int(line[3]) - 1
-        hours = hour + 0.5
-        dir_norm = float(line[14])
-        dif_hor = float(line[15])
-        data.append(WeaDataRow(
-            month, day, hour, 30, 0, hours, dir_norm, dif_hor))
-    city = epw_header[1]
-    country = epw_header[3]
-    latitude = float(epw_header[6])
-    longitude = -1 * float(epw_header[7])
-    tz = int(float(epw_header[8])) * (-15)
-    elevation = float(epw_header[9].rstrip())
-    meta_data = WeaMetaData(city, country, latitude, longitude, tz, elevation)
-    return meta_data, data
-
-
 def epw2wea(epw_str,
             dhour=False, shour=None, ehour=None,
             remove_zero=False, window_normal=None):
     """epw2wea with added filter."""
-    metadata, data = parse_epw(epw_str)
+    metadata, data = parsers.parse_epw(epw_str)
     if None not in (shour, ehour):
         data = start_end_hour(data, shour, ehour)
     if dhour:
@@ -474,62 +308,21 @@ def epw2wea(epw_str,
     return metadata, list(data)
 
 
-def getwea():
-    """Commandline program for generating a .wea file
-    from downloaded EPW data."""
-    parser = argparse.ArgumentParser(
-        prog='getwea',
-        description="Download the EPW files and convert it to a wea file")
-    parser.add_argument('-a', type=float, help='latitude')
-    parser.add_argument('-o', type=float, help='longitude')
-    parser.add_argument('-z', help='zipcode (U.S. only)')
-    parser.add_argument('-dh', action="store_true",
-                        help='output only for daylight hours')
-    parser.add_argument('-sh', type=float, help='start hour (float)')
-    parser.add_argument('-eh', type=float, help='end hour (float)')
-    parser.add_argument('-rz', action='store_true', help='remove zero solar luminance entries')
-    parser.add_argument('-wpths', nargs='+', help='window paths (.rad)')
-    parser.add_argument(
-        "-v", "--verbose", action="count", default=0,
-        help="Verbose mode: \n"
-        "\t-v=Debug\n"
-        "\t-vv=Info\n"
-        "\t-vvv=Warning\n"
-        "\t-vvvv=Error\n"
-        "\t-vvvvv=Critical\n"
-        "default=Warning")
-    args = parser.parse_args()
-    # Setup logger
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    console_handler = logging.StreamHandler()
-    _level = args.verbose * 10
-    logger.setLevel(_level)
-    console_handler.setLevel(_level)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    window_normals: Union[None, Set[radgeom.Vector]] = None
-    if args.z is not None:
-        lat, lon = util.get_latlon_from_zipcode(args.z)
-    elif None not in (args.a, args.o):
-        lat, lon = args.a, args.o
-    else:
-        print("Exit: need either latitude and longitude or U.S. postcode")
-        exit()
-    _, url = util.get_epw_url(lat, lon)
-    logger.debug("EPW URL:" + url)
-    epw = util.request(url, {})
-    remove_zero = False
-    if args.wpths is not None:
-        window_normals = radutil.primitive_normal(args.wpths)
-        remove_zero = True
-    wea_metadata, wea_data = parse_epw(epw)
-    if None not in (args.sh, args.eh):
-        wea_data = start_end_hour(wea_data, args.sh, args.eh)
-    if args.dh:
-        wea_data = check_sun_above_horizon(wea_data, wea_metadata)
+def filter_wea(wea_data: Sequence[WeaDataRow], meta_data: WeaMetaData,
+               start_hour: Optional[float]=None, end_hour: Optional[float]=None, daylight_hours_only=False,
+        remove_zero=False, window_normals=None) -> Tuple[List[WeaDataRow], List[str]]:
+    """Obtain and prepare weather file data."""
+    logger.info(f"Filtering wea data, starting with {len(wea_data)} rows")
+    if (start_hour is not None) and (end_hour is not None):
+        wea_data = start_end_hour(wea_data, start_hour, end_hour)
+        logger.info(f"Filtering out hours outside of {start_hour} and {end_hour}: {len(wea_data)} rows remaining")
+    if daylight_hours_only:
+        wea_data = check_sun_above_horizon(wea_data, meta_data)
+        logger.info(f"Filtering by daylight hours: {len(wea_data)} rows remaining")
     if remove_zero:
-        wea_data = remove_wea_zero_entry(
-            wea_data, wea_metadata, window_normals)
-    print(wea_metadata.wea_header())
-    print('\n'.join(map(str, wea_data)))
+        wea_data = remove_wea_zero_entry(wea_data, meta_data, window_normal=window_normals)
+        logger.info(f"Filtering out zero DNI hours and suns not seen by window: {len(wea_data)} rows remaining")
+    datetime_stamps = [row.dt_string() for row in wea_data]
+    if len(wea_data) == 0:
+        logger.warning("Empty wea file")
+    return wea_data, datetime_stamps

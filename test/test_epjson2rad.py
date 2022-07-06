@@ -3,17 +3,17 @@ import subprocess as sp
 import os
 import glob
 
-class TestEpjson2Rad(unittest.TestCase):
 
+class TestEpjson2Rad(unittest.TestCase):
     def test_help(self):
         cmd = ["ep2rad", "-h"]
         process = sp.run(cmd, check=True, stderr=sp.PIPE, stdout=sp.PIPE)
-        self.assertEqual(process.stderr, b'')
+        self.assertEqual(process.stderr, b"")
 
     def test_cfscase(self):
-        cmd = ["ep2rad", "./CmplxGlz_SingleZone_DoubleClearAir.idf"]
+        cmd = ["ep2rad", "Resources/CmplxGlz_SingleZone_DoubleClearAir.idf"]
         process = sp.run(cmd, check=True, stderr=sp.PIPE)
-        self.assertTrue(os.path.isfile("./CmplxGlz_SingleZone_DoubleClearAir.epJSON"))
+        self.assertTrue(os.path.isfile("CmplxGlz_SingleZone_DoubleClearAir.epJSON"))
         self.assertTrue(os.path.isfile("Room_102.cfg"))
         self.assertTrue(os.path.isfile("./Objects/Room102_South_Wall.rad"))
         self.assertTrue(os.path.isfile("./Objects/Room102_South_Wall_window.rad"))
@@ -25,7 +25,7 @@ class TestEpjson2Rad(unittest.TestCase):
             os.remove(file)
 
     def test_refcase(self):
-        cmd = ["ep2rad", "./RefBldgMediumOfficeNew2004_Chicago.idf"]
+        cmd = ["ep2rad", "Resources/RefBldgMediumOfficeNew2004_Chicago.idf"]
         process = sp.run(cmd, check=True, stderr=sp.PIPE)
         self.assertTrue(os.path.isfile("./RefBldgMediumOfficeNew2004_Chicago.epJSON"))
         self.assertTrue(os.path.isfile("./Objects/Perimeter_bot_ZN_1_Wall_South.rad"))

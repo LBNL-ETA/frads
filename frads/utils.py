@@ -1,6 +1,4 @@
-import argparse
-import csv
-from dataclasses import dataclass, field
+from io import TextIOWrapper
 import logging
 import math
 import os
@@ -9,183 +7,51 @@ import random
 import re
 import string
 import subprocess as sp
-import time
-from typing import Dict, List, Optional, NamedTuple, Tuple, Union, Generator, Any
-import xml.etree.ElementTree as ET
+from typing import Generator
+from typing import List
+from typing import Set
+
+from frads import geom
+from frads import parsers
+from frads.types import Primitive
+from frads.types import PaneRGB
+from frads.types import ScatteringData
+from frads.types import BSDFData
 
 
-logger = logging.getLogger("frads.util")
+logger = logging.getLogger("frads.utils")
 
-LEMAX = 683
-# Melanopic luminous efficacy for D65
-MLEMAX = 754
 
-COLOR_PRIMARIES = {}
+GEOM_TYPE = ['polygon', 'ring', 'tube', 'cone']
 
-COLOR_PRIMARIES["radiance"] = {
-    "cie_x_r": 0.640, "cie_y_r": 0.330,
-    "cie_x_g": 0.290, "cie_y_g": 0.600,
-    "cie_x_b": 0.150, "cie_y_b": 0.060,
-    "cie_x_w": 1 / 3, "cie_y_w": 1 / 3
+MATERIAL_TYPE = ['plastic', 'glass', 'trans', 'dielectric', 'BSDF']
+
+BASIS_DICT = {
+    '145': 'Klems Full',
+    '73': 'Klems Half',
+    '41': 'Klems Quarter',
 }
 
-COLOR_PRIMARIES["sharp"] = {
-    "cie_x_r": 0.6898, "cie_y_r": 0.3206,
-    "cie_x_w": 1 / 3, "cie_y_w": 1 / 3
+TREG_BASE = [
+    (90., 0),
+    (78., 30),
+    (66., 30),
+    (54., 24),
+    (42., 24),
+    (30., 18),
+    (18., 12),
+    (6., 6),
+    (0., 1),
+]
+
+ABASE_LIST = {
+    "Klems Full": [(0., 1), (5., 8), (15., 16), (25., 20), (35., 24),
+                   (45., 24), (55., 24), (65., 16), (75., 12), (90., 0)],
+    "Klems Half": [(0., 1), (6.5, 8), (19.5, 12), (32.5, 16), (46.5, 20),
+                   (61.5, 12), (76.5, 4), (90., 0)],
+    "Klems Quarter": [(0., 1), (9., 8), (27., 12), (46., 12), (66., 8),
+                      (90., 0)]
 }
-
-COLOR_PRIMARIES["adobe"] = {
-    "cie_x_r": 0.640, "cie_y_r": 0.330,
-    "cie_x_g": 0.210, "cie_y_g": 0.710,
-    "cie_x_b": 0.150, "cie_y_b": 0.060,
-    "cie_x_w": 0.3127, "cie_y_w": 0.3290
-}
-
-COLOR_PRIMARIES["rimm"] = {
-    "cie_x_r": 0.7347, "cie_y_r": 0.2653,
-    "cie_x_g": 0.1596, "cie_y_g": 0.8404,
-    "cie_x_b": 0.0366, "cie_y_b": 0.0001,
-    "cie_x_w": 0.3457, "cie_y_w": 0.3585
-}
-
-COLOR_PRIMARIES["709"] = {
-    "cie_x_r": 0.640, "cie_y_r": 0.330,
-    "cie_x_g": 0.300, "cie_y_g": 0.600,
-    "cie_x_b": 0.150, "cie_y_b": 0.060,
-    "cie_x_w": 0.3127, "cie_y_w": 0.3290
-}
-
-COLOR_PRIMARIES["p3"] = {
-    "cie_x_r": 0.680, "cie_y_r": 0.320,
-    "cie_x_g": 0.265, "cie_y_g": 0.690,
-    "cie_x_b": 0.150, "cie_y_b": 0.060,
-    "cie_x_w": 0.314, "cie_y_w": 0.351
-}
-
-COLOR_PRIMARIES["2020"] = {
-    "cie_x_r": 0.708, "cie_y_r": 0.292,
-    "cie_x_g": 0.170, "cie_y_g": 0.797,
-    "cie_x_b": 0.131, "cie_y_b": 0.046,
-    "cie_x_w": 0.3127, "cie_y_w": 0.3290
-}
-
-
-class PaneProperty(NamedTuple):
-    name: str
-    thickness: float
-    gtype: str
-    coated_side: str
-    wavelength: List[float]
-    transmittance: List[float]
-    reflectance_front: List[float]
-    reflectance_back: List[float]
-
-    def get_tf_str(self):
-        wavelength_tf = tuple(zip(self.wavelength, self.transmittance))
-        return '\n'.join([' '.join(map(str, pair)) for pair in wavelength_tf])
-
-    def get_rf_str(self):
-        wavelength_rf = tuple(zip(self.wavelength, self.reflectance_front))
-        return '\n'.join([' '.join(map(str, pair)) for pair in wavelength_rf])
-
-    def get_rb_str(self):
-        wavelength_rb = tuple(zip(self.wavelength, self.reflectance_back))
-        return '\n'.join([' '.join(map(str, pair)) for pair in wavelength_rb])
-
-
-class PaneRGB(NamedTuple):
-    measured_data: PaneProperty
-    coated_rgb: List[float]
-    glass_rgb: List[float]
-    trans_rgb: List[float]
-
-
-def parse_vu(vu_str: str) -> dict:
-    """Parse view string into a dictionary.
-
-    Args:
-        vu_str: view parameters as a string
-
-    Returns:
-        A view dictionary
-    """
-
-    args_list = vu_str.strip().split()
-    vparser = argparse.ArgumentParser()
-    vparser.add_argument('-v', action='store', dest='vt')
-    vparser.add_argument('-vp', nargs=3, type=float)
-    vparser.add_argument('-vd', nargs=3, type=float)
-    vparser.add_argument('-vu', nargs=3, type=float)
-    vparser.add_argument('-vv', type=float)
-    vparser.add_argument('-vh', type=float)
-    vparser.add_argument('-vo', type=float)
-    vparser.add_argument('-va', type=float)
-    vparser.add_argument('-vs', type=float)
-    vparser.add_argument('-vl', type=float)
-    vparser.add_argument('-x', type=int)
-    vparser.add_argument('-y', type=int)
-    vparser.add_argument('-vf', type=str)
-    args, _ = vparser.parse_known_args(args_list)
-    view_dict = vars(args)
-    if view_dict['vt'] is not None:
-        view_dict['vt'] = view_dict['vt'][-1]
-    view_dict = {k: v for (k, v) in view_dict.items() if v is not None}
-    return view_dict
-
-
-def parse_opt(opt_str: str) -> dict:
-    """Parsing option string into a dictionary.
-
-    Args:
-        opt_str: rtrace option parameters as a string
-
-    Returns:
-        An option dictionary
-    """
-
-    args_list = opt_str.strip().split()
-    oparser = argparse.ArgumentParser()
-    oparser.add_argument('-I', action='store_true', dest="I", default=None)
-    oparser.add_argument('-I+', action='store_true', dest="I", default=None)
-    oparser.add_argument('-I-', action='store_false', dest="I", default=None)
-    oparser.add_argument('-i', action='store_true', dest='i', default=None)
-    oparser.add_argument('-i+', action='store_true', dest='i', default=None)
-    oparser.add_argument('-i-', action='store_false', dest='i', default=None)
-    oparser.add_argument('-V', action='store_true', dest="V", default=None)
-    oparser.add_argument('-V+', action='store_true', dest="V", default=None)
-    oparser.add_argument('-V-', action='store_false', dest="V", default=None)
-    oparser.add_argument('-u', action='store_true', dest='u', default=None)
-    oparser.add_argument('-u+', action='store_true', dest='u', default=None)
-    oparser.add_argument('-u-', action='store_false', dest='u', default=None)
-    oparser.add_argument('-ld', action='store_true', dest='ld', default=None)
-    oparser.add_argument('-ld+', action='store_true', dest='ld', default=None)
-    oparser.add_argument('-ld-', action='store_false', dest='ld', default=None)
-    oparser.add_argument('-w', action='store_true', dest='w', default=None)
-    oparser.add_argument('-w+', action='store_true', dest='w', default=None)
-    oparser.add_argument('-w-', action='store_false', dest='w', default=None)
-    oparser.add_argument('-aa', type=float)
-    oparser.add_argument('-ab', type=int)
-    oparser.add_argument('-ad', type=int)
-    oparser.add_argument('-ar', type=int)
-    oparser.add_argument('-as', type=int)
-    oparser.add_argument('-c', type=int, default=1)
-    oparser.add_argument('-dc', type=int)
-    oparser.add_argument('-dj', type=float)
-    oparser.add_argument('-dp', type=int)
-    oparser.add_argument('-dr', type=int)
-    oparser.add_argument('-ds', type=int)
-    oparser.add_argument('-dt', type=int)
-    oparser.add_argument('-f', action='store')
-    oparser.add_argument('-hd', action='store_const', const='', default=None)
-    oparser.add_argument('-lr', type=int)
-    oparser.add_argument('-lw', type=float)
-    oparser.add_argument('-n', type=int)
-    oparser.add_argument('-ss', type=int)
-    oparser.add_argument('-st', type=int)
-    args, _ = oparser.parse_known_args(args_list)
-    opt_dict = vars(args)
-    opt_dict = {k: v for (k, v) in opt_dict.items() if v is not None}
-    return opt_dict
 
 
 def tmit2tmis(tmit: float) -> float:
@@ -195,295 +61,29 @@ def tmit2tmis(tmit: float) -> float:
     return max(0, min(tmis, 1))
 
 
-def parse_idf(content: str) -> dict:
-    """Parse an IDF file into a dictionary."""
-    sections = content.rstrip().split(';')
-    sub_sections: List[List[str]] = []
-    obj_dict: Dict[str, List[List[str]]] = {}
-    for sec in sections:
-        sec_lines = sec.splitlines()
-        _lines = []
-        for sl in sec_lines:
-            content = sl.split('!')[0]
-            if content != '':
-                _lines.append(content)
-        _lines = ' '.join(_lines).split(',')
-        clean_lines = [i.strip() for i in _lines]
-        sub_sections.append(clean_lines)
+def polygon2prim(polygon: geom.Polygon,
+                 modifier: str, identifier: str) -> Primitive:
+    """Generate a primitive from a polygon."""
+    return Primitive(modifier, 'polygon', identifier, '0', polygon.to_real())
 
-    for ssec in sub_sections:
-        obj_dict[ssec[0].lower()] = []
-    for ssec in sub_sections:
-        obj_dict[ssec[0].lower()].append(ssec[1:])
-    return obj_dict
-
-
-def parse_optics(fpath):
-    """Read and parse an optics file."""
-    # enc = 'cp1250' #decoding needed to parse header
-    with open(fpath, errors='ignore') as rdr:
-        raw = rdr.read()
-    header_lines = [i for i in raw.splitlines() if i.startswith('{')]
-    if header_lines == []:
-        raise Exception('No header in optics file')
-    header = {}
-    for line in header_lines:
-        if line.strip().split("}")[-1] != "":
-            key = re.search("{(.*?)}", line).group(1).strip()
-            val = line.split("}")[-1].strip()
-            header[key] = val
-        elif line:
-            content = re.search("{(.*?)}", line).group(1).strip()
-            if content != "":
-                key = content.split(":")[0].strip()
-                val = content.split(":")[1].strip()
-                header[key] = val
-    name = header['Product Name'].replace(" ","_")
-    thickness = float(header['Thickness'])
-    gtype = header['Type']
-    coated_side = header["Coated Side"].lower()
-    data = [i.split() for i in raw.strip().splitlines() if not i.startswith('{')]
-    wavelength = [float(row[0]) for row in data]
-    transmittance = [float(row[1]) for row in data]
-    reflectance_front = [float(row[2]) for row in data]
-    reflectance_back = [float(row[3]) for row in data]
-    if header['Units, Wavelength Units'] == 'SI Microns': # um to nm
-        wavelength = [val * 1e3 for val in wavelength]
-    return PaneProperty(
-        name, thickness, gtype, coated_side, wavelength,
-        transmittance, reflectance_front, reflectance_back)
-
-
-def parse_igsdb_json(json_obj: dict):
-    name = json_obj['name'].replace(" ", "_")
-    gtype = json_obj['type']
-    coated_side = json_obj['coated_side'].lower()
-    thickness = json_obj['measured_data']['thickness']
-    spectral_data = json_obj['spectral_data']['spectral_data']
-
-    wavelength = []
-    transmittance = []
-    reflectance_front = []
-    reflectance_back = []
-
-    for row in spectral_data:
-        wavelength.append(row['wavelength'] * 1e3) # um to nm
-        transmittance.append(row['T'])
-        reflectance_front.append(row['Rf'])
-        reflectance_back.append(row['Rb'])
-    return PaneProperty(
-        name, thickness, gtype, coated_side, wavelength,
-        transmittance, reflectance_front, reflectance_back)
-
-
-def get_igsdb_json(igsdb_id, token, xml=False):
-    """Get igsdb data by igsdb_id"""
-    if token is None:
-        raise ValueError("Need IGSDB token")
-    url = "https://igsdb.lbl.gov/api/v1/products/{}"
-    if xml:
-        url += "/datafile"
-    header = {"Authorization": "Token " + token}
-    response = request(url.format(igsdb_id), header)
-    if response == '{"detail":"Not found."}':
-        raise ValueError("Unknown igsdb id: ", igsdb_id)
-    return response
-
-
-def get_tristi_paths():
-    """Get CIE tri-stimulus file paths.
-    In addition, also getmelanopic action spetra path
-    """
-    _file_path_ = os.path.dirname(__file__)
-    standards_path = os.path.join(_file_path_, "data", "standards")
-    cie_path = {}
-    # 2° observer
-    cie_path["x2"] = os.path.join(standards_path, "CIE 1931 1nm X.dsp")
-    cie_path["y2"] = os.path.join(standards_path, "CIE 1931 1nm Y.dsp")
-    cie_path["z2"] = os.path.join(standards_path, "CIE 1931 1nm Z.dsp")
-    # 10° observer
-    cie_path["x10"] = os.path.join(standards_path, "CIE 1964 1nm X.dsp")
-    cie_path["y10"] = os.path.join(standards_path, "CIE 1964 1nm Y.dsp")
-    cie_path["z10"] = os.path.join(standards_path, "CIE 1964 1nm Z.dsp")
-    # melanopic action spectra
-    cie_path["mlnp"] = os.path.join(standards_path, "CIE S 026 1nm.dsp")
-    return cie_path
-
-
-def load_cie_tristi(inp_wvl: list, observer: str) -> tuple:
-    """Load CIE tristimulus data according to input wavelength.
-    Also load melanopic action spectra data as well.
-    Args:
-        inp_wvl: input wavelength in nm
-        observer: 2° or 10° observer for the colar matching function.
-    Returns:
-        Tristimulus XYZ and melanopic action spectra
-    """
-    header_lines = 3
-    cie_path = get_tristi_paths()
-    with open(cie_path[f"x{observer}"]) as rdr:
-        lines = rdr.readlines()[header_lines:]
-        trix = {float(row.split()[0]): float(row.split()[1]) for row in lines}
-    with open(cie_path[f"y{observer}"]) as rdr:
-        lines = rdr.readlines()[header_lines:]
-        triy = {float(row.split()[0]): float(row.split()[1]) for row in lines}
-    with open(cie_path[f"z{observer}"]) as rdr:
-        lines = rdr.readlines()[header_lines:]
-        triz = {float(row.split()[0]): float(row.split()[1]) for row in lines}
-    with open(cie_path["mlnp"]) as rdr:
-        lines = rdr.readlines()[header_lines:]
-        mlnp = {float(row.split()[0]): float(row.split()[1]) for row in lines}
-
-    trix_i = [trix[wvl] for wvl in inp_wvl if wvl in trix]
-    triy_i = [triy[wvl] for wvl in inp_wvl if wvl in triy]
-    triz_i = [triz[wvl] for wvl in inp_wvl if wvl in triz]
-    mlnp_i = [mlnp[wvl] for wvl in inp_wvl if wvl in mlnp]
-    return trix_i, triy_i, triz_i, mlnp_i
-
-
-def get_conversion_matrix(prims, reverse=False):
-    # The whole calculation is based on the CIE (x,y) chromaticities below
-
-    cie_x_r = COLOR_PRIMARIES[prims]["cie_x_r"]
-    cie_y_r = COLOR_PRIMARIES[prims]["cie_y_r"]
-    cie_x_g = COLOR_PRIMARIES[prims]["cie_x_g"]
-    cie_y_g = COLOR_PRIMARIES[prims]["cie_y_g"]
-    cie_x_b = COLOR_PRIMARIES[prims]["cie_x_b"]
-    cie_y_b = COLOR_PRIMARIES[prims]["cie_y_b"]
-    cie_x_w = COLOR_PRIMARIES[prims]["cie_x_w"]
-    cie_y_w = COLOR_PRIMARIES[prims]["cie_y_w"]
-
-    cie_y_w_inv = 1 / cie_y_w
-
-    cie_d = (cie_x_r * (cie_y_g - cie_y_b) +
-            cie_x_g * (cie_y_b - cie_y_r) + cie_x_b*(cie_y_r - cie_y_g))
-    cie_c_rd = (cie_y_w_inv * (cie_x_w * (cie_y_g - cie_y_b) -
-        cie_y_w * (cie_x_g - cie_x_b) + cie_x_g * cie_y_b - cie_x_b * cie_y_g))
-    cie_c_gd = (cie_y_w_inv * (cie_x_w * (cie_y_b - cie_y_r) -
-        cie_y_w * (cie_x_b - cie_x_r) - cie_x_r * cie_y_b + cie_x_b * cie_y_r))
-    cie_c_bd = (cie_y_w_inv * (cie_x_w * (cie_y_r - cie_y_g) -
-        cie_y_w * (cie_x_r - cie_x_g) + cie_x_r * cie_y_g - cie_x_g * cie_y_r))
-
-    coeff_00 = (cie_y_g - cie_y_b - cie_x_b * cie_y_g + cie_y_b * cie_x_g) / cie_c_rd
-    coeff_01 = (cie_x_b - cie_x_g - cie_x_b * cie_y_g + cie_x_g * cie_y_b) / cie_c_rd
-    coeff_02 = (cie_x_g * cie_y_b - cie_x_b * cie_y_g) / cie_c_rd
-    coeff_10 = (cie_y_b - cie_y_r - cie_y_b * cie_x_r + cie_y_r * cie_x_b) / cie_c_gd
-    coeff_11 = (cie_x_r - cie_x_b - cie_x_r * cie_y_b + cie_x_b * cie_y_r) / cie_c_gd
-    coeff_12 = (cie_x_b * cie_y_r - cie_x_r * cie_y_b) / cie_c_gd
-    coeff_20 = (cie_y_r - cie_y_g - cie_y_r * cie_x_g + cie_y_g * cie_x_r) / cie_c_bd
-    coeff_21 = (cie_x_g - cie_x_r - cie_x_g * cie_y_r + cie_x_r * cie_y_g) / cie_c_bd
-    coeff_22 = (cie_x_r * cie_y_g - cie_x_g * cie_y_r) / cie_c_bd
-
-    if reverse:
-        coeff_00 = cie_x_r * cie_c_rd / cie_d
-        coeff_01 = cie_x_g * cie_c_gd / cie_d
-        coeff_02 = cie_x_b * cie_c_bd / cie_d
-        coeff_10 = cie_y_r * cie_c_rd / cie_d
-        coeff_11 = cie_y_g * cie_c_gd / cie_d
-        coeff_12 = cie_y_b * cie_c_bd / cie_d
-        coeff_20 = (1 - cie_x_r - cie_y_r) * cie_c_rd / cie_d
-        coeff_21 = (1 - cie_x_g - cie_y_g) * cie_c_gd / cie_d
-        coeff_22 = (1 - cie_x_b - cie_y_b) * cie_c_bd / cie_d
-
-
-    return (coeff_00, coeff_01, coeff_02, coeff_10,
-            coeff_11, coeff_12, coeff_20, coeff_21, coeff_22)
-
-
-def rgb2xyz(r, g, b, coeffs: tuple):
-    """Convert RGB to CIE XYZ.
-
-    Args:
-        r: red
-        g: green
-        b: blue
-        coeffs: coversion matrix.
-    Returns:
-        CIE X, Y, Z.
-
-    Raise:
-        ValueError with invalid coeffs.
-    """
-    if len(coeffs) != 9:
-        raise ValueError("%s coefficients found, expected 9", len(coeffs))
-    x = coeffs[0] * r + coeffs[1] * g + coeffs[2] * b
-    y = coeffs[3] * r + coeffs[4] * g + coeffs[5] * b
-    z = coeffs[6] * r + coeffs[7] * g + coeffs[8] * b
-    return x, y, z
-
-
-def xyz2rgb(x, y, z, coeffs: tuple):
-    """Convert CIE XYZ to RGB.
-
-    Args:
-        x: cie_x
-        y: cie_y
-        z: cie_z
-        coeffs: conversion matrix
-    Returns:
-        Red, Green, Blue
-
-    Raise:
-        ValueError for invalid coeffs.
-    """
-    if len(coeffs) != 9:
-        raise ValueError("%s coefficients found, expected 9", len(coeffs))
-    red = max(0, coeffs[0] * x + coeffs[1] * y + coeffs[2] * z)
-    green = max(0, coeffs[3] * x + coeffs[4] * y + coeffs[5] * z)
-    blue = max(0, coeffs[6] * x + coeffs[7] * y + coeffs[8] * z)
-    return red, green, blue
-
-
-def spec2xyz(trix: List[float], triy: List[float], triz: List[float],
-        mlnp: List[float], sval: List[float], emis=False) -> tuple:
-    """Convert spectral data to CIE XYZ.
-
-    Args:
-        trix: tristimulus x function
-        triy: tristimulus y function
-        triz: tristimulus z function
-        mlnp: melanopic activation function
-        sval: input spectral data, either emissive or refl/trans.
-        emis: flag whether the input data is emissive
-    Returns:
-        CIE X, Y, Z
-
-    Raise:
-        ValueError if input data are not of equal length.
-    """
-    if ((len(trix) != len(triy)) or (len(trix) != len(triz)) 
-            or (len(trix) != len(sval)) or (len(mlnp) != len(sval))):
-        raise ValueError("Input data not of equal length")
-
-    xs = [x * v for x, v in zip(trix, sval)] 
-    ys = [y * v for y, v in zip(triy, sval)]
-    zs = [z * v for z, v in zip(triz, sval)]
-    ms = [m * v for m, v in zip(mlnp, sval)]
-    cie_X = sum(xs) / len(xs)
-    cie_Y = sum(ys) / len(ys)
-    cie_Z = sum(zs) / len(zs)
-    if not emis:
-        avg_y = sum(triy) / len(triy)
-        cie_X /= avg_y
-        cie_Y /= avg_y
-        cie_Z /= avg_y
-    return cie_X, cie_Y, cie_Z
-
-
-def xyz2xy(cie_x: float, cie_y: float, cie_z: float) -> tuple:
-    """Convert CIE XYZ to xy chromaticity."""
-    _sum = cie_x + cie_y + cie_z
-    if _sum == 0:
-        return 0, 0
-    chrom_x = cie_x / _sum
-    chrom_y = cie_y / _sum
-    return chrom_x, chrom_y
+# def get_igsdb_json(igsdb_id, token, xml=False):
+#     """Get igsdb data by igsdb_id"""
+#     if token is None:
+#         raise ValueError("Need IGSDB token")
+#     url = "https://igsdb.lbl.gov/api/v1/products/{}"
+#     if xml:
+#         url += "/datafile"
+#     header = {"Authorization": "Token " + token}
+#     response = request(url.format(igsdb_id), header)
+#     if response == '{"detail":"Not found."}':
+#         raise ValueError("Unknown igsdb id: ", igsdb_id)
+#     return response
 
 
 def unpack_idf(path: str) -> dict:
     """Read and parse and idf files."""
     with open(path, 'r') as rdr:
-        return parse_idf(rdr.read())
+        return parsers.parse_idf(rdr.read())
 
 
 def nest_list(inp: list, col_cnt: int) -> List[list]:
@@ -518,42 +118,19 @@ def write_square_matrix(opath, sdata):
             wt.write('\n')
 
 
-def parse_bsdf_xml(path: str) -> dict:
-    """Parse BSDF file in XML format.
-    TODO: validate xml first before parsing
-    """
-    error_msg = f"Error parsing {path}: "
-    data_dict: dict = {"Def": "", "Solar": {}, "Visible": {}}
-    tree = ET.parse(path)
-    if (root := tree.getroot()) is None:
-        raise ValueError(error_msg + "Root not found")
-    tag = root.tag.rstrip('WindowElement')
-    if (optical := root.find(tag + 'Optical')) is None:
-        raise ValueError(error_msg + "Optical not found")
-    if (layer := optical.find(tag + 'Layer')) is None:
-        raise ValueError(error_msg + "Layer not found")
-    if (data_def := layer.find(tag + 'DataDefinition')) is None:
-        raise ValueError(error_msg + "data definition not found")
-    if (data_struct_txt := data_def.findtext(tag + 'IncidentDataStructure')) is None:
-        raise ValueError(error_msg + "data structure not found")
-    data_dict["Def"] = data_struct_txt.strip()
-    data_blocks = layer.findall(tag + 'WavelengthData')
-    for block in data_blocks:
-        if (wavelength_txt := block.findtext(tag + 'Wavelength')) is None:
-            raise ValueError(error_msg + "wavelength not found")
-        if wavelength_txt not in ("Solar", "Visible"):
-            raise ValueError("Unknown %s" % wavelength_txt)
-        if (dblock := block.find(tag + 'WavelengthDataBlock')) is None:
-            raise ValueError(error_msg + "wavelength data block not found")
-        if (direction := dblock.findtext(tag + 'WavelengthDataDirection')) is None:
-            raise ValueError(error_msg + "wavelength direction not found")
-        if (sdata_txt := dblock.findtext(tag + 'ScatteringData')) is None:
-            raise ValueError(error_msg + "scattering data not found")
-        sdata_txt = sdata_txt.strip()
-        if sdata_txt.count('\n') == 21168:
-            sdata_txt = sdata_txt.replace('\n\t', ' ')
-        data_dict[wavelength_txt][direction] = sdata_txt
-    return data_dict
+def sdata2bsdf(sdata: ScatteringData) -> BSDFData:
+    basis = BASIS_DICT[str(sdata.ncolumn)]
+    lambdas = angle_basis_coeff(basis)
+    bsdf = [list(map(lambda x, y: x/y, i, lambdas)) for i in sdata.sdata]
+    return BSDFData(bsdf)
+
+
+def bsdf2sdata(bsdf: BSDFData) -> ScatteringData:
+    basis = BASIS_DICT[str(bsdf.ncolumn)]
+    lambdas = angle_basis_coeff(basis)
+    sdata = [list(map(lambda x, y: x/y, i, lambdas))
+             for i in bsdf.bsdf]
+    return ScatteringData(sdata)
 
 
 def dhi2dni(GHI: float, DHI: float, alti: float) -> float:
@@ -637,16 +214,6 @@ def square2disk(in_square_a: float, in_square_b: float) -> tuple:
     return out_disk_x, out_disk_y, out_disk_r, out_disk_phi
 
 
-def mkdir_p(path):
-    """Make a directory, silent if exist."""
-    try:
-        os.makedirs(path)
-    except OSError as e:
-        logger.debug(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
-    except TypeError as e:
-        logger.debug(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
-
-
 def sprun(cmd):
     """Call subprocess run"""
     logger.debug(cmd)
@@ -688,107 +255,436 @@ def tokenize(inp: str) -> Generator[str, None, None]:
             yield match.group(0)
 
 
-def parse_branch(token: Generator[str, None, None]) -> Any:
-    """Prase tensor tree branches recursively by opening and closing curly braces.
-    Args:
-        token: token generator object.
-    Return:
-        children: parsed branches as nexted list
-    """
-    children = []
-    while True:
-        value = next(token)
-        if value == "{":
-            children.append(parse_branch(token))
-        elif value == "}":
-            return children
-        else:
-            children.append(float(value))
 
 
-def parse_ttree(data_str: str) -> list:
-    """Parse a tensor tree.
+def unpack_primitives(file: str | Path | TextIOWrapper) -> List[Primitive]:
+    """Open a file a to parse primitive."""
+    if isinstance(file, TextIOWrapper):
+        lines = file.readlines()
+    else:
+        with open(file, 'r') as rdr:
+            lines = rdr.readlines()
+    return parsers.parse_primitive(lines)
+
+
+def primitive_normal(primitive_paths: List[str]) -> Set[geom.Vector]:
+    """Return a set of normal vectors given a list of primitive paths."""
+    _primitives: List[Primitive] = []
+    _normals: List[geom.Vector]
+    for path in primitive_paths:
+        _primitives.extend(unpack_primitives(path))
+    _normals = [parsers.parse_polygon(prim.real_arg).normal() for prim in _primitives]
+    return set(_normals)
+
+
+def samp_dir(primlist: list) -> geom.Vector:
+    """Calculate the primitives' average sampling
+    direction weighted by area."""
+    primlist = [p for p in primlist
+                if p.ptype == 'polygon' or p.ptype == 'ring']
+    normal_area = geom.Vector()
+    for prim in primlist:
+        polygon = parsers.parse_polygon(prim.real_arg)
+        normal_area += polygon.normal().scale(polygon.area())
+    sdir = normal_area.scale(1.0 / len(primlist))
+    sdir = sdir.normalize()
+    return sdir
+
+
+def up_vector(primitives: list) -> geom.Vector:
+    """Define the up vector given primitives.
+
     Args:
-        data_str: input data string
+        primitives: list of dictionary (primitives)
+
     Returns:
-        A nested list that is the tree
+        returns a str as x,y,z
+
     """
-    tokenized = tokenize(data_str)
-    if next(tokenized) != "{":
-        raise ValueError("Tensor tree data not starting with {")
-    return parse_branch(tokenized)
+    xaxis = geom.Vector(1, 0, 0)
+    yaxis = geom.Vector(0, 1, 0)
+    norm_dir = samp_dir(primitives)
+    if norm_dir not in (xaxis, xaxis.scale(-1)):
+        upvect = xaxis.cross(norm_dir)
+    else:
+        upvect = yaxis.cross(norm_dir)
+    return upvect
 
 
-def get_nested_list_levels(nested_list: list) -> int:
-    """Calculate the number of levels given a nested list."""
-    return isinstance(nested_list, list) and max(map(get_nested_list_levels, nested_list)) + 1
+def neutral_plastic_prim(mod: str, ident: str, refl: float,
+                         spec: float, rough: float) -> Primitive:
+    """Generate a neutral color plastic material.
+    Args:
+        mod(str): modifier to the primitive
+        ident(str): identifier to the primitive
+        refl (float): measured reflectance (0.0 - 1.0)
+        specu (float): material specularity (0.0 - 1.0)
+        rough (float): material roughness (0.0 - 1.0)
+
+    Returns:
+        A material primtive
+    """
+    err_msg = 'reflectance, speculariy, and roughness have to be 0-1'
+    assert all(0 <= i <= 1 for i in [spec, refl, rough]), err_msg
+    real_args = '5 {0} {0} {0} {1} {2} \n'.format(refl, spec, rough)
+    return Primitive(mod, 'plastic', ident, '0', real_args)
 
 
-class TensorTree:
-    """The tensor tree object.
-    Anisotropic tensor tree has should have 16 lists
-    Attributes:
-        parsed: parsed tensor tree object)
-        depth: number of tree levels
+def neutral_trans_prim(mod: str, ident: str, trans: float, refl: float,
+                       spec: float, rough: float) -> Primitive:
+    """Generate a neutral color plastic material.
+    Args:
+        mod(str): modifier to the primitive
+        ident(str): identifier to the primitive
+        refl (float): measured reflectance (0.0 - 1.0)
+        specu (float): material specularity (0.0 - 1.0)
+        rough (float): material roughness (0.0 - 1.0)
+
+    Returns:
+        A material primtive
+    """
+    color = trans + refl
+    t_diff = trans / color
+    tspec = 0
+    err_msg = 'reflectance, speculariy, and roughness have to be 0-1'
+    assert all(0 <= i <= 1 for i in [spec, refl, rough]), err_msg
+    real_args = "7 {0} {0} {0} {1} {2} {3} {4}".format(color, spec, rough, t_diff, tspec)
+    return Primitive(mod, 'trans', ident, '0', real_args)
+
+
+def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough):
+    """Generate a colored plastic material.
+    Args:
+        mod(str): modifier to the primitive
+        ident(str): identifier to the primitive
+        refl (float): measured reflectance (0.0 - 1.0)
+        red; green; blue (int): rgb values (0 - 255)
+        specu (float): material specularity (0.0 - 1.0)
+        rough (float): material roughness (0.0 - 1.0)
+
+    Returns:
+        A material primtive
+    """
+    err_msg = 'reflectance, speculariy, and roughness have to be 0-1'
+    assert all(0 <= i <= 1 for i in [specu, refl, rough]), err_msg
+    red_eff = 0.3
+    green_eff = 0.59
+    blue_eff = 0.11
+    weighted = red * red_eff + green * green_eff + blue * blue_eff
+    matr = round(red / weighted * refl, 3)
+    matg = round(green / weighted * refl, 3)
+    matb = round(blue / weighted * refl, 3)
+    real_args = '5 %s %s %s %s %s\n' % (matr, matg, matb, specu, rough)
+    return Primitive(mod, 'plastic', ident, '0', real_args)
+
+
+def glass_prim(mod, ident, tr, tg, tb, refrac=1.52):
+    """Generate a glass material.
+
+    Args:
+        mod (str): modifier to the primitive
+        ident (str): identifier to the primtive
+        tr, tg, tb (float): transmmisivity in each channel (0.0 - 1.0)
+        refrac (float): refraction index (default=1.52)
+    Returns:
+        material primtive (dict)
+
+    """
+    tmsv_red = tmit2tmis(tr)
+    tmsv_green = tmit2tmis(tg)
+    tmsv_blue = tmit2tmis(tb)
+    real_args = '4 %s %s %s %s' % (tmsv_red, tmsv_green, tmsv_blue, refrac)
+    return Primitive(mod, 'glass', ident, '0', real_args)
+
+
+def bsdf_prim(mod, ident, xmlpath, upvec,
+              pe=False, thickness=0.0, xform=None, real_args='0'):
+    """Create a BSDF primtive."""
+    str_args = '"{}" {} '.format(xmlpath, str(upvec))
+    str_args_count = 5
+    if pe:
+        _type = 'aBSDF'
+    else:
+        str_args_count += 1
+        str_args = '%s ' % thickness + str_args
+        _type = 'BSDF'
+    if xform is not None:
+        str_args_count += len(xform.split())
+        str_args += xform
+    else:
+        str_args += '.'
+    str_args = '%s ' % str_args_count + str_args
+    return Primitive(mod, _type, ident, str_args, real_args)
+
+
+def lambda_calc(theta_lr, theta_up, nphi):
+    """."""
+    return ((math.cos(math.pi / 180 * theta_lr)**2 -
+             math.cos(math.pi / 180 * theta_up)**2) * math.pi / nphi)
+
+
+def angle_basis_coeff(basis: str) -> List[float]:
+    '''Calculate klems basis coefficient'''
+    ablist = ABASE_LIST[basis]
+    lambdas = []
+    for i in range(len(ablist) - 1):
+        tu = ablist[i + 1][0]
+        tl = ablist[i][0]
+        np = ablist[i][1]
+        lambdas.extend([lambda_calc(tl, tu, np) for _ in range(np)])
+    return lambdas
+
+
+def opt2str(opt: dict) -> str:
+    out_str = ""
+    for k, v in opt.items():
+        if isinstance(v, list):
+            val = ' '.join(map(str, v))
+        else:
+            val = v
+        if k == 'vt' or k == 'f':
+            out_str += "-{}{} ".format(k, val)
+        elif k == 'hd':
+            out_str += "-h "
+        else:
+            out_str += '-{} {} '.format(k, val)
+    return out_str
+
+
+def opt2list(opt: dict) -> list:
+    out = []
+    for k, v in opt.items():
+        if isinstance(v, list):
+            val = list(map(str, v))
+        else:
+            val = str(v)
+        if k == 'vt' or k == 'f':
+            out.append(f"-{k}{val}")
+        elif k == 'hd':
+            out.append("-h")
+        else:
+            if isinstance(val, list):
+                out.extend(['-'+k, *val])
+            else:
+                out.extend(['-'+k, val])
+    return out
+
+
+class Reinsrc:
+    """Calculate Reinhart/Treganza sampling directions.
+
+    Direct translation of Radiance reinsrc.cal file.
     """
 
-    def __init__(self, parsed):
-        self.parsed = parsed
-        self.depth = get_nested_list_levels(parsed)
+    TNAZ = [30, 30, 24, 24, 18, 12, 6]
 
-    def lookup(self, xp, yp) -> list:
-        """Traverses a parsed tensor tree (a nexted list) given a input position."""
-        branch_idx = self.get_branch_index(xp, yp)
-        quads = [self.parsed[i] for i in branch_idx]
-        return [self.traverse(quad, xp, yp) for quad in quads]
+    def __init__(self, mf: int):
+        """Initialize with multiplication factor."""
+        self.mf = mf
+        self.rowMax = 7 * mf + 1
+        self.rmax = self.raccum(self.rowMax)
+        self.alpha = 90 / (mf * 7 + 0.5)
 
-    def get_leaf_index(self, xp, yp):
-        if xp < 0:
-            if yp < 0:
-                return range(0, 4)
-            else:
-                return range(4, 8)
+    def dir_calc(self, rbin: int, x1=0.5, x2=0.5) -> tuple:
+        """Calculate the ray direction.
+
+        Parameter:
+            rbin: bin count
+            x1, x2: sampling position (0.5, 0.5) is at the center
+        Return:
+            Sampling direction (tuple)
+        """
+        rrow = self.rowMax - \
+            1 if rbin > (self.rmax - 0.5) else self.rfindrow(0, rbin)
+        rcol = rbin - self.raccum(rrow) - 1
+        razi_width = 2 * math.pi / self.rnaz(rrow)
+        rah = self.alpha * math.pi / 180
+        razi = (rcol + x2 - 0.5) * \
+            razi_width if rbin > 0.5 else 2 * math.pi * x2
+        ralt = (rrow + x1) * rah if rbin > 0.5 else math.asin(-x1)
+        cos_alt = math.cos(ralt)
+        if rbin < .5:
+            romega = 2 * math.pi
         else:
-            if yp < 0:
-                return range(8, 12)
+            if self.rmax - .5 > rbin:
+                romega = razi_width * (math.sin(rah * (rrow + 1)) - math.sin(rah * rrow))
             else:
-                return range(12, 16)
+                romega = 2 * math.pi * (1 - math.cos(rah / 2))
+        dx = math.sin(razi) * cos_alt
+        dy = math.cos(razi) * cos_alt
+        dz = math.sin(ralt)
+        return (dx, dy, dz, romega)
 
-    def get_branch_index(self, xp, yp):
-        """Gets a set of index."""
-        if xp < 0:
-            if yp < 0:
-                return range(0, 16, 4)
-            else:
-                return range(2, 16, 4)
+    def rnaz(self, r):
+        """."""
+        if r > (self.mf * 7 - .5):
+            return 1
         else:
-            if yp < 0:
-                return range(1, 16, 4)
-            else:
-                return range(3, 16, 4)
+            return self.mf * self.TNAZ[int(math.floor((r + 0.5) / self.mf))]
 
-    def traverse(self, quad, xp, yp, n=1) -> list:
-        """Traverse a quadrant."""
-        if len(quad) == 1:  # single leaf
-            res = quad
+    def raccum(self, r):
+        """."""
+        if r > 0.5:
+            return self.rnaz(r - 1) + self.raccum(r - 1)
         else:
-            res = []
-            # get x, y signage in relation to branches
-            _x = xp + 1 / (2**n) if xp < 0 else xp - 1 / (2**n)
-            _y = yp + 1 / (2**n) if yp < 0 else yp - 1 / (2**n)
-            n += 1
-            # which four branches to get? get index for them
-            if n < self.depth:
-                ochild = self.get_branch_index(_x, _y)
+            return 0
+
+    def rfindrow(self, r, rem):
+        """."""
+        if (rem - self.rnaz(r)) > 0.5:
+            return self.rfindrow(r + 1, rem - self.rnaz(r))
+        else:
+            return r
+
+
+class pt_inclusion(object):
+    """Test whether a point is inside a polygon
+    using winding number algorithm."""
+
+    def __init__(self, polygon_pts):
+        """Initialize the polygon."""
+        self.pt_cnt = len(polygon_pts)
+        polygon_pts.append(polygon_pts[0])
+        self.polygon_pts = polygon_pts
+
+    def isLeft(self, pt0, pt1, pt2):
+        """Test whether a point is left to a line."""
+        return (pt1.x - pt0.x) * (pt2.y - pt0.y) \
+            - (pt2.x - pt0.x) * (pt1.y - pt0.y)
+
+    def test_inside(self, pt):
+        """Test if a point is inside the polygon."""
+        wn = 0
+        for i in range(self.pt_cnt):
+            if self.polygon_pts[i].y <= pt.y:
+                if self.polygon_pts[i + 1].y > pt.y:
+                    if self.isLeft(self.polygon_pts[i],
+                                   self.polygon_pts[i + 1], pt) > 0:
+                        wn += 1
             else:
-                ochild = self.get_leaf_index(_x, _y)
-            sub_quad = [quad[i] for i in ochild]
-            if all(isinstance(i, float) for i in sub_quad):
-                res = sub_quad  # single leaf for each branch
-            else:  # branches within this quadrant
-                for sq in sub_quad:
-                    if len(sq) > 4:  # there is another branch
-                        res.append(self.traverse(sq, _x, _y, n=n))
-                    else:  # just a leaf
-                        res.append(sq)
-        return res
+                if self.polygon_pts[i + 1].y <= pt.y:
+                    if self.isLeft(self.polygon_pts[i],
+                                   self.polygon_pts[i + 1], pt) < 0:
+                        wn -= 1
+        return wn
+
+
+def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> list:
+    """Generate a grid of points for orthogonal planar surfaces.
+
+    Args:
+        polygon: a polygon object
+        height: points' distance from the surface in its normal direction
+        spacing: distance between the grid points
+    Returns:
+        List of the points as list
+    """
+    vertices = polygon.vertices
+    plane_height = sum([i.z for i in vertices]) / len(vertices)
+    imin, imax, jmin, jmax, _, _ = polygon.extreme()
+    xlen_spc = ((imax - imin) / spacing)
+    ylen_spc = ((jmax - jmin) / spacing)
+    xstart = ((xlen_spc - int(xlen_spc) + 1)) * spacing / 2
+    ystart = ((ylen_spc - int(ylen_spc) + 1)) * spacing / 2
+    x0 = [x + xstart for x in frange_inc(imin, imax, spacing)]
+    y0 = [x + ystart for x in frange_inc(jmin, jmax, spacing)]
+    grid_dir = polygon.normal().reverse()
+    grid_hgt = geom.Vector(0, 0, plane_height) + grid_dir.scale(height)
+    raw_pts = [geom.Vector(round(i, 3), round(j, 3), round(grid_hgt.z, 3))
+               for i in x0 for j in y0]
+    scale_factor = 1 - 0.3/(imax - imin)  # scale boundary down .3 meter
+    _polygon = polygon.scale(geom.Vector(
+        scale_factor, scale_factor, 0), polygon.centroid())
+    _vertices = _polygon.vertices
+    if polygon.normal() == geom.Vector(0, 0, 1):
+        pt_incls = pt_inclusion(_vertices)
+    else:
+        pt_incls = pt_inclusion(_vertices[::-1])
+    _grid = [p for p in raw_pts if pt_incls.test_inside(p) > 0]
+    grid = [p.to_list() + grid_dir.to_list() for p in _grid]
+    return grid
+
+
+def material_lib():
+    mlib = []
+    # carpet .2
+    mlib.append(neutral_plastic_prim('void', 'carpet_20', .2, 0, 0))
+    # Paint .5
+    mlib.append(neutral_plastic_prim('void', 'white_paint_50', .5, 0, 0))
+    # Paint .7
+    mlib.append(neutral_plastic_prim('void', 'white_paint_70', .7, 0, 0))
+    # Glass .6
+    tmis = tmit2tmis(.6)
+    mlib.append(glass_prim('void', 'glass_60', tmis, tmis, tmis))
+    return mlib
+
+
+def gen_blinds(depth, width, height, spacing, angle, curve, movedown):
+    """Generate genblinds command for genBSDF."""
+    nslats = int(round(height / spacing, 0))
+    slat_cmd = "!genblinds blindmaterial blinds "
+    slat_cmd += "{} {} {} {} {} {}".format(
+        depth, width, height, nslats, angle, curve)
+    slat_cmd += "| xform -rz -90 -rx -90 -t "
+    slat_cmd += f"{-width/2} {-height/2} {-movedown}\n"
+    return slat_cmd
+
+
+def get_glazing_primitive(panes: List[PaneRGB]) -> Primitive:
+    """Generate a BRTDfunc to represent a glazing system."""
+    if len(panes) > 2:
+        raise ValueError("Only double pane supported")
+    name = "+".join([pane.measured_data.name for pane in panes])
+    if len(panes) == 1:
+        str_arg = "10 sr_clear_r sr_clear_g sr_clear_b "
+        str_arg += "st_clear_r st_clear_g st_clear_b 0 0 0 glaze1.cal"
+        coated_real = "1" if panes[0].measured_data.coated_side == 'front' else "-1"
+        real_arg = f"19 0 0 0 0 0 0 0 0 0 {coated_real} "
+        real_arg += " ".join(map(str, panes[0].glass_rgb)) + " "
+        real_arg += " ".join(map(str, panes[0].coated_rgb)) + " "
+        real_arg += " ".join(map(str, panes[0].trans_rgb))
+    else:
+        s12t_rgb = panes[0].trans_rgb
+        s34t_rgb = panes[1].trans_rgb
+        if panes[0].measured_data.coated_side == 'back':
+            s2r_rgb = panes[0].coated_rgb
+            s1r_rgb = panes[0].glass_rgb
+        else:  # front or neither side coated
+            s2r_rgb = panes[0].glass_rgb
+            s1r_rgb = panes[0].coated_rgb
+        if panes[1].measured_data.coated_side == 'back':
+            s4r_rgb = panes[1].coated_rgb
+            s3r_rgb = panes[1].glass_rgb
+        else:  # front or neither side coated
+            s4r_rgb = panes[1].glass_rgb
+            s3r_rgb = panes[1].coated_rgb
+        str_arg = "10\nif(Rdot,"
+        str_arg += f"cr(fr({s4r_rgb[0]}),ft({s34t_rgb[0]}),fr({s2r_rgb[0]})),"
+        str_arg += f"cr(fr({s1r_rgb[0]}),ft({s12t_rgb[0]}),fr({s3r_rgb[0]})))\n"
+        str_arg += "if(Rdot,"
+        str_arg += f"cr(fr({s4r_rgb[1]}),ft({s34t_rgb[1]}),fr({s2r_rgb[1]})),"
+        str_arg += f"cr(fr({s1r_rgb[1]}),ft({s12t_rgb[1]}),fr({s3r_rgb[1]})))\n"
+        str_arg += "if(Rdot,"
+        str_arg += f"cr(fr({s4r_rgb[2]}),ft({s34t_rgb[2]}),fr({s2r_rgb[2]})),"
+        str_arg += f"cr(fr({s1r_rgb[2]}),ft({s12t_rgb[2]}),fr({s3r_rgb[2]})))\n"
+        str_arg += f"ft({s34t_rgb[0]})*ft({s12t_rgb[0]})\n"
+        str_arg += f"ft({s34t_rgb[1]})*ft({s12t_rgb[1]})\n"
+        str_arg += f"ft({s34t_rgb[2]})*ft({s12t_rgb[2]})\n"
+        str_arg += "0 0 0 glaze2.cal"
+        real_arg = "9 0 0 0 0 0 0 0 0 0"
+    return Primitive("void", "BRTDfunc", name, str_arg, real_arg)
+
+
+def flush_corner_rays_cmd(ray_cnt: int, xres: int) -> list:
+    """Flush the corner rays from a fisheye view
+
+    Args:
+        ray_cnt: ray count;
+        xres: resolution of the square image;
+
+    Returns:
+        Command to generate cropped rays
+
+    """
+    cmd = ["rcalc", "-if6", "-of", '-e', f"DIM:{xres};CNT:{ray_cnt}", '-e', "pn=(recno-1)/CNT+.5", '-e', "frac(x):x-floor(x)", '-e', "xpos=frac(pn/DIM);ypos=pn/(DIM*DIM)",'-e', "incir=if(.25-(xpos-.5)*(xpos-.5)-(ypos-.5)*(ypos-.5),1,0)", '-e', "$1=$1;$2=$2;$3=$3;$4=$4*incir;$5=$5*incir;$6=$6*incir"]
+    return cmd

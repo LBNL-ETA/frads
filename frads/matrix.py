@@ -10,209 +10,153 @@ a surface, sky, or suns.
 from __future__ import annotations
 import logging
 import os
+from pathlib import Path
 import subprocess as sp
 import tempfile as tf
 from typing import Optional
-from frads import makesky, radgeom, radutil, util
+from typing import Sequence
+from typing import Union
+
+from frads import sky
+from frads import geom
+from frads import utils
+from frads import parsers
+from frads.types import Primitive
+from frads.types import Receiver
+from frads.types import Sender
 
 
-logger = logging.getLogger('frads.radmtx')
+logger = logging.getLogger('frads.matrix')
 
 
-class Sender:
-    """Sender object for matrix generation with the following attributes:
+def surface_as_sender(prim_list: list, basis: str, offset=None, left=None):
+    """
+    Construct a sender from a surface.
 
-    Attributes:
-        form(str): types of sender, {surface(s)|view(v)|points(p)}
-        sender(str): the sender object
-        xres(int): sender x dimension
-        yres(int): sender y dimension
+    Args:
+        prim_list(list): a list of primitives
+        basis(str): sender sampling basis
+        offset(float): move the sender surface in its normal direction
+        left(bool): Use left-hand rule instead for matrix generation
+
+    Returns:
+        A sender object (Sender)
+
+    """
+    prim_str = prepare_surface(prims=prim_list, basis=basis, offset=offset, left=left, source=None, out=None)
+    return Sender('s', prim_str.encode(), None, None)
+
+
+def view_as_sender(vu_dict: dict, ray_cnt: int, xres: int, yres: int) -> Sender:
+    """
+    Construct a sender from a view.
+
+    Args:
+        vu_dict: a dictionary containing view parameters;
+        ray_cnt: ray count;
+        xres, yres: image resolution
+        c2c: Set to True to trim the fisheye corner rays.
+
+    Returns:
+        A sender object
+
+    """
+    if (xres is None) or (yres is None):
+        raise ValueError("Need to specify resolution")
+    res_cmd = ["vwrays", *(utils.opt2list(vu_dict)), "-x", str(xres), "-y", str(yres), "-d"]
+    res_proc = sp.run(res_cmd, check=True, stdout=sp.PIPE, encoding='ascii')
+    res_eval = res_proc.stdout.split()
+    new_xres, new_yres = int(res_eval[1]), int(res_eval[3])
+    if (new_xres != xres) and (new_yres != yres):
+        logger.info("Changed resolution to %s %s", new_xres, new_yres)
+    vwrays_cmd = ["vwrays", "-ff", "-x", str(new_xres), "-y", str(new_yres)]
+    if ray_cnt > 1:
+        vu_dict['c'] = ray_cnt
+        vu_dict['pj'] = 0.7  # placeholder
+    logger.debug("Ray count is %s", ray_cnt)
+    vwrays_cmd += utils.opt2list(vu_dict)
+    vwrays_proc = sp.run(vwrays_cmd, check=True, stdout=sp.PIPE)
+    if vu_dict['vt'] == 'a':
+        flush_cmd = utils.flush_corner_rays_cmd(ray_cnt, xres)
+        flush_proc = sp.run(flush_cmd, input=vwrays_proc.stdout, stdout=sp.PIPE)
+        vrays = flush_proc.stdout
+    else:
+        vrays = vwrays_proc.stdout
+    return Sender('v', vrays, xres, yres)
+
+
+def points_as_sender(pts_list: list, ray_cnt: Optional[int]=None) -> Sender:
+    """Construct a sender from a list of points.
+
+    Args:
+        pts_list(list): a list of list of float
+        ray_cnt(int): sender ray count
+
+    Returns:
+        A sender object
+    """
+    ray_cnt = 1 if ray_cnt is None else ray_cnt
+    if pts_list is None:
+        raise ValueError("pts_list is None")
+    if not all(isinstance(item, list) for item in pts_list):
+        raise ValueError("All grid points has to be lists.")
+    pts_list = [i for i in pts_list for _ in range(ray_cnt)]
+    grid_str = os.linesep.join(
+        [' '.join(map(str, li)) for li in pts_list]) + os.linesep
+    return Sender('p', grid_str.encode(), None, len(pts_list))
+
+
+def sun_as_receiver(basis, smx_path, window_normals, full_mod=False) -> Receiver:
+    """Instantiate a sun receiver object.
+    Args:
+        basis: receiver sampling basis {kf | r1 | sc25...}
+        smx_path: sky/sun matrix file path
+        window_paths: window file paths
+    Returns:
+        A sun receiver object
     """
 
-    def __init__(self, *, form: str, sender: bytes,
-                 xres: Optional[int], yres: Optional[int]):
-        """Instantiate the instance.
-
-        Args:
-            form(str): Sender as (s, v, p) for surface, view, and points;
-            path(str): sender file path;
-            sender(str):  content of the sender file;
-            xres(int): x resolution of the image;
-            yres(int): y resoluation or line count if form is pts;
-        """
-        self.form = form
-        self.sender = sender
-        self.xres = xres
-        self.yres = yres
-        logger.debug("Sender: %s", sender)
-
-    @classmethod
-    def as_surface(cls, *, prim_list: list, basis: str,
-                   offset=None, left=None):
-        """
-        Construct a sender from a surface.
-
-        Args:
-            prim_list(list): a list of primitives
-            basis(str): sender sampling basis
-            offset(float): move the sender surface in its normal direction
-            left(bool): Use left-hand rule instead for matrix generation
-
-        Returns:
-            A sender object (Sender)
-
-        """
-        prim_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
-                                   left=left, source=None, out=None)
-        return cls(form='s', sender=prim_str.encode(), xres=None, yres=None)
-
-    @classmethod
-    def as_view(cls, *, vu_dict: dict, ray_cnt: int, xres: int, yres: int) -> Sender:
-        """
-        Construct a sender from a view.
-
-        Args:
-            vu_dict: a dictionary containing view parameters;
-            ray_cnt: ray count;
-            xres, yres: image resolution
-            c2c: Set to True to trim the fisheye corner rays.
-
-        Returns:
-            A sender object
-
-        """
-        if None in (xres, yres):
-            raise ValueError("Need to specify resolution")
-        vcmd = f"vwrays {radutil.opt2str(vu_dict)} -x {xres} -y {yres} -d"
-        res_eval = util.spcheckout(vcmd.split()).decode().split()
-        xres, yres = int(res_eval[1]), int(res_eval[3])
-        logger.info("Changed resolution to %s %s", xres, yres)
-        cmd = f"vwrays -ff -x {xres} -y {yres} "
-        if ray_cnt > 1:
-            vu_dict['c'] = ray_cnt
-            vu_dict['pj'] = 0.7  # placeholder
-        logger.debug("Ray count is %s", ray_cnt)
-        cmd += radutil.opt2str(vu_dict)
-        if vu_dict['vt'] == 'a':
-            cmd += "|" + Sender.crop2circle(ray_cnt, xres)
-        vrays = sp.run(cmd, shell=True, check=True, stdout=sp.PIPE).stdout
-        return cls(form='v', sender=vrays, xres=xres, yres=yres)
-
-    @classmethod
-    def as_pts(cls, *, pts_list: list, ray_cnt=1) -> Sender:
-        """Construct a sender from a list of points.
-
-        Args:
-            pts_list(list): a list of list of float
-            ray_cnt(int): sender ray count
-
-        Returns:
-            A sender object
-        """
-        if pts_list is None:
-            raise ValueError("pts_list is None")
-        if not all(isinstance(item, list) for item in pts_list):
-            raise ValueError("All grid points has to be lists.")
-        pts_list = [i for i in pts_list for _ in range(ray_cnt)]
-        grid_str = os.linesep.join(
-            [' '.join(map(str, li)) for li in pts_list]) + os.linesep
-        return cls(form='p', sender=grid_str.encode(), xres=None, yres=len(pts_list))
-
-    @staticmethod
-    def crop2circle(ray_cnt: int, xres: int) -> str:
-        """Flush the corner rays from a fisheye view
-
-        Args:
-            ray_cnt: ray count;
-            xres: resolution of the square image;
-
-        Returns:
-            Command to generate cropped rays
-
-        """
-        cmd = "rcalc -if6 -of "
-        cmd += f'-e "DIM:{xres};CNT:{ray_cnt}" '
-        cmd += '-e "pn=(recno-1)/CNT+.5" '
-        cmd += '-e "frac(x):x-floor(x)" '
-        cmd += '-e "xpos=frac(pn/DIM);ypos=pn/(DIM*DIM)" '
-        cmd += '-e "incir=if(.25-(xpos-.5)*(xpos-.5)-(ypos-.5)*(ypos-.5),1,0)" '
-        cmd += ' -e "$1=$1;$2=$2;$3=$3;$4=$4*incir;$5=$5*incir;$6=$6*incir"'
-        if os.name == "posix":
-            cmd = cmd.replace('"', "'")
-        return cmd
+    gensun = sky.Gensun(int(basis[-1]))
+    if (smx_path is None) and (window_normals is None):
+        str_repr = gensun.gen_full()
+        return Receiver(str_repr, basis, modifier=gensun.mod_str)
+    str_repr, mod_str = gensun.gen_cull(smx_path=smx_path, window_normals=window_normals)
+    if full_mod:
+        return Receiver(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
+    return Receiver(receiver=str_repr, basis=basis, modifier=mod_str)
 
 
-class Receiver:
-    """Receiver object for matrix generation."""
+def sky_as_receiver(basis) -> Receiver:
+    """Instantiate a sky receiver object.
+    Args:
+        basis: receiver sampling basis {kf | r1 | sc25...}
+    Returns:
+        A sky receiver object
+    """
 
-    def __init__(self, receiver: str, basis: str, modifier=None) -> None:
-        """Instantiate the receiver object.
+    if not basis.startswith('r'):
+        raise ValueError(f'Sky basis need to be Treganza/Reinhart, found {basis}')
+    sky_str = sky.basis_glow(basis)
+    logger.debug(sky_str)
+    return Receiver(sky_str, basis)
 
-        Args:
-            receiver(str): receiver string which can be appended to one another
-            basis(str): receiver basis, usually kf, r4, r6;
-            modifier(str): modifiers to the receiver objects;
-        """
-        self.receiver = receiver
-        self.basis = basis
-        self.modifier = modifier
-        logger.debug("Receivers: %s", receiver)
 
-    def __add__(self, other: Receiver) -> Receiver:
-        self.receiver += '\n' + other.receiver
-        return self
-
-    @classmethod
-    def as_sun(cls, *, basis, smx_path, window_normals, full_mod=False) -> Receiver:
-        """Instantiate a sun receiver object.
-        Args:
-            basis: receiver sampling basis {kf | r1 | sc25...}
-            smx_path: sky/sun matrix file path
-            window_paths: window file paths
-        Returns:
-            A sun receiver object
-        """
-
-        gensun = makesky.Gensun(int(basis[-1]))
-        if (smx_path is None) and (window_normals is None):
-            str_repr = gensun.gen_full()
-            return cls(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
-        str_repr, mod_str = gensun.gen_cull(smx_path=smx_path, window_normals=window_normals)
-        if full_mod:
-            return cls(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
-        return cls(receiver=str_repr, basis=basis, modifier=mod_str)
-
-    @classmethod
-    def as_sky(cls, basis) -> Receiver:
-        """Instantiate a sky receiver object.
-        Args:
-            basis: receiver sampling basis {kf | r1 | sc25...}
-        Returns:
-            A sky receiver object
-        """
-
-        assert basis.startswith('r'), 'Sky basis need to be Treganza/Reinhart'
-        sky_str = makesky.basis_glow(basis)
-        logger.debug(sky_str)
-        return cls(receiver=sky_str, basis=basis)
-
-    @classmethod
-    def as_surface(cls, prim_list: list, basis: str, out: Optional[str],
-                   offset=None, left=False, source='glow') -> Receiver:
-        """Instantiate a surface receiver object.
-        Args:
-            prim_list: list of primitives(dict)
-            basis: receiver sampling basis {kf | r1 | sc25...}
-            out: output path
-            offset: offset the surface in its normal direction
-            left: use instead left-hand rule for matrix generation
-            source: light source for receiver object {glow|light}
-        Returns:
-            A surface receiver object
-        """
-        rcvr_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
-                                   left=left, source=source, out=out)
-        return cls(receiver=rcvr_str, basis=basis)
+def surface_as_receiver(prim_list: Sequence[Primitive], basis: str, out: Union[None, str, Path],
+               offset=None, left=False, source='glow') -> Receiver:
+    """Instantiate a surface receiver object.
+    Args:
+        prim_list: list of primitives(dict)
+        basis: receiver sampling basis {kf | r1 | sc25...}
+        out: output path
+        offset: offset the surface in its normal direction
+        left: use instead left-hand rule for matrix generation
+        source: light source for receiver object {glow|light}
+    Returns:
+        A surface receiver object
+    """
+    rcvr_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
+                               left=left, source=source, out=out)
+    return Receiver(rcvr_str, basis)
 
 
 def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
@@ -230,13 +174,13 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
 
     if basis is None:
         raise ValueError('Sampling basis cannot be None')
-    upvector = str(radutil.up_vector(prims)).replace(' ', ',')
+    upvector = str(utils.up_vector(prims)).replace(' ', ',')
     upvector = "-" + upvector if left else upvector
     modifier_set = {p.modifier for p in prims}
     if len(modifier_set) != 1:
         logger.warning("Primitives don't share modifier")
     src_mod = f"rflx{prims[0].modifier}"
-    src_mod += util.id_generator()
+    src_mod += utils.id_generator()
     header = f'#@rfluxmtx h={basis} u={upvector}\n'
     if out is not None:
         header += f'#@rfluxmtx o="{out}"\n\n'
@@ -252,13 +196,13 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
             _identifier = prim.identifier
         _modifier = src_mod
         if offset is not None:
-            poly = radutil.parse_polygon(prim.real_arg)
+            poly = parsers.parse_polygon(prim.real_arg)
             offset_vec = poly.normal().scale(offset)
             moved_pts = [pt + offset_vec for pt in poly.vertices]
-            _real_args = radgeom.Polygon(moved_pts).to_real()
+            _real_args = geom.Polygon(moved_pts).to_real()
         else:
             _real_args = prim.real_arg
-        new_prim = radutil.Primitive(
+        new_prim = Primitive(
             _modifier, prim.ptype, _identifier, prim.str_arg, _real_args)
         content += str(new_prim) + '\n'
     return header + content
@@ -306,16 +250,17 @@ def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
         elif sender.form == 'v':
             cmd.extend(["-ffc", "-x", str(sender.xres), "-y", str(sender.yres), "-ld-"])
             if out is not None:
-                util.mkdir_p(out)
-                out = os.path.join(out, '%04d.hdr')
-                cmd.extend(["-o", out])
+                out = Path(out)
+                out.mkdir(exist_ok=True)
+                out = out / '%04d.hdr'
+                cmd.extend(["-o", str(out)])
             cmd.extend(['-', receiver_path])
             stdin = sender.sender
         cmd.extend(env_paths)
-        return util.spcheckout(cmd, inp=stdin)
+        return utils.spcheckout(cmd, inp=stdin)
 
 
-def rcvr_oct(receiver, env, oct_path):
+def rcvr_oct(receiver, env, oct_path: Union[str, Path]):
     """Generate an octree of the environment and the receiver.
     Args:
         receiver: receiver object
@@ -328,12 +273,12 @@ def rcvr_oct(receiver, env, oct_path):
         with open(receiver_path, 'w') as wtr:
             wtr.write(receiver.receiver)
         ocmd = ['oconv', '-f'] + env + [receiver_path]
-        octree = util.spcheckout(ocmd)
+        octree = utils.spcheckout(ocmd)
         with open(oct_path, 'wb') as wtr:
             wtr.write(octree)
 
 
-def rcontrib(*, sender, modifier: str, octree, out, opt) -> None:
+def rcontrib(*, sender, modifier: str, octree: Union[str, Path], out, opt) -> None:
     """Calling rcontrib to generate the matrices.
 
     Args:
@@ -358,8 +303,9 @@ def rcontrib(*, sender, modifier: str, octree, out, opt) -> None:
         if sender.form == 'p':
             cmd += ['-I+', '-faf', '-y', str(sender.yres)]
         elif sender.form == 'v':
-            util.mkdir_p(out)
-            out = os.path.join(out, '%04d.hdr')
+            out = Path(out)
+            out.mkdir(exist_ok=True)
+            out = out / '%04d.hdr'
             cmd += ['-ffc', '-x', str(sender.xres), '-y', str(sender.yres)]
-        cmd += ['-o', out, '-M', modifier_path, octree]
-        util.spcheckout(cmd, inp=stdin)
+        cmd += ['-o', out, '-M', modifier_path, str(octree)]
+        sp.run(cmd, check=True, input=stdin)

@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 from typing import List
+from typing import Sequence
 
 
 @dataclass(frozen=True)
@@ -17,14 +18,11 @@ class Vector:
         x: x coordinate
         y: y coordinate
         z: z coordinate
-        length: length of the vector
     """
+
     x: float = 0
     y: float = 0
     z: float = 0
-
-    def __post_init__(self):
-        """Initialize vector."""
 
     def __str__(self) -> str:
         """Class string representation.
@@ -90,8 +88,7 @@ class Vector:
     def normalize(self) -> Vector:
         """Return the unit vector."""
         magnitude = math.sqrt(self.x**2 + self.y**2 + self.z**2)
-        return Vector(self.x / magnitude, self.y / magnitude,
-                      self.z / magnitude)
+        return Vector(self.x / magnitude, self.y / magnitude, self.z / magnitude)
 
     def reverse(self) -> Vector:
         """Return the reversed vector."""
@@ -120,25 +117,30 @@ class Vector:
         cosa = math.cos(theta)
         sina = math.sin(theta)
 
-        row1 = [(vector.x * vector.x) + ((1 - (vector.x * vector.x)) * cosa),
-                (vector.x * vector.y * (1 - cosa)) - (vector.z * sina),
-                (vector.x * vector.z * (1 - cosa)) + (vector.y * sina), 0.0]
-        row2 = [(vector.x * vector.y * (1 - cosa)) + (vector.z * sina),
-                (vector.y * vector.y) + ((1 - (vector.y * vector.y)) * cosa),
-                (vector.y * vector.z * (1 - cosa)) - (vector.x * sina), 0.0]
-        row3 = [(vector.x * vector.z * (1.0 - cosa)) - (vector.y * sina),
-                (vector.y * vector.z * (1.0 - cosa)) + (vector.x * sina),
-                (vector.z * vector.z) + ((1.0 - (vector.z * vector.z)) * cosa),
-                0.0]
+        row1 = [
+            (vector.x * vector.x) + ((1 - (vector.x * vector.x)) * cosa),
+            (vector.x * vector.y * (1 - cosa)) - (vector.z * sina),
+            (vector.x * vector.z * (1 - cosa)) + (vector.y * sina),
+            0.0,
+        ]
+        row2 = [
+            (vector.x * vector.y * (1 - cosa)) + (vector.z * sina),
+            (vector.y * vector.y) + ((1 - (vector.y * vector.y)) * cosa),
+            (vector.y * vector.z * (1 - cosa)) - (vector.x * sina),
+            0.0,
+        ]
+        row3 = [
+            (vector.x * vector.z * (1.0 - cosa)) - (vector.y * sina),
+            (vector.y * vector.z * (1.0 - cosa)) + (vector.x * sina),
+            (vector.z * vector.z) + ((1.0 - (vector.z * vector.z)) * cosa),
+            0.0,
+        ]
 
         row4 = [0.0] * 4
 
-        rx = (self.x * row1[0]) + (self.y * row2[0]) + (self.z *
-                                                        row3[0]) + row4[0]
-        ry = (self.x * row1[1]) + (self.y * row2[1]) + (self.z *
-                                                        row3[1]) + row4[1]
-        rz = (self.x * row1[2]) + (self.y * row2[2]) + (self.z *
-                                                        row3[2]) + row4[2]
+        rx = (self.x * row1[0]) + (self.y * row2[0]) + (self.z * row3[0]) + row4[0]
+        ry = (self.x * row1[1]) + (self.y * row2[1]) + (self.z * row3[1]) + row4[1]
+        rz = (self.x * row1[2]) + (self.y * row2[2]) + (self.z * row3[2]) + row4[2]
 
         return Vector(rx, ry, rz)
 
@@ -152,7 +154,7 @@ class Vector:
     def coplanar(self, other1, other2):
         """Test if the vector is coplanar with the other two vectors."""
         triple_prod = self * other1.cross(other2)
-        return triple_prod==0
+        return triple_prod == 0
 
     def to_list(self):
         """Return a list containing the coordinates."""
@@ -160,7 +162,7 @@ class Vector:
 
     def to_tuple(self):
         """Return a tuple containing the coordinates, and round to third decimal place."""
-        return (round(self.x,3), round(self.y, 3), round(self.z, 3))
+        return (round(self.x, 3), round(self.y, 3), round(self.z, 3))
 
     @classmethod
     def spherical(cls, theta, phi, r) -> Vector:
@@ -191,7 +193,7 @@ class Polygon:
 
         """
         pt1 = self.vertices[0]
-        #opposite = False if self.normal() == other.normal() else True
+        # opposite = False if self.normal() == other.normal() else True
         opposite = False
         distances1 = [pt1.distance_from(i) for i in other.vertices]
         idx_min = distances1.index(min(distances1))
@@ -276,19 +278,32 @@ class Polygon:
         polygons.append(polygon2)
         for i in range(len(self.vertices) - 1):
             polygons.append(
-                Polygon([self.vertices[i], polygon2.vertices[i],
-                         polygon2.vertices[i + 1], self.vertices[i + 1]]))
+                Polygon(
+                    [
+                        self.vertices[i],
+                        polygon2.vertices[i],
+                        polygon2.vertices[i + 1],
+                        self.vertices[i + 1],
+                    ]
+                )
+            )
         polygons.append(
-            Polygon([self.vertices[-1], polygon2.vertices[-1],
-                     polygon2.vertices[0], self.vertices[0]]))
+            Polygon(
+                [
+                    self.vertices[-1],
+                    polygon2.vertices[-1],
+                    polygon2.vertices[0],
+                    self.vertices[0],
+                ]
+            )
+        )
         return polygons
 
     def __add__(self, other: Polygon) -> Polygon:
         """Merge two polygons."""
         sp, index = self.shared_pts(other)
         if sp != 2:
-            raise ValueError(
-                "Trying to merge two polygons without shared sides")
+            raise ValueError("Trying to merge two polygons without shared sides")
         t1 = self.vertices[index[0]:] + self.vertices[:index[0]]
         oid = other.vertices.index(self.vertices[index[0]])
         t2 = other.vertices[oid:] + other.vertices[:oid]
@@ -330,7 +345,7 @@ class Polygon:
     def to_real(self):
         """Convert the vertices to real arg string format."""
         real_str = "{} ".format(3 * len(self.vertices))
-        vert_str = ' '.join([str(i) for i in self.vertices])
+        vert_str = " ".join([str(i) for i in self.vertices])
         return real_str + vert_str
 
     @classmethod
@@ -352,6 +367,7 @@ def convexhull(points: List[Vector], normal: Vector):
         points (list): list of Point;
         normal (Vector): plane's normal
     """
+
     def toleft(u, v, points):
         """."""
         vect2 = v - u
@@ -376,7 +392,7 @@ def convexhull(points: List[Vector], normal: Vector):
 
     u = min(points, key=lambda p: p.x)
     v = max(points, key=lambda p: p.x)
-    if u.__str__() == v.__str__():
+    if u == v:
         u = min(points, key=lambda p: p.y)
         v = max(points, key=lambda p: p.y)
     left, right = toleft(u, v, points), toleft(v, u, points)
@@ -390,7 +406,7 @@ def polygon_center(*polygons):
     return sum(vertices, Vector()).scale(1 / len(vertices))
 
 
-def get_polygon_limits(polygon_list: list, offset=0.0):
+def get_polygon_limits(polygon_list: Sequence[Polygon], offset=0.0):
     """Get the x,y,z limits from a list of polygons."""
     extreme_list = [p.extreme() for p in polygon_list]
     lim = list(zip(*extreme_list))
@@ -403,7 +419,7 @@ def get_polygon_limits(polygon_list: list, offset=0.0):
     return xmin, xmax, ymin, ymax, zmin, zmax
 
 
-def getbbox(polygons: list, offset: float = 0.0):
+def getbbox(polygons: Sequence[Polygon], offset: float = 0.0):
     """Get a bounding box for a list of polygons.
 
     Return a list of polygon that is the
@@ -416,21 +432,20 @@ def getbbox(polygons: list, offset: float = 0.0):
     Returns:
         A list of polygon that is the bounding box.
     """
-    xmin, xmax, ymin, ymax, zmin, zmax = get_polygon_limits(
-        polygons, offset=offset)
+    xmin, xmax, ymin, ymax, zmin, zmax = get_polygon_limits(polygons, offset=offset)
     fp1 = Vector(xmin, ymin, zmin)
     fp2 = Vector(xmax, ymin, zmin)
     fp3 = Vector(xmax, ymax, zmin)
-    fpg = Polygon.rectangle3pts(fp1, fp2, fp3) #-Z
+    fpg = Polygon.rectangle3pts(fp1, fp2, fp3)  # -Z
     cp1 = Vector(xmin, ymin, zmax)
     cp2 = Vector(xmax, ymin, zmax)
     cp3 = Vector(xmax, ymax, zmax)
-    cpg = Polygon.rectangle3pts(cp3, cp2, cp1) #+Z
-    swpg = Polygon.rectangle3pts(cp2, fp2, fp1) #-Y
-    ewpg = Polygon.rectangle3pts(fp3, fp2, cp2) #+X
+    cpg = Polygon.rectangle3pts(cp3, cp2, cp1)  # +Z
+    swpg = Polygon.rectangle3pts(cp2, fp2, fp1)  # -Y
+    ewpg = Polygon.rectangle3pts(fp3, fp2, cp2)  # +X
     s2n_vec = Vector(0, ymax - ymin, 0)
-    nwpg = Polygon([v + s2n_vec for v in swpg.vertices]).flip() #+Y
+    nwpg = Polygon([v + s2n_vec for v in swpg.vertices]).flip()  # +Y
     e2w_vec = Vector(xmax - xmin, 0, 0)
-    wwpg = Polygon([v - e2w_vec for v in ewpg.vertices]).flip() #-X
+    wwpg = Polygon([v - e2w_vec for v in ewpg.vertices]).flip()  # -X
 
     return [fpg, cpg, ewpg, swpg, wwpg, nwpg]

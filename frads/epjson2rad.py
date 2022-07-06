@@ -7,85 +7,33 @@ TODO:
 """
 import argparse
 from configparser import ConfigParser
-from dataclasses import dataclass
 import json
 import logging
 import os
+from pathlib import Path
 import subprocess as sp
-from typing import Dict, List
+from typing import Dict
+from typing import List
 
-from frads import radgeom, radutil, util
+from frads import geom
+from frads import utils
+from frads.types import Primitive
+from frads.types import BSDFData
+from frads.types import RadMatrix
+from frads.types import EPlusWindowGas
+from frads.types import EPlusOpaqueMaterial
+from frads.types import EPlusWindowMaterial
+from frads.types import EPlusConstruction
+from frads.types import EPlusOpaqueSurface
+from frads.types import EPlusFenestration
+from frads.types import EPlusZone
 
 logger = logging.getLogger("frads.epjson2rad")
 
 
-@dataclass
-class EPlusWindowGas:
-    name: str
-    thickness: float
-    type: list
-    percentage: list
-    primitive: str = ""
 
-
-@dataclass
-class EPlusOpaqueMaterial:
-    name: str
-    roughness: str
-    solar_absorptance: float
-    visible_absorptance: float
-    visible_reflectance: float
-    primitive: radutil.Primitive
-    thickness: float = 0.0
-
-
-@dataclass
-class EPlusWindowMaterial:
-    name: str
-    visible_transmittance: float
-    primitive: radutil.Primitive
-
-
-@dataclass
-class EPlusConstruction:
-    name: str
-    type: str
-    layers: list
-
-
-@dataclass
-class EPlusOpaqueSurface:
-    name: str
-    type: str
-    polygon: radgeom.Polygon
-    construction: str
-    boundary: str
-    sun_exposed: bool
-    zone: str
-    fenestrations: list
-
-
-@dataclass
-class EPlusFenestration:
-    name: str
-    type: str
-    polygon: radgeom.Polygon
-    construction: EPlusConstruction
-    host: EPlusOpaqueSurface
-
-
-@dataclass
-class EPlusZone:
-    name: str
-    wall: Dict[str, EPlusOpaqueSurface]
-    ceiling: Dict[str, EPlusOpaqueSurface]
-    roof: Dict[str, EPlusOpaqueSurface]
-    floor: Dict[str, EPlusOpaqueSurface]
-    window: Dict[str, EPlusFenestration]
-
-
-def thicken(surface: radgeom.Polygon,
-            windows: List[radgeom.Polygon],
+def thicken(surface: geom.Polygon,
+            windows: List[geom.Polygon],
             thickness: float) -> list:
     """Thicken window-wall."""
     direction = surface.normal().scale(thickness)
@@ -109,7 +57,7 @@ def get_construction_thickness(
     return sum(layer_thickness)
 
 
-def check_outward(polygon: radgeom.Polygon, zone_center: radgeom.Vector) -> bool:
+def check_outward(polygon: geom.Polygon, zone_center: geom.Vector) -> bool:
     """Check whether a surface is facing outside."""
     pi = 3.14159265358579
     outward = True
@@ -146,7 +94,7 @@ def eplus_surface2primitive(
                 window_polygon = window_polygon.flip()
             window_polygons.append(window_polygon)
             surface_primitives[name]["window"].append(
-                radutil.polygon2prim(
+                utils.polygon2prim(
                     window_polygon, window_material, fen.name))
         surface_primitives[name]["surface"] = []
         surface_construction_layers = constructions[surface.construction].layers
@@ -154,18 +102,18 @@ def eplus_surface2primitive(
         inner_material = surface_construction_layers[
             -min(2, len(surface_construction_layers))].replace(" ", "_")
         surface_primitives[name]["surface"].append(
-            radutil.polygon2prim(surface_polygon, inner_material, surface.name))
+            utils.polygon2prim(surface_polygon, inner_material, surface.name))
         if surface.sun_exposed:
             outer_material = surface_construction_layers[-1].replace(" ", "_")
             thickness = get_construction_thickness(
                 constructions[surface.construction], materials)
             facade = thicken(surface_polygon, window_polygons, thickness)
             surface_primitives[name]["surface"].append(
-                radutil.polygon2prim(
+                utils.polygon2prim(
                     facade[1], outer_material, f"ext_{surface.name}"))
             for idx in range(2, len(facade)):
                 surface_primitives[name]["surface"].append(
-                    radutil.polygon2prim(
+                    utils.polygon2prim(
                         facade[idx], inner_material, f"sill_{surface.name}.{idx}"))
     return surface_primitives
 
@@ -186,7 +134,7 @@ def write_primitives(surfaces: dict, odir: str):
 
 def epluszone2rad(zone, constructions, materials):
     """Convert a EPlusZone object to a Radiance model."""
-    zone_center = radgeom.polygon_center(
+    zone_center = geom.polygon_center(
         *[wall.polygon for wall in zone.wall.values()])
     wall = eplus_surface2primitive(
         zone.wall, constructions, zone_center, materials)
@@ -207,7 +155,7 @@ def parse_material(name: str, material: dict) -> EPlusOpaqueMaterial:
     solar_absorptance = material.get("solar_absorptance", 0.7)
     visible_absorptance = material.get("visible_absorptance", 0.7)
     visible_reflectance = round(1 - visible_absorptance, 2)
-    primitive = radutil.Primitive(
+    primitive = Primitive(
         "void", "plastic", name, "0",
         "5 {0} {0} {0} 0 0".format(visible_reflectance))
     return EPlusOpaqueMaterial(
@@ -222,7 +170,7 @@ def parse_material_nomass(name: str, material: dict) -> EPlusOpaqueMaterial:
     solar_absorptance = material.get("solar_absorptance", 0.7)
     visible_absorptance = material.get("visible_absorptance", 0.7)
     visible_reflectance = round(1 - visible_absorptance, 2)
-    primitive = radutil.Primitive(
+    primitive = Primitive(
         "void", "plastic", name, "0",
         "5 {0} {0} {0} 0 0".format(visible_reflectance))
     return EPlusOpaqueMaterial(
@@ -263,8 +211,8 @@ def parse_windowmaterial_simpleglazingsystem(
     identifier = name.replace(" ", "_")
     shgc = material["solar_heat_gain_coefficient"]
     tmit = material.get("visible_transmittance", shgc)
-    tmis = util.tmit2tmis(tmit)
-    primitive = radutil.Primitive(
+    tmis = utils.tmit2tmis(tmit)
+    primitive = Primitive(
         "void", "glass", identifier, "0",
         "3 {0:.2f} {0:.2f} {0:.2f}".format(tmis))
     return EPlusWindowMaterial(identifier, tmit, primitive)
@@ -275,8 +223,8 @@ def parse_windowmaterial_simpleglazing(
     """Parse EP WindowMaterial:Simpleglazing"""
     identifier = name.replace(" ", "_")
     tmit = material['visible_transmittance']
-    tmis = util.tmit2tmis(tmit)
-    primitive = radutil.Primitive(
+    tmis = utils.tmit2tmis(tmit)
+    primitive = Primitive(
         "void", "glass", identifier, "0",
         "3 {0:.2f} {0:.2f} {0:.2f}".format(tmis))
     return EPlusWindowMaterial(identifier, tmit, primitive)
@@ -290,8 +238,8 @@ def parse_windowmaterial_glazing(
         tmit = 1
     else:
         tmit = material['visible_transmittance_at_normal_incidence']
-    tmis = util.tmit2tmis(tmit)
-    primitive = radutil.Primitive('void', 'glass', identifier, '0',
+    tmis = utils.tmit2tmis(tmit)
+    primitive = Primitive('void', 'glass', identifier, '0',
                                   "3 {0:.2f} {0:.2f} {0:.2f}".format(tmis))
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
@@ -309,7 +257,7 @@ def parse_windowmaterial_blind(inp: dict) -> dict:
         # slat_thickness = val['slat_thickness']
         # slat_separation = val['slat_separation']
         # slat_angle = val['slat_angle']
-        blind_prims[key] = radutil.Primitive(
+        blind_prims[key] = Primitive(
             'void', 'plastic', _id, '0',
             '5 {0:.2f} {0:.2f} {0:.2f} 0 0'.format(front_diff_vis_refl))
         # genblinds_cmd = f"genblinds {_id} {_id} {slat_width} 3 {20*slat_separation} {slat_angle}"
@@ -341,11 +289,11 @@ def parse_construction_complexfenestrationstate(epjs):
         ncolumn = epjs["Matrix:TwoDimension"][tf_name]['number_of_columns']
         # if ncolumn < 145:
             # raise ValueError("BSDF resolution too low to take advantage of Radiance")
-        tf_bsdf = util.nest_list([v['value'] for v in tf_list], ncolumn)
-        tb_bsdf = util.nest_list([v['value'] for v in tb_list], ncolumn)
-        tf = radutil.BSDFData(tf_bsdf).to_sdata()
-        tb = radutil.BSDFData(tb_bsdf).to_sdata()
-        matrices[key] = radutil.RadMatrix(tf, tb)
+        tf_bsdf = utils.nest_list([v['value'] for v in tf_list], ncolumn)
+        tb_bsdf = utils.nest_list([v['value'] for v in tb_list], ncolumn)
+        tf = utils.bsdf2sdata(BSDFData(tf_bsdf))
+        tb = utils.bsdf2sdata(BSDFData(tb_bsdf))
+        matrices[key] = RadMatrix(tf, tb)
         cfs[key] = EPlusConstruction(key, "cfs", [])
     return cfs, matrices
 
@@ -366,8 +314,8 @@ def parse_opaque_surface(surfaces: dict, fenestrations: dict) -> dict:
         identifier = name.replace(" ", "_")
         fenes = [fen for fen in fenestrations.values() if fen.host == name]
         type = surface['surface_type']
-        polygon = radgeom.Polygon(
-            [radgeom.Vector(*vertice.values()) for vertice in surface['vertices']])
+        polygon = geom.Polygon(
+            [geom.Vector(*vertice.values()) for vertice in surface['vertices']])
         for fen in fenes:
             polygon -= fen.polygon
         construction = surface['construction_name']
@@ -391,13 +339,13 @@ def parse_epjson_fenestration(fenes: dict) -> Dict[str, EPlusFenestration]:
             vertices = []
             for i in range(1, fen['number_of_vertices'] + 1):
                 vertices.append(
-                    radgeom.Vector(
+                    geom.Vector(
                         fen[f"vertex_{i}_x_coordinate"],
                         fen[f"vertex_{i}_y_coordinate"],
                         fen[f"vertex_{i}_z_coordinate"],
                     )
                 )
-            polygon = radgeom.Polygon(vertices)
+            polygon = geom.Polygon(vertices)
             construction = fen['construction_name']
             fenestrations[name] = EPlusFenestration(
                 name, surface_type, polygon, construction, host)
@@ -467,9 +415,9 @@ def write_config(config):
 def epjson2rad(epjs: dict) -> None:
     """Command-line program to convert a energyplus model into a Radiance model."""
     # Setup file structure
-    util.mkdir_p("Objects")
-    util.mkdir_p("Resources")
-    util.mkdir_p("Matrices")
+    Path("Objects").mkdir(exist_ok=True)
+    Path("Resources").mkdir(exist_ok=True)
+    Path("Matrices").mkdir(exist_ok=True)
 
     site, zones, constructions, materials, matrices = parse_epjson(epjs)
     building_name = epjs["Building"].popitem()[0].replace(" ", "_")
@@ -490,7 +438,8 @@ def epjson2rad(epjs: dict) -> None:
             wtr.write(repr(val.tf))
         with open(tb_path, 'w') as wtr:
             wtr.write(repr(val.tb))
-        basis = ''.join([word[0] for word in val.tf.basis.split()])
+        # basis = ''.join([word[0] for word in val.tf.basis.split()])
+        basis = ''.join([word[0].lower() for word in utils.BASIS_DICT[str(val.tf.ncolumn)].split()])
         cmd = ['wrapBSDF', '-f', 'n=' + key, '-a', basis]
         cmd += ['-tf', tf_path, '-tb', tb_path, '-U']
         wb_process = sp.run(cmd, check=True, stdout=sp.PIPE, stderr=sp.PIPE)

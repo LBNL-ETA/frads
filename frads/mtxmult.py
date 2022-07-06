@@ -2,195 +2,145 @@
 """
 
 import argparse
-import multiprocessing as mp
-import glob
 import logging
 import os
+from pathlib import Path
 import re
 import subprocess as sp
+from typing import List, Optional
+
 try:
     import numpy as np
+
     NUMPY_FOUND = True
 except ModuleNotFoundError:
     NUMPY_FOUND = False
 
-from frads import util
 
-
-logger = logging.getLogger("frads.radutil")
+logger = logging.getLogger("frads.mtxmult")
 
 
 def parse_rad_header(header_str: str) -> tuple:
     """Parse a Radiance matrix file header."""
     compiled = re.compile(
-        r' NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ', flags=re.X)
+        r" NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ", flags=re.X
+    )
     matches = compiled.findall(header_str)
     if len(matches) != 4:
         raise ValueError("Can't find one of the header entries.")
-    nrow = int([mat[0] for mat in matches if mat[0] != ''][0])
-    ncol = int([mat[1] for mat in matches if mat[1] != ''][0])
-    ncomp = int([mat[2] for mat in matches if mat[2] != ''][0])
-    dtype = [mat[3] for mat in matches if mat[3] != ''][0].strip()
+    nrow = int([mat[0] for mat in matches if mat[0] != ""][0])
+    ncol = int([mat[1] for mat in matches if mat[1] != ""][0])
+    ncomp = int([mat[2] for mat in matches if mat[2] != ""][0])
+    dtype = [mat[3] for mat in matches if mat[3] != ""][0].strip()
     return nrow, ncol, ncomp, dtype
 
 
-def pcomb(inputs):
-    """Image operations with pcomb.
-    Parameter: inputs,
-        e.g: ['img1.hdr', '+', img2.hdr', '-', 'img3.hdr', 'output.hdr']
+def batch_dctimestep(
+    mtx: List[Path], sky_dir: Path, out_dir: Path, nproc: Optional[int] = None
+):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    nproc = 1 if nproc is None else nproc
+    if len(mtx) == 0:
+        raise ValueError("Input matrices files empty")
+    if not sky_dir.is_dir():
+        raise ValueError("Sky directory not exist")
+    i = 0
+    for sky in sorted(sky_dir.glob("*")):
+        i += 1
+        out_path = out_dir / sky.with_suffix(".hdr")
+        cmd = ["dctimestep"] + [str(f) for f in mtx]
+        cmd.append(str(sky))
+        with open(out_path, "wb") as wtr:
+            proc = sp.Popen(cmd, stdout=wtr)
+        if i % nproc == 0:
+            proc.wait()
+
+
+def batch_pcomb(
+    inp: List[Path], ops: List[str], out_dir: Path, nproc: Optional[int] = None
+):
     """
-    input_list = inputs[:-1]
-    out_dir = inputs[-1]
-    component_idx = range(0, len(input_list), 2)
-    components = [input_list[i] for i in component_idx]
-    color_op_list = []
-    for c in 'rgb':
-        color_op = input_list[:]
-        for i in component_idx:
-            color_op[i] = '%si(%d)' % (c, i/2+1)
-        cstr = '%so=%s' % (c, ''.join(color_op))
-        color_op_list.append(cstr)
-    rgb_str = ';'.join(color_op_list)
-    cmd = ['pcomb', '-e', '%s' % rgb_str]
-    img_name = util.basename(input_list[0], keep_ext=True)
-    for c in components:
-        cmd.append('-o')
-        cmd.append(c)
-    res = util.spcheckout(cmd)
-    with open(os.path.join(out_dir, img_name), 'wb') as wtr:
-        wtr.write(res)
-
-
-def dctimestep(input_list):
-    """Image operations in forms of Vs, VDs, VTDs, VDFs, VTDFs."""
-    inputs = input_list[:-1]
-    out_dir = input_list[-1]
-    inp_dir_count = len(inputs)
-    sky = input_list[-2]
-    img_name = util.basename(sky)
-    out_path = os.path.join(out_dir, img_name)
-
-    if inputs[1].endswith('.xml') is False\
-            and inp_dir_count > 2 and os.path.isdir(inputs[0]):
-        combined = "'!rmtxop %s" % (' '.join(inputs[1:-1]))
-        img = [i for i in os.listdir(inputs[0]) if i.endswith('.hdr')][0]
-        str_count = len(img.split('.hdr')[0])  # figure out unix %0d string
-        appendi = r"%0"+"%sd.hdr" % (str_count)
-        new_inp_dir = [os.path.join(inputs[0], appendi), combined]
-        cmd = "dctimestep -oc %s %s' > %s.hdr" \
-            % (' '.join(new_inp_dir), sky, out_path)
-
-    else:
-        if not os.path.isdir(inputs[0]) and not inputs[1].endswith('.xml'):
-            combined = os.path.join(os.path.dirname(inputs[0]), "tmp.vfdmtx")
-            stderr = combine_mtx(inputs[:-1], combined)
-            if stderr != "":
-                print(stderr)
-                return
-            inputs_ = [combined]
-
-        elif inp_dir_count == 5:
-            combined = os.path.join(os.path.dirname(inputs[2]), "tmp.fdmtx")
-            stderr = combine_mtx(inputs[2:4], combined)
-            if stderr != "":
-                print(stderr)
-                return
-            inputs_ = [inputs[0], inputs[1], combined]
-
-        else:
-            inputs_ = inputs[:-1]
-
-        if os.path.isdir(inputs[0]):
-            img = [i for i in os.listdir(inputs[0])
-                   if i.endswith('.hdr')][0]
-            str_count = len(img.split('.hdr')[0])
-            appendi = r"%0"+"%sd.hdr" % (str_count)
-            inputs_[0] = os.path.join(inputs[0], appendi)
-            out_ext = ".hdr"
-        else:
-            out_ext = ".dat"
-
-        input_string = ' '.join(inputs_)
-        out_path = out_path + out_ext
-        cmd = "dctimestep %s %s > %s" % (input_string, sky, out_path)
-    sp.call(cmd, shell=True)
-
-
-def dctsop(inputs, out_dir, nproc=1):
-    if not os.path.isdir(out_dir):
-        os.makedirs(out_dir)
-    nproc = mp.cpu_count() if nproc is None else nproc
-    process = mp.Pool(nproc)
-    assert len(inputs) > 1
-    mtx_inp = inputs[:-1]
-    sky_dir = inputs[-1]
-    sky_files = (os.path.join(sky_dir, i) for i in os.listdir(sky_dir))
-    grouped = [mtx_inp+[skv] for skv in sky_files]
-    [sub.append(out_dir) for sub in grouped]
-    process.map(dctimestep, grouped)
-
-
-def pcombop(inputs, out_dir, nproc=1):
-    """
-    inputs(list): e.g.[inpdir1,'+',inpdir2,'-',inpdir3]
+    inputs: e.g.[inpdir1, inpdir2, inpdir3.hdr]
+    ops: e.g.['+', '-']
     out_dir: output directory
+    Resulting files will be named after first input item.
     """
-    if not os.path.isdir(out_dir):
-        os.makedirs(out_dir)
-    nproc = mp.cpu_count() if nproc is None else nproc
-    process = mp.Pool(nproc)
-    assert len(inputs) > 2
-    assert len(inputs) % 2 == 1
-    inp_dir = [inputs[i] for i in range(0, len(inputs), 2)]
-    inp_cnt = len(inp_dir)
-    ops = [inputs[i] for i in range(1, len(inputs), 2)]
-    inp_lists = []
-    for i in inp_dir:
-        if os.path.isdir(i):
-            inp_lists.append(glob.glob(os.path.join(i, '*.hdr')))
-        else:
-            inp_lists.append(i)
-    inp_lists_full = []
-    for i in range(inp_cnt):
-        if os.path.isdir(inp_dir[i]):
-            inp_lists_full.append(inp_lists[i])
-        else:
-            inp_lists_full.append(inp_dir[i])
-    max_len = sorted([len(i) for i in inp_lists_full if type(i) == list])[0]
-    for i in range(len(inp_lists_full)):
-        if type(inp_lists_full[i]) is not list:
-            inp_lists_full[i] = [inp_lists_full[i]] * max_len
-    equal_len = all(len(i) == len(inp_lists_full[0]) for i in inp_lists_full)
+    out_dir.mkdir(exist_ok=True)
+    nproc = 1 if nproc is None else nproc
+    if (len(inp) < 2) or (len(ops) < 1):
+        raise ValueError("Invalid # of inputs")
+    if inp[0].is_file():
+        raise ValueError("First input cannot be a file, please reformulate")
+    expanded_inp: List[List[Path]] = []
+    max_len = 0
+    for i in inp:
+        if i.is_dir():
+            hdrs = sorted(i.glob("*.hdr"))
+            max_len = max(max_len, len(hdrs))
+            expanded_inp.append([p for p in hdrs])
+        elif i.is_file():
+            expanded_inp.append([i])
+    if max_len > 1:
+        for idx, ip in enumerate(expanded_inp):
+            if len(ip) == 1:
+                expanded_inp[idx] = ip * max_len
+    equal_len = all(len(i) == len(expanded_inp[0]) for i in expanded_inp)
     if not equal_len:
         logger.warning("Input directories don't the same number of files")
-    grouped = [list(i) for i in zip(*inp_lists_full)]
-    grouped_op = []
+    grouped = [list(i) for i in zip(*expanded_inp)]
+    rstr_list = [f"ri({i})" for i, _ in enumerate(expanded_inp)]
+    frstr_list = rstr_list + ops
+    frstr_list[::2] = rstr_list
+    frstr_list[1::2] = ops
+    frstr_list.insert(0, "ro=")
+    frstr = "".join(frstr_list)
+    fgstr = frstr.replace("r", "g")
+    fbstr = frstr.replace("r", "b")
+    pcomb_expr = frstr + ";" + fgstr + ";" + fbstr
+    ni = 0
     for group in grouped:
-        result = group + ops
-        result[::2] = group
-        result[1::2] = ops
-        result.append(out_dir)
-        grouped_op.append(result)
-    process.map(pcomb, grouped_op)
+        cmd = ["pcomb", "-e", pcomb_expr]
+        for cp in group:
+            cmd += ["-o", str(cp)]
+        opath = out_dir / group[0].name
+        ni += 1
+        with open(opath, "wb") as wtr:
+            proc = sp.Popen(cmd, stdout=wtr)
+        if ni % nproc == 0:
+            proc.wait()
 
 
 def rpxop():
     """Operate on input directories given a operation type."""
-    PROGRAM_SCRIPTION = "Image operations with parallel processing"
-    parser = argparse.ArgumentParser(
-        prog='imgop', description=PROGRAM_SCRIPTION)
-    parser.add_argument('-t', type=str, required=True,
-                        choices=['dcts', 'pcomb'],
-                        help='operation types: {pcomb|dcts}')
-    parser.add_argument('-i', type=str, required=True,
-                        nargs="+", help='list of inputs')
-    parser.add_argument('-o', type=str, required=True, help="output directory")
-    parser.add_argument('-n', type=int, help='number of processors to use')
+    PROGRAM_SCRIPTION = "Batch image processing."
+    parser = argparse.ArgumentParser(prog="rpxop", description=PROGRAM_SCRIPTION)
+    subparser = parser.add_subparsers()
+    parser_dcts = subparser.add_parser("dctimestep")
+    parser_dcts.set_defaults(func=batch_dctimestep)
+    parser_dcts.add_argument("mtx", nargs="+", type=Path, help="input matrices")
+    parser_dcts.add_argument("sky", type=Path, help="sky files directory")
+    parser_dcts.add_argument("out", type=Path, help="output directory")
+    parser_dcts.add_argument("-n", type=int, help="number of processors to use")
+    parser_pcomb = subparser.add_parser("pcomb")
+    parser_pcomb.set_defaults(func=batch_pcomb)
+    parser_pcomb.add_argument(
+        "inp", type=str, nargs="+", help="list of inputs, e.g., inp1 + inp2.hdr"
+    )
+    parser_pcomb.add_argument("out", type=Path, help="output directory")
+    parser_pcomb.add_argument("-n", type=int, help="number of processors to use")
     args = parser.parse_args()
-    if args.t == "pcomb":
-        pcombop(args.i, args.o, nproc=args.n)
-    elif args.t == 'dcts':
-        dctsop(args.i, args.o, nproc=args.n)
+    if args.func == batch_pcomb:
+        inp = [Path(i) for i in args.inp[::2]]
+        for i in inp:
+            if not i.exists():
+                raise FileNotFoundError(i)
+        ops = args.inp[1::2]
+        args.func(inp, ops, args.out, nproc=args.n)
+    elif args.func == batch_dctimestep:
+        for i in args.mtx:
+            if not i.exists():
+                raise FileNotFoundError(i)
+        args.func(args.mtx, args.sky, args.out, nproc=args.n)
 
 
 def combine_mtx(mtxs, out_dir):
@@ -219,13 +169,12 @@ def mtxstr2nparray(data_str: bytes):
         linesep2 = b"\n\n"
     chunks = data_str.split(linesep2)
     nrow, ncol, ncomp, dtype = parse_rad_header(chunks[0].decode())
-    if dtype == 'ascii':
-        data = np.array(
-            [line.split() for line in chunks[1].splitlines()], dtype=float)
+    if dtype == "ascii":
+        data = np.array([line.split() for line in chunks[1].splitlines()], dtype=float)
     else:
-        if dtype == 'float':
+        if dtype == "float":
             data = np.frombuffer(chunks[1], np.single).reshape(nrow, ncol * ncomp)
-        elif dtype == 'double':
+        elif dtype == "double":
             data = np.frombuffer(chunks[1], np.double).reshape(nrow, ncol * ncomp)
         else:
             raise ValueError("Unsupported data type %s" % dtype)
@@ -238,8 +187,7 @@ def mtxstr2nparray(data_str: bytes):
 
 
 def smx2nparray(data_str):
-    """Convert Radiance sky matrix file to numpy array.
-    """
+    """Convert Radiance sky matrix file to numpy array."""
     if not data_str.startswith(b"#?RADIANCE"):
         raise ValueError("No header found")
     if b"\r\n\r\n" in data_str:
@@ -250,21 +198,26 @@ def smx2nparray(data_str):
     header_str = chunks[0].decode()
     content = chunks[1:]
     nrow, ncol, ncomp, dtype = parse_rad_header(header_str)
-    if dtype == 'ascii':
-        data = [i.splitlines() for i in content if i != b'']
-        rdata = np.array([[i.split()[::ncomp][0] for i in row] for row in data],
-                         dtype=float)
-        gdata = np.array([[i.split()[1::ncomp][0] for i in row] for row in data],
-                         dtype=float)
-        bdata = np.array([[i.split()[2::ncomp][0] for i in row] for row in data],
-                         dtype=float)
+    if dtype == "ascii":
+        data = [i.splitlines() for i in content if i != b""]
+        rdata = np.array(
+            [[i.split()[::ncomp][0] for i in row] for row in data], dtype=float
+        )
+        gdata = np.array(
+            [[i.split()[1::ncomp][0] for i in row] for row in data], dtype=float
+        )
+        bdata = np.array(
+            [[i.split()[2::ncomp][0] for i in row] for row in data], dtype=float
+        )
     else:
-        if dtype == 'float':
+        if dtype == "float":
             data = np.frombuffer(b"\n\n".join(content), np.single).reshape(
-                nrow, ncol * ncomp)
-        elif dtype == 'double':
+                nrow, ncol * ncomp
+            )
+        elif dtype == "double":
             data = np.frombuffer(b"\n\n".join(content), np.double).reshape(
-                nrow, ncol * ncomp)
+                nrow, ncol * ncomp
+            )
         else:
             raise ValueError("Unsupported data type %s" % dtype)
         rdata = data[:, 0::ncomp]
@@ -309,25 +262,33 @@ def rad_mtxmult3(*mtxs, weights: tuple = (), no_header=True):
     if len(mtxs) not in (2, 4):
         raise ValueError("Only works with two or four matrices")
     if os.path.isfile(mtxs[-1]):
-        cmd1 = ['dctimestep', '-od'] + list(mtxs)
+        cmd1 = ["dctimestep", "-od"] + list(mtxs)
         inp1 = None
     else:
-        cmd1 = ['dctimestep', '-od'] + list(mtxs)[:-1]
+        cmd1 = ["dctimestep", "-od"] + list(mtxs)[:-1]
         inp1 = mtxs[-1].encode()
     if weights == ():
         weights = (47.4, 119.9, 11.6)
         logger.warning("Using default photopic RGB weights")
-    cmd2 = ['rmtxop', '-fa', '-c', str(weights[0]),
-            str(weights[1]), str(weights[2]), '-', '-t']
+    cmd2 = [
+        "rmtxop",
+        "-fa",
+        "-c",
+        str(weights[0]),
+        str(weights[1]),
+        str(weights[2]),
+        "-",
+        "-t",
+    ]
     out1 = sp.Popen(cmd1, stdin=inp1, stdout=sp.PIPE)
     out2 = sp.Popen(cmd2, stdin=out1.stdout, stdout=sp.PIPE)
     if out1 is not None:
-        out1.stdout.close() # type: ignore
+        out1.stdout.close()  # type: ignore
     if no_header:
-        cmd3 = ['getinfo', '-']
+        cmd3 = ["getinfo", "-"]
         out3 = sp.Popen(cmd3, stdin=out2.stdout, stdout=sp.PIPE)
         if out2 is not None:
-            out2.stdout.close() # type: ignore
+            out2.stdout.close()  # type: ignore
         out = out3.communicate()[0]
     else:
         out = out2.communicate()[0]
@@ -337,15 +298,19 @@ def rad_mtxmult3(*mtxs, weights: tuple = (), no_header=True):
 def mtxmult(*mtxs):
     if NUMPY_FOUND:
         def mtx_parser(fpath):
-            if fpath.endswith('xml'):
-                raw = util.spcheckout(['rmtxop', fpath])
+            if fpath.suffix == ".xml":
+                proc = sp.run(
+                    ["rmtxop", fpath], check=True, stdout=sp.PIPE,
+                )
+                raw = proc.stdout
             else:
-                with open(fpath, 'rb') as rdr:
+                with open(fpath, "rb") as rdr:
                     raw = rdr.read()
             return mtxstr2nparray(raw)
+
         npmtx = [mtx_parser(mtx) for mtx in mtxs[:-1]]
         if os.path.isfile(mtxs[-1]):
-            with open(mtxs[-1], 'rb') as rdr:
+            with open(mtxs[-1], "rb") as rdr:
                 smx_str = rdr.read()
         else:
             smx_str = mtxs[-1]
@@ -355,11 +320,11 @@ def mtxmult(*mtxs):
         return rad_mtxmult3(*mtxs)
 
 
-def imgmult(*mtx, odir):
+def get_imgmult_cmd(*mtx: Path, odir: Path):
     """Image-based matrix multiplication using dctimestep."""
-    util.mkdir_p(odir)
-    cmd = ['dctimestep', '-oc', '-o', os.path.join(odir, '%04d.hdr')]
-    cmd += list(mtx)
+    odir.mkdir(exist_ok=True)
+    cmd = ["dctimestep", "-oc", "-o", str(odir / "%04d.hdr")]
+    cmd += [str(m) for m in mtx]
     return cmd
 
 
@@ -369,25 +334,29 @@ def dctsnp():
         print("Numpy not found")
         return
     aparser = argparse.ArgumentParser(
-        prog='dctsnp',
-        description='dctimestep but using numpy (non-image)')
-    aparser.add_argument('-m', '--mtx', required=True,
-                         nargs='+', help='scene matrix')
-    aparser.add_argument('-s', '--smx', required=True, help='sky matrix')
-    aparser.add_argument('-w', '--weight', type=float, default=None,
-                         nargs=3, help='RGB weights')
-    aparser.add_argument('-o', '--output', required=True, help='output path')
+        prog="dctsnp", description="dctimestep but using numpy (non-image)"
+    )
+    aparser.add_argument("-m", "--mtx", required=True, nargs="+", help="scene matrix")
+    aparser.add_argument("-s", "--smx", required=True, help="sky matrix")
+    aparser.add_argument(
+        "-w", "--weight", type=float, default=None, nargs=3, help="RGB weights"
+    )
+    aparser.add_argument("-o", "--output", required=True, help="output path")
     args = aparser.parse_args()
 
     def mtx_parser(fpath):
-        if fpath.endswith('.xml'):
-            raw = util.spcheckout(['rmtxop', fpath])
+        if fpath.endswith(".xml"):
+            proc = sp.run(
+                ["rmtxop", fpath], check=True, stdout=sp.PIPE, encoding="ascii"
+            )
+            raw = proc.stdout
         else:
-            with open(fpath, 'rb') as rdr:
+            with open(fpath, "rb") as rdr:
                 raw = rdr.read()
         return mtxstr2nparray(raw)
+
     npmtx = [mtx_parser(mtx) for mtx in args.mtx]
-    with open(args.smx, 'rb') as rdr:
+    with open(args.smx, "rb") as rdr:
         npmtx.append(smx2nparray(rdr.read()))
     result = numpy_mtxmult(npmtx, weight=args.weight)
     np.savetxt(args.output, result)
