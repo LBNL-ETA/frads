@@ -138,7 +138,8 @@ def assemble_model(config: ConfigParser) -> MradModel:
         material_primitives.append(black_mat)
     if glow_mat not in material_primitives:
         material_primitives.append(glow_mat)
-    _, material_path = tf.mkstemp(suffix="all_material")
+    # _, material_path = tf.mkstemp(suffix="all_material")
+    material_path = "all_material" + utils.id_generator()
     with open(material_path, "w") as wtr:
         [wtr.write(str(primitive) + "\n") for primitive in material_primitives]
     _blackenvpath = "blackened.rad"
