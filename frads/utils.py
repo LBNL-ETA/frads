@@ -10,6 +10,7 @@ import subprocess as sp
 from typing import Generator
 from typing import List
 from typing import Set
+from typing import Union
 
 from frads import geom
 from frads import parsers
@@ -255,9 +256,7 @@ def tokenize(inp: str) -> Generator[str, None, None]:
             yield match.group(0)
 
 
-
-
-def unpack_primitives(file: str | Path | TextIOWrapper) -> List[Primitive]:
+def unpack_primitives(file: Union[str, Path, TextIOWrapper]) -> List[Primitive]:
     """Open a file a to parse primitive."""
     if isinstance(file, TextIOWrapper):
         lines = file.readlines()

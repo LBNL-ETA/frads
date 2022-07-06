@@ -17,3 +17,5 @@ tags
 *.wea
 *.mat
 *.oct
+*.end
+*.err

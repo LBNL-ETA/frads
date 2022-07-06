@@ -1,8 +1,6 @@
 import os
 from pathlib import Path
 import unittest
-from frads import util
-from frads import radutil
 from frads import mtxmult
 
 
