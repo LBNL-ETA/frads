@@ -32,7 +32,7 @@ setuptools.setup(
                             'genradroom=frads.cli:genradroom',
                             'geombsdf=frads.geombsdf:main',
                             'dctsnp=frads.cli:dctsnp',
-                            'rglaze=frads.cli:glaze',
+                            'glazing=frads.cli:glazing',
                             'gencolorsky=frads.gencolorsky:main',
                             ],
     }
