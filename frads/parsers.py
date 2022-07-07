@@ -1,3 +1,6 @@
+"""
+This module contains all data parsing routines.
+"""
 import argparse
 import re
 import subprocess as sp
@@ -282,6 +285,21 @@ def parse_bsdf_xml(path: str) -> dict:
             sdata_txt = sdata_txt.replace('\n\t', ' ')
         data_dict[wavelength_txt][direction] = sdata_txt
     return data_dict
+
+
+def parse_rad_header(header_str: str) -> tuple:
+    """Parse a Radiance matrix file header."""
+    compiled = re.compile(
+        r" NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ", flags=re.X
+    )
+    matches = compiled.findall(header_str)
+    if len(matches) != 4:
+        raise ValueError("Can't find one of the header entries.")
+    nrow = int([mat[0] for mat in matches if mat[0] != ""][0])
+    ncol = int([mat[1] for mat in matches if mat[1] != ""][0])
+    ncomp = int([mat[2] for mat in matches if mat[2] != ""][0])
+    dtype = [mat[3] for mat in matches if mat[3] != ""][0].strip()
+    return nrow, ncol, ncomp, dtype
 
 
 def parse_branch(token: Generator[str, None, None]) -> Any:
