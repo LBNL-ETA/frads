@@ -53,7 +53,7 @@ class TestMrad(unittest.TestCase):
         shutil.rmtree("Results")
 
     def test_4_five_phase(self):
-        cmd = ["mrad", "-vvvv", "run", "five_phase.cfg"]
+        cmd = ["mrad", "-v", "run", "five_phase.cfg"]
         proc = sp.run(cmd, check=True, stderr=sp.PIPE)
         view_results = glob.glob("Results/view_five_phase_view_00/*.hdr")
         self.assertEqual(len(view_results), 4387)
@@ -61,7 +61,7 @@ class TestMrad(unittest.TestCase):
         shutil.rmtree("Results")
 
     def test_5_five_phase2(self):
-        cmd = ["mrad", "-vvvv", "run", "five_phase2.cfg"]
+        cmd = ["mrad", "-v", "run", "five_phase2.cfg"]
         proc = sp.run(cmd, check=True, stderr=sp.PIPE)
         view_results = glob.glob("Results/view_five_phase2_view_00/*.hdr")
         self.assertEqual(len(view_results), 4387)
