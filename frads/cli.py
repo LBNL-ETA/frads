@@ -306,12 +306,12 @@ def varays():
     aparser.add_argument('-c', default='1', help='Ray count')
     aparser.add_argument('-vf', required=True, help='View file path')
     args = aparser.parse_args()
-    cmd = "vwrays -ff -x {0} -y {0} ".format(args.x)
+    cmd = ["vwrays", "-ff", "-x", args.x, "-y", args.x]
     if args.c != '1':
-        cmd += '-c {} -pj 0.7 '.format(args.c)
-    cmd += f"-vf {args.vf} | "
-    cmd += utils.crop2circle(args.c, args.x)
-    sp.run(cmd, shell=True)
+        cmd += ['-c', args.c, '-pj', '0.7']
+    cmd += ["-vf", args.vf]
+    proc1 = sp.run(cmd, check=True, stdout=sp.PIPE)
+    sp.run(utils.crop2circle(args.c, args.x), check=True, stdin=proc1.stdout)
 
 
 def epjson2rad_cmd():
