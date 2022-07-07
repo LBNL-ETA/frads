@@ -814,11 +814,13 @@ def calc_5phase_vu(
                 mtxmult.batch_pcomb(vresl, ops, res3, nproc=nprocess)
                 mtxmult.batch_pcomb(vdresl, ops, res3di, nproc=nprocess)
             else:
-                vresl[0].replace(res3)
-                vdresl[0].replace(res3d)
+                for file in vresl[0].glob("*.hdr"):
+                    file.replace(res3 / file.name)
+                for file in vdresl[0].glob("*.hdr"):
+                    file.replace(res3di / file.name)
             logger.info("Applying material reflectance map")
             mtxmult.batch_pcomb(
-                [res3di, mpath.vmap[view]], ["*"], Path(res3d), nproc=nprocess
+                [res3di, mpath.vmap[view]], ["*"], res3d, nproc=nprocess
             )
             mtxmult.batch_pcomb(
                 [vrescdr, mpath.cdmap[view], vrescdf],
