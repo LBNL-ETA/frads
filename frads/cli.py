@@ -223,6 +223,7 @@ def mrad() -> None:
     # Call subprograms to do work
     args.func(args)
 
+
 def glazing():
     """Command-line program for generating BRTDfunc for glazing system."""
     aparser = argparse.ArgumentParser(
@@ -259,10 +260,13 @@ def glazing():
     pane_rgb = []
     coeffs = color.get_conversion_matrix(args.cspace)
     for pane in panes:
-        trix, triy, triz, mlnp = color.load_cie_tristi(pane.wavelength, args.observer)
-        tf_x, tf_y, tf_z = color.spec2xyz(trix, triy, triz, mlnp, pane.transmittance)
-        rf_x, rf_y, rf_z = color.spec2xyz(trix, triy, triz, mlnp, pane.reflectance_front)
-        rb_x, rb_y, rb_z = color.spec2xyz(trix, triy, triz, mlnp, pane.reflectance_back)
+        trix, triy, triz, mlnp, oidx = color.load_cie_tristi(pane.wavelength, args.observer)
+        trans = [pane.transmittance[idx] for idx in oidx]
+        reflf = [pane.reflectance_front[idx] for idx in oidx]
+        reflb = [pane.reflectance_back[idx] for idx in oidx]
+        tf_x, tf_y, tf_z = color.spec2xyz(trix, triy, triz, mlnp, trans)
+        rf_x, rf_y, rf_z = color.spec2xyz(trix, triy, triz, mlnp, reflf)
+        rb_x, rb_y, rb_z = color.spec2xyz(trix, triy, triz, mlnp, reflb)
         tf_rgb = color.xyz2rgb(tf_x, tf_y, tf_z, coeffs)
         rf_rgb = color.xyz2rgb(rf_x, rf_y, rf_z, coeffs)
         rb_rgb = color.xyz2rgb(rb_x, rb_y, rb_z, coeffs)

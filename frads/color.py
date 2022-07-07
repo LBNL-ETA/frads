@@ -105,11 +105,12 @@ def load_cie_tristi(inp_wvl: list, observer: str) -> tuple:
         lines = rdr.readlines()[header_lines:]
         mlnp = {float(row.split()[0]): float(row.split()[1]) for row in lines}
 
-    trix_i = [trix[wvl] for wvl in inp_wvl if wvl in trix]
+    trix_i = [trix[wvl] for idx, wvl in enumerate(inp_wvl) if wvl in trix]
     triy_i = [triy[wvl] for wvl in inp_wvl if wvl in triy]
     triz_i = [triz[wvl] for wvl in inp_wvl if wvl in triz]
     mlnp_i = [mlnp[wvl] for wvl in inp_wvl if wvl in mlnp]
-    return trix_i, triy_i, triz_i, mlnp_i
+    oidx = [idx for idx, wvl in enumerate(inp_wvl) if wvl in triy]
+    return trix_i, triy_i, triz_i, mlnp_i, oidx
 
 
 def get_conversion_matrix(prims, reverse=False):
