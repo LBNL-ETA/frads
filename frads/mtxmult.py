@@ -5,34 +5,20 @@ import argparse
 import logging
 import os
 from pathlib import Path
-import re
 import subprocess as sp
-from typing import List, Optional
+from typing import List
+from typing import Optional
+
+from frads import parsers
 
 try:
     import numpy as np
-
     NUMPY_FOUND = True
 except ModuleNotFoundError:
     NUMPY_FOUND = False
 
 
 logger = logging.getLogger("frads.mtxmult")
-
-
-def parse_rad_header(header_str: str) -> tuple:
-    """Parse a Radiance matrix file header."""
-    compiled = re.compile(
-        r" NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ", flags=re.X
-    )
-    matches = compiled.findall(header_str)
-    if len(matches) != 4:
-        raise ValueError("Can't find one of the header entries.")
-    nrow = int([mat[0] for mat in matches if mat[0] != ""][0])
-    ncol = int([mat[1] for mat in matches if mat[1] != ""][0])
-    ncomp = int([mat[2] for mat in matches if mat[2] != ""][0])
-    dtype = [mat[3] for mat in matches if mat[3] != ""][0].strip()
-    return nrow, ncol, ncomp, dtype
 
 
 def batch_dctimestep(
@@ -167,8 +153,8 @@ def mtxstr2nparray(data_str: bytes):
         linesep2 = b"\r\n\r\n"
     else:
         linesep2 = b"\n\n"
-    chunks = data_str.split(linesep2)
-    nrow, ncol, ncomp, dtype = parse_rad_header(chunks[0].decode())
+    chunks = data_str.split(linesep2, 1)
+    nrow, ncol, ncomp, dtype = parsers.parse_rad_header(chunks[0].decode())
     if dtype == "ascii":
         data = np.array([line.split() for line in chunks[1].splitlines()], dtype=float)
     else:
@@ -197,7 +183,7 @@ def smx2nparray(data_str):
     chunks = data_str.split(linesep2)
     header_str = chunks[0].decode()
     content = chunks[1:]
-    nrow, ncol, ncomp, dtype = parse_rad_header(header_str)
+    nrow, ncol, ncomp, dtype = parsers.parse_rad_header(header_str)
     if dtype == "ascii":
         data = [i.splitlines() for i in content if i != b""]
         rdata = np.array(
