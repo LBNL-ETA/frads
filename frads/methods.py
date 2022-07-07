@@ -569,7 +569,7 @@ def direct_sun_matrix_vu(
             )
             mpath.vcdfmx[view].mkdir(exist_ok=True)
             for idx, file in enumerate(sorted(tempf.glob("*.hdr"))):
-                file.rename(mpath.vcdfmx[view] / (mod_names[idx] + ".hdr"))
+                file.replace(mpath.vcdfmx[view] / (mod_names[idx] + ".hdr"))
             shutil.rmtree(tempf)
         if regen(mpath.vcdrmx[view], config):
             logger.info(f"Generating direct sun r matrix for {view}")
@@ -582,7 +582,7 @@ def direct_sun_matrix_vu(
             )
             mpath.vcdrmx[view].mkdir(exist_ok=True)
             for idx, file in enumerate(sorted(tempr.glob("*.hdr"))):
-                file.rename(mpath.vcdrmx[view] / (mod_names[idx] + ".hdr"))
+                file.replace(mpath.vcdrmx[view] / (mod_names[idx] + ".hdr"))
             shutil.rmtree(tempr)
     sun_oct.unlink()
 
@@ -623,7 +623,7 @@ def calc_2phase_vu(mpath: MradPath, datetime_stamps, config: ConfigParser) -> No
         )
         ofiles = sorted(opath.glob("*.hdr"))
         for idx, val in enumerate(ofiles):
-            val.rename(opath / (datetime_stamps[idx] + ".hdr"))
+            val.replace(opath / (datetime_stamps[idx] + ".hdr"))
 
 
 def calc_3phase_pt(
@@ -689,7 +689,7 @@ def calc_3phase_vu(mpath: MradPath, model: MradModel, datetime_stamps, config: C
             shutil.move(vresl[0], opath)
         ofiles = sorted(opath.glob("*.hdr"))
         for idx, ofile in enumerate(ofiles):
-            ofile.rename(opath / (datetime_stamps[idx] + ".hdr"))
+            ofile.replace(opath / (datetime_stamps[idx] + ".hdr"))
 
 
 def calc_5phase_pt(
@@ -832,17 +832,17 @@ def calc_5phase_vu(
             logger.info("Assemble all phase results.")
             res3_path = sorted(res3.glob("*.hdr"))
             [
-                res3_path[idx].rename(res3 / (stamp + ".hdr"))
+                res3_path[idx].replace(res3 / (stamp + ".hdr"))
                 for idx, stamp in enumerate(datetime_stamps)
             ]
             res3d_path = sorted(res3d.glob("*.hdr"))
             [
-                res3d_path[idx].rename(res3d / (stamp + ".hdr"))
+                res3d_path[idx].replace(res3d / (stamp + ".hdr"))
                 for idx, stamp in enumerate(datetime_stamps)
             ]
             vrescd_path = sorted(vrescd.glob("*.hdr"))
             [
-                vrescd_path[idx].rename(vrescd / (stamp + ".hdr"))
+                vrescd_path[idx].replace(vrescd / (stamp + ".hdr"))
                 for idx, stamp in enumerate(datetime_stamps_d6)
             ]
             opath.mkdir(exist_ok=True)
@@ -865,7 +865,7 @@ def calc_5phase_vu(
                     if ni % nprocess == 0:
                         proc.wait()
                 else:
-                    os.rename(res3/hdr3, opath/hdr3)
+                    os.replace(res3/hdr3, opath/hdr3)
             logger.info(f"Done computing for {view}")
 
 
