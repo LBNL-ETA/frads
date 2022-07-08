@@ -1,17 +1,38 @@
-"""Call uvspec to generate spectrally resolved sky description."""
+"""
+Call uvspec to generate spectrally resolved sky description.
+This module contains only functionalities relating to calling uvspec.
+Uvspec needs to be in the local environment.
+This module is not merged into sky.rad because of this unique circumstance.
+"""
+
 import argparse
 from datetime import datetime, timedelta
 import logging
 import math
 import os
+from pathlib import Path
 import subprocess as sp
-import tempfile
-from frads import makesky, util, radutil
+
+from frads import sky
+from frads import parsers
+from frads import color
 
 
-def get_local_input(dt: str, latitude: float, longitude: float,
-                    altitude: float, zenith: float,
-                    azimuth: float) -> str:
+# TODO:
+# 1) add rgb sampling at 440, 550, 680 nm:
+#   L(r), L(g), L(b) to sRGB
+#   sRGB to CIE XYZ to xyY
+#   xyY to spectrum S(l) = S1(l) + S2(l) + S3(l)
+
+
+def get_local_input(
+    dt: str,
+    latitude: float,
+    longitude: float,
+    altitude: float,
+    zenith: float,
+    azimuth: float,
+) -> str:
     """Get geographical and solar geometry input to uvspec.
     args:
         dt: datetime string
@@ -42,8 +63,9 @@ def get_local_input(dt: str, latitude: float, longitude: float,
     return inp
 
 
-def get_output_input(umu: list, phis: list,
-                     output=None, silent=True, verbose=False) -> str:
+def get_output_input(
+    umu: list, phis: list, output=None, silent=True, verbose=False
+) -> str:
     """Get sampling angles and output format input for uvspec.
     args:
         umu:
@@ -84,13 +106,13 @@ def get_uniform_samples(step: int) -> tuple:
     return cos_thetas, phis
 
 
-def get_solar(year: str, month: str, day: str, hours: str,
-              lat: str, lon: str, tzone: str):
+def get_solar(
+    year: str, month: str, day: str, hours: str, lat: str, lon: str, tzone: str
+):
     """Call gendaylit to get solar angles."""
-    cmd = makesky.gendaylit_cmd(month, day, hours, lat, lon, tzone, year=year)
-    gdl_proc = sp.run(list(map(str, cmd)), check=True,
-                      stdout=sp.PIPE, stderr=sp.PIPE)
-    gdl_prims = radutil.parse_primitive(gdl_proc.stdout.decode().splitlines())
+    cmd = sky.gendaylit_cmd(month, day, hours, lat, lon, tzone, year=year)
+    gdl_proc = sp.run(list(map(str, cmd)), check=True, stdout=sp.PIPE, stderr=sp.PIPE)
+    gdl_prims = parsers.parse_primitive(gdl_proc.stdout.decode().splitlines())
     source_prim = [prim for prim in gdl_prims if prim.ptype == "source"][0]
     source_dir = list(map(float, source_prim.real_arg.split()[1:4]))
     zenith_angle = math.degrees(math.acos(source_dir[2]))
@@ -129,7 +151,8 @@ def get_logger(verbosity: int):
     """
     logger = logging.getLogger("frads.gencolorsky")
     formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     console_handler = logging.StreamHandler()
     _level = verbosity * 10
     logger.setLevel(_level)
@@ -151,6 +174,9 @@ def parse_cli_args():
     parser.add_argument("-o", "--longitude", type=float, required=True)
     parser.add_argument("-m", "--tzone", type=int, required=True)
     parser.add_argument("-e", "--atm")
+    parser.add_argument(
+        "-f", "--rgb", action="store_true", help="RGB sampling to full spectrum approx."
+    )
     parser.add_argument("-s", "--observer", choices=["2", "10"], default="2")
     parser.add_argument("-c", "--colorspace", default="radiance")
     parser.add_argument("-b", "--cloudcover", type=float)
@@ -159,26 +185,35 @@ def parse_cli_args():
     parser.add_argument("-r", "--anglestep", type=int, default=3)
     parser.add_argument("-u", "--altitude", default=0)
     parser.add_argument("-d", "--aod", type=float)
-    parser.add_argument("-l", "--aerosol",
-                        choices=["continental_clean",
-                                 "continental_average",
-                                 "continental_polluted",
-                                 "urban",
-                                 "maritime_clean",
-                                 "maritime_polluted",
-                                 "maritime_tropical",
-                                 "desert",
-                                 "antarctic"])
+    parser.add_argument(
+        "-l",
+        "--aerosol",
+        choices=[
+            "continental_clean",
+            "continental_average",
+            "continental_polluted",
+            "urban",
+            "maritime_clean",
+            "maritime_polluted",
+            "maritime_tropical",
+            "desert",
+            "antarctic",
+        ],
+    )
     parser.add_argument("-i", "--pmt", action="store_true")
     parser.add_argument(
-        "-v", "--verbose", action="count", default=0,
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
         help="Verbose mode: \n"
         "\t-v=Debug\n"
         "\t-vv=Info\n"
         "\t-vvv=Warning\n"
         "\t-vvvv=Error\n"
         "\t-vvvvv=Critical\n"
-        "default=Warning")
+        "default=Warning",
+    )
     args = parser.parse_args()
     return args
 
@@ -193,35 +228,50 @@ def main():
     direct_sun = True
     try:
         lib_path = os.environ["LIBRADTRAN_DATA_FILES"]
-    except KeyError as ke:
+    except KeyError:
         raise KeyError("Can't find LIBRADTRAN_DATA_FILES in environment")
     args = parse_cli_args()
     logger = get_logger(args.verbose)
     verbose = True if args.verbose < 3 else False
     hours = args.hour + args.minute / 60.0
-    wavelengths = range(start_wvl, end_wvl + 1, wvl_step)
+    if args.rgb:
+        wavelengths = [440, 550, 680]
+    else:
+        wavelengths = range(start_wvl, end_wvl + 1, wvl_step)
     dt = datetime(args.year, args.month, args.day, args.hour, args.minute)
     dt_str = (dt + timedelta(hours=int(args.tzone / (-15)))).strftime(
-        "%Y %m %d %H %M %S")
+        "%Y %m %d %H %M %S"
+    )
     ct, phis = get_uniform_samples(args.anglestep)
     source_prim, source_dir, zenith_angle, azimuth_angle = get_solar(
-        args.year, args.month, args.day, hours,
-        args.latitude, args.longitude, args.tzone)
+        args.year,
+        args.month,
+        args.day,
+        hours,
+        args.latitude,
+        args.longitude,
+        args.tzone,
+    )
     # Generate input to uvspec
     model = f"data_files_path {lib_path}\n"
     model += f"source solar {lib_path}solar_flux/apm_1nm\n"
     model += "pseudospherical\n"
     model += "aerosol_default\n"
-    model += get_local_input(dt_str, args.latitude, args.longitude,
-                             args.altitude, zenith_angle, azimuth_angle)
+    model += get_local_input(
+        dt_str,
+        args.latitude,
+        args.longitude,
+        args.altitude,
+        zenith_angle,
+        azimuth_angle,
+    )
     if args.atm:
-        model += f"atmosphere_file {atm_file}\n"
+        model += f"atmosphere_file {args.atm}\n"
     if args.cloudcover:
         if args.cloudprofile:
             wc_path = args.cloudprofile
         else:
-            _file_path_ = os.path.dirname(__file__)
-            wc_path = os.path.join(_file_path_, 'data', "WC.DAT")
+            wc_path = Path(__file__).parent / "data" / "WC.DAT"
         model += f"wc_file 1D {wc_path}\n"
         model += f"cloudcover wc {args.cloudcover}\n"
         model += "interpret_as_level wc\n"  # use independent pixel approximation
@@ -258,7 +308,7 @@ def main():
     wvl_range = end_wvl - start_wvl + wvl_step
     wavelengths = list(wavelengths)
     wvl_length = len(wavelengths)
-    trix, triy, triz, mlnp = util.load_cie_tristi(wavelengths, args.observer)
+    trix, triy, triz, mlnp = color.load_cie_tristi(wavelengths, args.observer)
     columns = [col for col in zip(*result)]
     # Carry out additional full solar spectra run if pmt requested
     if args.pmt:
@@ -269,21 +319,21 @@ def main():
         logger.info(inp)
         proc = sp.run("uvspec", input=inp.encode(), stderr=sp.PIPE, stdout=sp.PIPE)
         blue = [i / 1e3 for i in map(float, proc.stdout.decode().strip().split())]
-        pfact = util.LEMAX * wvl_range / wvl_length / 1e3
-        mfact = util.MLEMAX * wvl_range / wvl_length / 1e3
+        pfact = color.LEMAX * wvl_range / wvl_length / 1e3
+        mfact = color.MLEMAX * wvl_range / wvl_length / 1e3
         red = []
         green = []
         for col in columns[1:]:
             col = list(map(float, col))
             cieys = [i * j for i, j in zip(col, triy)]
-            edis = [i * j for i,j in zip(col, mlnp)]
+            edis = [i * j for i, j in zip(col, mlnp)]
             cie_y = pfact * sum(cieys)
             edi = mfact * sum(edis)
             red.append(cie_y)
             green.append(edi)
     else:
-        coeffs = util.get_conversion_matrix(args.colorspace)
-        pfact = util.LEMAX * wvl_range / wvl_length / 1e3 / 179
+        coeffs = color.get_conversion_matrix(args.colorspace)
+        pfact = color.LEMAX * wvl_range / wvl_length / 1e3 / 179
         # Get RGB for each sampled point from sky
         red = []
         green = []
@@ -296,30 +346,31 @@ def main():
             cie_x = pfact * sum(ciexs)
             cie_y = pfact * sum(cieys)
             cie_z = pfact * sum(ciezs)
-            _r, _g, _b = util.xyz2rgb(cie_x, cie_y, cie_z, coeffs)
+            _r, _g, _b = color.xyz2rgb(cie_x, cie_y, cie_z, coeffs)
             red.append(_r)
             green.append(_g)
             blue.append(_b)
 
-    out_dir = f"cs_{args.month:02d}{args.day:02d}{args.hour:02d}"
-    out_dir += f"{args.minute:02d}_{args.latitude}_{args.longitude}"
-    util.mkdir_p(out_dir)
+    out_dir = Path(
+        f"cs_{args.month:02d}{args.day:02d}{args.hour:02d}_{args.minute:02d}_{args.latitude}_{args.longitude}"
+    )
+    out_dir.mkdir(exist_ok=True)
     if direct_sun:
         sidx = 2
     else:
         sidx = 0
     header = gen_header(args.anglestep)
-    with open(os.path.join(out_dir, "red.dat"), "w") as wtr:
+    with open(out_dir / "red.dat", "w") as wtr:
         wtr.write(header)
         wtr.write("\n".join([str(value) for value in red[sidx:]]))
-    with open(os.path.join(out_dir, "green.dat"), "w") as wtr:
+    with open(out_dir / "green.dat", "w") as wtr:
         wtr.write(header)
         wtr.write("\n".join([str(value) for value in green[sidx:]]))
-    with open(os.path.join(out_dir, "blue.dat"), "w") as wtr:
+    with open(out_dir / "blue.dat", "w") as wtr:
         wtr.write(header)
         wtr.write("\n".join([str(value) for value in blue[sidx:]]))
     sky_template = gen_rad_template()
-    with open(os.path.join(out_dir, "sky.rad"), "w") as wtr:
+    with open(out_dir / "sky.rad", "w") as wtr:
         if direct_sun:
             wtr.write("void light solar\n0\n0\n3 ")
             wtr.write(f"{red[0]/solar_sa/source_dir[2]} ")
