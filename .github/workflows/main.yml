@@ -32,13 +32,6 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-        # uses: i3h/download-release-asset@v1
-        # with:
-        # owner: LBNL-ETA
-        # repo: Radiance
-        # tag: latest
-        # file: /Linux.zip$/
-
     - name: Download latest Radiance binaries
       id: download_release_asset
       run: |
@@ -54,15 +47,6 @@ jobs:
         gh release download $ver -R NREL/EnergyPlus -p '*Ubuntu2*.tar.gz'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # with:
-        # repo: 'NREL/EnergyPlus'
-        # file: 'EnergyPlus-9.6.0-9f02123d77-Linux-Ubuntu20.04-x86_64.tar.gz'
-          # uses: i3h/download-release-asset@v1
-          # with:
-          # owner: NREL
-          # repo: EnergyPlus
-          # tag: latest
-          # file: /EnergyPlus.+Ubuntu2.+x86_64.tar.gz/
 
     - name: Install Radiance
       run: |
@@ -116,17 +100,19 @@ jobs:
 
     - name: Download latest Radiance binaries
       id: download_release_asset
-      uses: dsaltares/fetch-gh-release-asset@master
-      with:
-        repo: 'LBNL-ETA/Radiance'
-        file: 'Radiance_97040891_OSX.zip'
+      run: |
+        ver=$(gh release list -R LBNL-ETA/Radiance -L 1 | cut -f 3)
+        gh release download $ver -R LBNL-ETA/Radiance -p '*OSX.zip'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Download latest EnergyPlus
       id: download_energyplus_asset
-      uses: dsaltares/fetch-gh-release-asset@master
-      with:
-        repo: 'NREL/EnergyPlus'
-        file: 'EnergyPlus-9.6.0-9f02123d77-Darwin-macOS11.6-x86_64.tar.gz'
+      run: |
+        ver=$(gh release list -R NREL/EnergyPlus -L 1 | cut -f 3)
+        gh release download $ver -R NREL/EnergyPlus -p '*macOS11*.tar.gz'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install Radiance
       run: |
@@ -182,17 +168,19 @@ jobs:
 
     - name: Download latest Radiance binaries
       id: download_release_asset
-      uses: dsaltares/fetch-gh-release-asset@master
-      with:
-        repo: 'LBNL-ETA/Radiance'
-        file: 'Radiance_97040891_Windows.zip'
+      run: |
+        ver=$(gh release list -R LBNL-ETA/Radiance -L 1 | cut -f 3)
+        gh release download $ver -R LBNL-ETA/Radiance -p '*Windows.zip'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Download latest EnergyPlus
       id: download_energyplus_asset
-      uses: dsaltares/fetch-gh-release-asset@master
-      with:
-        repo: 'NREL/EnergyPlus'
-        file: 'EnergyPlus-9.6.0-9f02123d77-Windows-x86_64.zip'
+      run: |
+        ver=$(gh release list -R NREL/EnergyPlus -L 1 | cut -f 3)
+        gh release download $ver -R NREL/EnergyPlus -p '*Windows*.zip'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install Radiance
       run: |
