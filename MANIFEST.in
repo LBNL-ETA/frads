@@ -1,0 +1,6 @@
+include frads/data/WC.DAT
+include frads/data/standards/*.dsp
+include test/data/*.dat
+include test/Resources/*.epw 
+include test/Resources/*.xml
+include test/Resources/*.wea
