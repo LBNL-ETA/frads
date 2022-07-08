@@ -262,55 +262,61 @@ def check_sun_above_horizon(data, metadata):
     return [row for row in data if solar_altitude_check(row)]
 
 
-def remove_wea_zero_entry(data, metadata: WeaMetaData,
-        window_normal: Optional[Sequence[geom.Vector]]=None) -> List[WeaDataRow]:
-    """Remove wea data entries with zero solar luminance.
-    If window normal supplied, eliminate entries not seen by window.
-    Solar luminance determined using Perez sky model.
-    Window field of view is 176 deg with 2 deg tolerance on each side.
+def filter_data_with_zero_dni(data):
+    """Filter out data entries with zero direct normal irradiance."""
+    return [row for row in data if row.dni != 0]
+
+
+def filter_data_by_direct_sun(
+    data: Sequence[WeaDataRow],
+    meta: WeaMetaData,
+    window_normal: Optional[Sequence[geom.Vector]]=None,
+) -> List[WeaDataRow]:
     """
-    check_window_normal = True if window_normal is not None else False
+    Remove wea data entries with zero solar luminance according to
+    Perez All-Weather sky model. If window normal supplied,
+    eliminate entries not seen by window. Window field of view
+    is 176 deg with 2 deg tolerance on each side.
+    """
+    if window_normal is not None:
+        logger.warning("Window normals detected:")
+        for norm in window_normal:
+            logger.warning(str(norm))
+        if len(window_normal) == 0:
+            window_normal = None
     new_dataline = []
-    data = filter(lambda row: row.dni != 0, data)
     for row in data:
-        cmd = ['gendaylit', str(row.month), str(row.day), str(row.hours),
-               '-a', str(metadata.latitude), '-o', str(metadata.longitude),
-               '-m', str(metadata.timezone), '-W', str(row.dni), str(row.dhi)]
+        cmd = gendaylit_cmd(str(row.month), str(row.day), str(row.hours),
+                            str(meta.latitude), str(meta.longitude), str(meta.timezone),
+                            dir_norm_ir=str(row.dni), dif_hor_ir=str(row.dhi))
         process = sp.run(cmd, stderr=sp.PIPE, stdout=sp.PIPE)
-        primitives = parsers.parse_primitive(
-            process.stdout.decode().splitlines())
         if process.stderr == b'':
+            primitives = parsers.parse_primitive(process.stdout.decode().splitlines())
             light = float(primitives[0].real_arg.split()[2])
             dirs = geom.Vector(*list(map(float, primitives[1].real_arg.split()[1:4])))
             if light > 0:
-                if check_window_normal:
+                if window_normal is not None:
                     for normal in window_normal:
                         if normal * dirs < -0.035:  # 2deg tolerance
+                            logger.debug(f"{row.month} {row.day} {row.hours} inside of 176deg of {normal}")
                             new_dataline.append(row)
                             break
                 else:
                     new_dataline.append(row)
+        else:
+            logger.warning(process.stderr.decode())
     return new_dataline
 
 
-def epw2wea(epw_str,
-            dhour=False, shour=None, ehour=None,
-            remove_zero=False, window_normal=None):
-    """epw2wea with added filter."""
-    metadata, data = parsers.parse_epw(epw_str)
-    if None not in (shour, ehour):
-        data = start_end_hour(data, shour, ehour)
-    if dhour:
-        data = check_sun_above_horizon(data, metadata)
-    if remove_zero:
-        data = remove_wea_zero_entry(data, metadata,
-                                     window_normal=window_normal)
-    return metadata, list(data)
-
-
-def filter_wea(wea_data: Sequence[WeaDataRow], meta_data: WeaMetaData,
-               start_hour: Optional[float]=None, end_hour: Optional[float]=None, daylight_hours_only=False,
-        remove_zero=False, window_normals=None) -> Tuple[List[WeaDataRow], List[str]]:
+def filter_wea(
+    wea_data: Sequence[WeaDataRow],
+    meta_data: WeaMetaData,
+    start_hour: Optional[float]=None,
+    end_hour: Optional[float]=None,
+    daylight_hours_only=False,
+    remove_zero=False,
+    window_normals=None,
+) -> Tuple[List[WeaDataRow], List[str]]:
     """Obtain and prepare weather file data."""
     logger.info(f"Filtering wea data, starting with {len(wea_data)} rows")
     if (start_hour is not None) and (end_hour is not None):
@@ -320,7 +326,9 @@ def filter_wea(wea_data: Sequence[WeaDataRow], meta_data: WeaMetaData,
         wea_data = check_sun_above_horizon(wea_data, meta_data)
         logger.info(f"Filtering by daylight hours: {len(wea_data)} rows remaining")
     if remove_zero:
-        wea_data = remove_wea_zero_entry(wea_data, meta_data, window_normal=window_normals)
+        wea_data = filter_data_with_zero_dni(wea_data)
+    if window_normals is not None:
+        wea_data = filter_data_by_direct_sun(wea_data, meta_data, window_normal=window_normals)
         logger.info(f"Filtering out zero DNI hours and suns not seen by window: {len(wea_data)} rows remaining")
     datetime_stamps = [row.dt_string() for row in wea_data]
     if len(wea_data) == 0:
