@@ -171,14 +171,14 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release download -R LBNL-ETA/Radiance -p '*Windows.zip'
+        gh release download -R LBNL-ETA/Radiance -p "*Windows.zip"
 
     - name: Download latest EnergyPlus
       id: download_energyplus_asset
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release download -R NREL/EnergyPlus -p '*Windows*.zip'
+        gh release download -R NREL/EnergyPlus -p "*Windows*.zip"
 
     - name: Install Radiance
       run: |
