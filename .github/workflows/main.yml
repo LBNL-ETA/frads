@@ -168,19 +168,17 @@ jobs:
 
     - name: Download latest Radiance binaries
       id: download_release_asset
-      run: |
-        $ver = gh release list -R LBNL-ETA/Radiance -L 1 | ForEach-Object {$_.split("`t")[2]}
-        gh release download $ver -R LBNL-ETA/Radiance -p '*Windows.zip'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release download $(gh release list -R LBNL-ETA/Radiance -L 1 | ForEach-Object {$_.split("`t")[2]}) -R LBNL-ETA/Radiance -p '*Windows.zip'
 
     - name: Download latest EnergyPlus
       id: download_energyplus_asset
-      run: |
-        $ver = gh release list -R NREL/EnergyPlus -L 1 | ForEach-Object {$_.split("`t")[2]}
-        gh release download $ver -R NREL/EnergyPlus -p '*Windows*.zip'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release download $(gh release list -R NREL/EnergyPlus -L 1 | ForEach-Object {$_.split("`t")[2]}) -R NREL/EnergyPlus -p '*Windows*.zip'
 
     - name: Install Radiance
       run: |
