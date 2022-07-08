@@ -45,7 +45,7 @@ jobs:
       with:
         repo: 'LBNL-ETA/Radiance'
         regex: true
-        file: ".*\\Linux.zip"
+        file: "Radiance_97040891_Linux.zip"
 
     - name: Download latest EnergyPlus
       id: download_energyplus_asset
@@ -53,7 +53,7 @@ jobs:
       with:
         repo: 'NREL/EnergyPlus'
         regex: true
-        file: ".*\\Ubuntu2.*\\86_64.tar.gz"
+        file: "EnergyPlus-9.6.0-9f02123d77-Linux-Ubuntu20.04-x86_64.tar.gz"
           # uses: i3h/download-release-asset@v1
           # with:
           # owner: NREL
@@ -117,7 +117,7 @@ jobs:
       with:
         repo: 'LBNL-ETA/Radiance'
         regex: true
-        file: ".*\\OSX.zip"
+        file: "Radiance_97040891_OSX.zip"
 
     - name: Download latest EnergyPlus
       id: download_energyplus_asset
@@ -125,7 +125,7 @@ jobs:
       with:
         repo: 'NREL/EnergyPlus'
         regex: true
-        file: ".*\\macOS11.*\\86_64.tar.gz"
+        file: "EnergyPlus-9.6.0-9f02123d77-Darwin-macOS11.6-x86_64.tar.gz"
 
     - name: Install Radiance
       run: |
@@ -185,7 +185,7 @@ jobs:
       with:
         repo: 'LBNL-ETA/Radiance'
         regex: true
-        file: ".*\\Windows.zip"
+        file: "Radiance_97040891_Windows.zip"
 
     - name: Download latest EnergyPlus
       id: download_energyplus_asset
@@ -193,7 +193,7 @@ jobs:
       with:
         repo: 'NREL/EnergyPlus'
         regex: true
-        file: ".*\\Windows.*\\86_64.zip"
+        file: "EnergyPlus-9.6.0-9f02123d77-Windows-x86_64.zip"
 
     - name: Install Radiance
       run: |
