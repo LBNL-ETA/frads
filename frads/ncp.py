@@ -134,13 +134,13 @@ def klems_wrap2(out, out2, inp, basis):
     """prepare wrapping for Klems basis."""
     cmd = f"rmtxop -fa -t -c .265 .67 .065 {inp} | getinfo - > {out}"
     sp.run(cmd, shell=True)
-    basis_dict = {'kq':'Klems Quarter', 'kh':'Klems Half', 'kf':'Klems Full'}
+    basis_dict = {"kq": "Klems Quarter", "kh": "Klems Half", "kf": "Klems Full"}
     coeff = utils.angle_basis_coeff(basis_dict[basis])
-    with open(out, 'r') as rdr:
+    with open(out, "r") as rdr:
         rows = [map(float, l.split()) for l in rdr.readlines()]
-    res = [[str(val/c) for val in row] for row, c in zip(rows, coeff)]
-    with open(out2, 'w') as wtr:
-        [wtr.write('\t'.join(row)+'\n') for row in res]
+    res = [[str(val / c) for val in row] for row, c in zip(rows, coeff)]
+    with open(out2, "w") as wtr:
+        [wtr.write("\t".join(row) + "\n") for row in res]
 
 
 def rttree_reduce(ttrank, ttlog2, pctcull, refl, src, dest, spec="Visible"):
@@ -220,7 +220,7 @@ def tt_wrap(model, src_dict, fwrap_dict, out, refl) -> None:
         cmd = ["wrapBSDF", "-a", "t4", "-s", "Visible"]
         cmd += [" ".join(("-" + i[:2], j)) for i, j in sub_dict.items()]
         cmd += f"> {out}.xml"
-        with open(out, 'wb') as wtr:
+        with open(out, "wb") as wtr:
             sp.run(cmd, stdout=wtr)
 
 
@@ -240,44 +240,56 @@ def gen_ncp_mtx(
         all_prims.extend(utils.unpack_primitives(path))
 
     # Find out the modifier of the ncp polygon
-    ncp_mod = [prim.modifier for prim in ncp_prims if prim.ptype=='polygon'][0]
+    ncp_mod = [prim.modifier for prim in ncp_prims if prim.ptype == "polygon"][0]
 
     # Find out the ncp material primitive
     ncp_mat: Primitive
-    ncp_type: str = ''
+    ncp_type: str = ""
     for prim in all_prims:
         if prim.identifier == ncp_mod:
             ncp_mat = prim
             ncp_type = prim.ptype
             break
-    if ncp_type == '':
+    if ncp_type == "":
         raise ValueError("Unknown NCP material")
 
     dirname = out.parent
-    if solar and ncp_type=='BSDF':
-        logger.info('Computing for solar and visible spectrum...')
+    if solar and ncp_type == "BSDF":
+        logger.info("Computing for solar and visible spectrum...")
         xmlpath = ncp_mat.str_arg.split()[2]
         td = tf.mkdtemp()
         with open(xmlpath) as rdr:
             raw = rdr.read()
-        raw = raw.replace('<Wavelength unit="Integral">Visible</Wavelength>',
-                    '<Wavelength unit="Integral">Visible2</Wavelength>')
-        raw = raw.replace('<Wavelength unit="Integral">Solar</Wavelength>',
-                    '<Wavelength unit="Integral">Visible</Wavelength>')
-        raw = raw.replace('<Wavelength unit="Integral">Visible2</Wavelength>',
-                    '<Wavelength unit="Integral">Solar</Wavelength>')
-        solar_xml_path = os.path.join(td, 'solar.xml')
-        with open(solar_xml_path, 'w') as wtr:
+        raw = raw.replace(
+            '<Wavelength unit="Integral">Visible</Wavelength>',
+            '<Wavelength unit="Integral">Visible2</Wavelength>',
+        )
+        raw = raw.replace(
+            '<Wavelength unit="Integral">Solar</Wavelength>',
+            '<Wavelength unit="Integral">Visible</Wavelength>',
+        )
+        raw = raw.replace(
+            '<Wavelength unit="Integral">Visible2</Wavelength>',
+            '<Wavelength unit="Integral">Solar</Wavelength>',
+        )
+        solar_xml_path = os.path.join(td, "solar.xml")
+        with open(solar_xml_path, "w") as wtr:
             wtr.write(raw)
         _strarg = ncp_mat.str_arg.split()
         _strarg[2] = solar_xml_path
-        solar_ncp_mat = Primitive(ncp_mat.modifier, ncp_mat.ptype, ncp_mat.identifier+".solar", ' '.join(_strarg), '0')
+        solar_ncp_mat = Primitive(
+            ncp_mat.modifier,
+            ncp_mat.ptype,
+            ncp_mat.identifier + ".solar",
+            " ".join(_strarg),
+            "0",
+        )
 
-        _env_path = os.path.join(td, 'env_solar.rad')
-        with open(_env_path, 'w') as wtr:
+        _env_path = os.path.join(td, "env_solar.rad")
+        with open(_env_path, "w") as wtr:
             for prim in all_prims:
                 wtr.write(str(prim))
-        outsolar = dirname / ('_solar_{out.stem}.dat')
+        outsolar = dirname / ("_solar_{out.stem}.dat")
 
     klems = True
     if wrap and (model.rbasis.startswith("sc")) and (model.sbasis.startswith("sc")):
@@ -322,32 +334,37 @@ def gen_ncp_mtx(
                 out_name = f"{out.stem}_{key}.mtx"
                 file.rename(out.parent / out_name)
 
-    if solar and ncp_type == 'BSDF':
+    if solar and ncp_type == "BSDF":
         # process_thread.join()
         vis_dict = {}
         sol_dict = {}
-        oname = Path(args['o']).stem
-        mtxs = [os.path.join(dirname, mtx) for mtx in os.listdir(dirname) if mtx.endswith('.mtx')]
+        oname = Path(args["o"]).stem
+        mtxs = [
+            os.path.join(dirname, mtx)
+            for mtx in os.listdir(dirname)
+            if mtx.endswith(".mtx")
+        ]
         for mtx in mtxs:
-            _direc = Path(mtx).stem.split('_')[-1][:2]
+            _direc = Path(mtx).stem.split("_")[-1][:2]
             mtxname = Path(mtx).stem
             if mtxname.startswith(oname):
-                #vis_dict[_direc] = os.path.join(dirname, f"_vis_{_direc}")
+                # vis_dict[_direc] = os.path.join(dirname, f"_vis_{_direc}")
                 vis_dict[_direc] = os.path.join(td, f"vis_{_direc}")
                 out2 = os.path.join(dirname, f"vis_{_direc}")
                 klems_wrap(vis_dict[_direc], out2, mtx, args.ss)
-            if mtxname.startswith('_solar_'):
+            if mtxname.startswith("_solar_"):
                 sol_dict[_direc] = os.path.join(td, f"sol_{_direc}")
                 out2 = os.path.join(dirname, f"sol_{_direc}")
                 klems_wrap(sol_dict[_direc], out2, mtx, args.ss)
         cmd = f"wrapBSDF -a {args.ss} -c -s Visible "
-        cmd += ' '.join([f"-{key} {vis_dict[key]}" for key in vis_dict])
-        cmd += ' -s Solar '
-        cmd += ' '.join([f"-{key} {sol_dict[key]}" for key in sol_dict])
+        cmd += " ".join([f"-{key} {vis_dict[key]}" for key in vis_dict])
+        cmd += " -s Solar "
+        cmd += " ".join([f"-{key} {sol_dict[key]}" for key in sol_dict])
         cmd += f" > {os.path.join(dirname, oname)}.xml"
         os.system(cmd)
         shutil.rmtree(td)
         [os.remove(mtx) for mtx in mtxs]
+
 
 # class Genfmtx(object):
 #     """Generate facade matrix."""

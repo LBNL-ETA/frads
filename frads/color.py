@@ -15,50 +15,76 @@ MLEMAX = 754
 COLOR_PRIMARIES = {}
 
 COLOR_PRIMARIES["radiance"] = {
-    "cie_x_r": 0.640, "cie_y_r": 0.330,
-    "cie_x_g": 0.290, "cie_y_g": 0.600,
-    "cie_x_b": 0.150, "cie_y_b": 0.060,
-    "cie_x_w": 1 / 3, "cie_y_w": 1 / 3
+    "cie_x_r": 0.640,
+    "cie_y_r": 0.330,
+    "cie_x_g": 0.290,
+    "cie_y_g": 0.600,
+    "cie_x_b": 0.150,
+    "cie_y_b": 0.060,
+    "cie_x_w": 1 / 3,
+    "cie_y_w": 1 / 3,
 }
 
 COLOR_PRIMARIES["sharp"] = {
-    "cie_x_r": 0.6898, "cie_y_r": 0.3206,
-    "cie_x_w": 1 / 3, "cie_y_w": 1 / 3
+    "cie_x_r": 0.6898,
+    "cie_y_r": 0.3206,
+    "cie_x_w": 1 / 3,
+    "cie_y_w": 1 / 3,
 }
 
 COLOR_PRIMARIES["adobe"] = {
-    "cie_x_r": 0.640, "cie_y_r": 0.330,
-    "cie_x_g": 0.210, "cie_y_g": 0.710,
-    "cie_x_b": 0.150, "cie_y_b": 0.060,
-    "cie_x_w": 0.3127, "cie_y_w": 0.3290
+    "cie_x_r": 0.640,
+    "cie_y_r": 0.330,
+    "cie_x_g": 0.210,
+    "cie_y_g": 0.710,
+    "cie_x_b": 0.150,
+    "cie_y_b": 0.060,
+    "cie_x_w": 0.3127,
+    "cie_y_w": 0.3290,
 }
 
 COLOR_PRIMARIES["rimm"] = {
-    "cie_x_r": 0.7347, "cie_y_r": 0.2653,
-    "cie_x_g": 0.1596, "cie_y_g": 0.8404,
-    "cie_x_b": 0.0366, "cie_y_b": 0.0001,
-    "cie_x_w": 0.3457, "cie_y_w": 0.3585
+    "cie_x_r": 0.7347,
+    "cie_y_r": 0.2653,
+    "cie_x_g": 0.1596,
+    "cie_y_g": 0.8404,
+    "cie_x_b": 0.0366,
+    "cie_y_b": 0.0001,
+    "cie_x_w": 0.3457,
+    "cie_y_w": 0.3585,
 }
 
 COLOR_PRIMARIES["709"] = {
-    "cie_x_r": 0.640, "cie_y_r": 0.330,
-    "cie_x_g": 0.300, "cie_y_g": 0.600,
-    "cie_x_b": 0.150, "cie_y_b": 0.060,
-    "cie_x_w": 0.3127, "cie_y_w": 0.3290
+    "cie_x_r": 0.640,
+    "cie_y_r": 0.330,
+    "cie_x_g": 0.300,
+    "cie_y_g": 0.600,
+    "cie_x_b": 0.150,
+    "cie_y_b": 0.060,
+    "cie_x_w": 0.3127,
+    "cie_y_w": 0.3290,
 }
 
 COLOR_PRIMARIES["p3"] = {
-    "cie_x_r": 0.680, "cie_y_r": 0.320,
-    "cie_x_g": 0.265, "cie_y_g": 0.690,
-    "cie_x_b": 0.150, "cie_y_b": 0.060,
-    "cie_x_w": 0.314, "cie_y_w": 0.351
+    "cie_x_r": 0.680,
+    "cie_y_r": 0.320,
+    "cie_x_g": 0.265,
+    "cie_y_g": 0.690,
+    "cie_x_b": 0.150,
+    "cie_y_b": 0.060,
+    "cie_x_w": 0.314,
+    "cie_y_w": 0.351,
 }
 
 COLOR_PRIMARIES["2020"] = {
-    "cie_x_r": 0.708, "cie_y_r": 0.292,
-    "cie_x_g": 0.170, "cie_y_g": 0.797,
-    "cie_x_b": 0.131, "cie_y_b": 0.046,
-    "cie_x_w": 0.3127, "cie_y_w": 0.3290
+    "cie_x_r": 0.708,
+    "cie_y_r": 0.292,
+    "cie_x_g": 0.170,
+    "cie_y_g": 0.797,
+    "cie_x_b": 0.131,
+    "cie_y_b": 0.046,
+    "cie_x_w": 0.3127,
+    "cie_y_w": 0.3290,
 }
 
 
@@ -127,14 +153,29 @@ def get_conversion_matrix(prims, reverse=False):
 
     cie_y_w_inv = 1 / cie_y_w
 
-    cie_d = (cie_x_r * (cie_y_g - cie_y_b) +
-             cie_x_g * (cie_y_b - cie_y_r) + cie_x_b*(cie_y_r - cie_y_g))
-    cie_c_rd = (cie_y_w_inv * (cie_x_w * (cie_y_g - cie_y_b) -
-                cie_y_w * (cie_x_g - cie_x_b) + cie_x_g * cie_y_b - cie_x_b * cie_y_g))
-    cie_c_gd = (cie_y_w_inv * (cie_x_w * (cie_y_b - cie_y_r) -
-                cie_y_w * (cie_x_b - cie_x_r) - cie_x_r * cie_y_b + cie_x_b * cie_y_r))
-    cie_c_bd = (cie_y_w_inv * (cie_x_w * (cie_y_r - cie_y_g) -
-                cie_y_w * (cie_x_r - cie_x_g) + cie_x_r * cie_y_g - cie_x_g * cie_y_r))
+    cie_d = (
+        cie_x_r * (cie_y_g - cie_y_b)
+        + cie_x_g * (cie_y_b - cie_y_r)
+        + cie_x_b * (cie_y_r - cie_y_g)
+    )
+    cie_c_rd = cie_y_w_inv * (
+        cie_x_w * (cie_y_g - cie_y_b)
+        - cie_y_w * (cie_x_g - cie_x_b)
+        + cie_x_g * cie_y_b
+        - cie_x_b * cie_y_g
+    )
+    cie_c_gd = cie_y_w_inv * (
+        cie_x_w * (cie_y_b - cie_y_r)
+        - cie_y_w * (cie_x_b - cie_x_r)
+        - cie_x_r * cie_y_b
+        + cie_x_b * cie_y_r
+    )
+    cie_c_bd = cie_y_w_inv * (
+        cie_x_w * (cie_y_r - cie_y_g)
+        - cie_y_w * (cie_x_r - cie_x_g)
+        + cie_x_r * cie_y_g
+        - cie_x_g * cie_y_r
+    )
 
     coeff_00 = (cie_y_g - cie_y_b - cie_x_b * cie_y_g + cie_y_b * cie_x_g) / cie_c_rd
     coeff_01 = (cie_x_b - cie_x_g - cie_x_b * cie_y_g + cie_x_g * cie_y_b) / cie_c_rd
@@ -157,12 +198,20 @@ def get_conversion_matrix(prims, reverse=False):
         coeff_21 = (1 - cie_x_g - cie_y_g) * cie_c_gd / cie_d
         coeff_22 = (1 - cie_x_b - cie_y_b) * cie_c_bd / cie_d
 
-    return (coeff_00, coeff_01, coeff_02, coeff_10,
-            coeff_11, coeff_12, coeff_20, coeff_21, coeff_22)
+    return (
+        coeff_00,
+        coeff_01,
+        coeff_02,
+        coeff_10,
+        coeff_11,
+        coeff_12,
+        coeff_20,
+        coeff_21,
+        coeff_22,
+    )
 
 
-def rgb2xyz(r: float, g: float, b: float,
-            coeffs: tuple) -> Tuple[float, float, float]:
+def rgb2xyz(r: float, g: float, b: float, coeffs: tuple) -> Tuple[float, float, float]:
     """Convert RGB to CIE XYZ.
 
     Args:
@@ -184,8 +233,7 @@ def rgb2xyz(r: float, g: float, b: float,
     return x, y, z
 
 
-def xyz2rgb(x: float, y: float, z: float,
-            coeffs: tuple) -> Tuple[float, float, float]:
+def xyz2rgb(x: float, y: float, z: float, coeffs: tuple) -> Tuple[float, float, float]:
     """Convert CIE XYZ to RGB.
 
     Args:
@@ -207,8 +255,14 @@ def xyz2rgb(x: float, y: float, z: float,
     return red, green, blue
 
 
-def spec2xyz(trix: List[float], triy: List[float], triz: List[float],
-             mlnp: List[float], sval: List[float], emis=False) -> tuple:
+def spec2xyz(
+    trix: List[float],
+    triy: List[float],
+    triz: List[float],
+    mlnp: List[float],
+    sval: List[float],
+    emis=False,
+) -> tuple:
     """Convert spectral data to CIE XYZ.
 
     Args:
@@ -224,8 +278,12 @@ def spec2xyz(trix: List[float], triy: List[float], triz: List[float],
     Raise:
         ValueError if input data are not of equal length.
     """
-    if ((len(trix) != len(triy)) or (len(trix) != len(triz))
-            or (len(trix) != len(sval)) or (len(mlnp) != len(sval))):
+    if (
+        (len(trix) != len(triy))
+        or (len(trix) != len(triz))
+        or (len(trix) != len(sval))
+        or (len(mlnp) != len(sval))
+    ):
         raise ValueError("Input data not of equal length")
 
     xs = [x * v for x, v in zip(trix, sval)]

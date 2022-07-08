@@ -22,7 +22,7 @@ from frads.types import Receiver
 from frads.types import Sender
 
 
-logger = logging.getLogger('frads.matrix')
+logger = logging.getLogger("frads.matrix")
 
 
 def surface_as_sender(prim_list: list, basis: str, offset=None, left=None):
@@ -39,8 +39,10 @@ def surface_as_sender(prim_list: list, basis: str, offset=None, left=None):
         A sender object (Sender)
 
     """
-    prim_str = prepare_surface(prims=prim_list, basis=basis, offset=offset, left=left, source=None, out=None)
-    return Sender('s', prim_str.encode(), None, None)
+    prim_str = prepare_surface(
+        prims=prim_list, basis=basis, offset=offset, left=left, source=None, out=None
+    )
+    return Sender("s", prim_str.encode(), None, None)
 
 
 def view_as_sender(vu_dict: dict, ray_cnt: int, xres: int, yres: int) -> Sender:
@@ -59,29 +61,37 @@ def view_as_sender(vu_dict: dict, ray_cnt: int, xres: int, yres: int) -> Sender:
     """
     if (xres is None) or (yres is None):
         raise ValueError("Need to specify resolution")
-    res_cmd = ["vwrays", *(utils.opt2list(vu_dict)), "-x", str(xres), "-y", str(yres), "-d"]
-    res_proc = sp.run(res_cmd, check=True, stdout=sp.PIPE, encoding='ascii')
+    res_cmd = [
+        "vwrays",
+        *(utils.opt2list(vu_dict)),
+        "-x",
+        str(xres),
+        "-y",
+        str(yres),
+        "-d",
+    ]
+    res_proc = sp.run(res_cmd, check=True, stdout=sp.PIPE, encoding="ascii")
     res_eval = res_proc.stdout.split()
     new_xres, new_yres = int(res_eval[1]), int(res_eval[3])
     if (new_xres != xres) and (new_yres != yres):
         logger.info("Changed resolution to %s %s", new_xres, new_yres)
     vwrays_cmd = ["vwrays", "-ff", "-x", str(new_xres), "-y", str(new_yres)]
     if ray_cnt > 1:
-        vu_dict['c'] = ray_cnt
-        vu_dict['pj'] = 0.7  # placeholder
+        vu_dict["c"] = ray_cnt
+        vu_dict["pj"] = 0.7  # placeholder
     logger.debug("Ray count is %s", ray_cnt)
     vwrays_cmd += utils.opt2list(vu_dict)
     vwrays_proc = sp.run(vwrays_cmd, check=True, stdout=sp.PIPE)
-    if vu_dict['vt'] == 'a':
+    if vu_dict["vt"] == "a":
         flush_cmd = utils.flush_corner_rays_cmd(ray_cnt, xres)
         flush_proc = sp.run(flush_cmd, input=vwrays_proc.stdout, stdout=sp.PIPE)
         vrays = flush_proc.stdout
     else:
         vrays = vwrays_proc.stdout
-    return Sender('v', vrays, xres, yres)
+    return Sender("v", vrays, xres, yres)
 
 
-def points_as_sender(pts_list: list, ray_cnt: Optional[int]=None) -> Sender:
+def points_as_sender(pts_list: list, ray_cnt: Optional[int] = None) -> Sender:
     """Construct a sender from a list of points.
 
     Args:
@@ -97,9 +107,8 @@ def points_as_sender(pts_list: list, ray_cnt: Optional[int]=None) -> Sender:
     if not all(isinstance(item, list) for item in pts_list):
         raise ValueError("All grid points has to be lists.")
     pts_list = [i for i in pts_list for _ in range(ray_cnt)]
-    grid_str = os.linesep.join(
-        [' '.join(map(str, li)) for li in pts_list]) + os.linesep
-    return Sender('p', grid_str.encode(), None, len(pts_list))
+    grid_str = os.linesep.join([" ".join(map(str, li)) for li in pts_list]) + os.linesep
+    return Sender("p", grid_str.encode(), None, len(pts_list))
 
 
 def sun_as_receiver(basis, smx_path, window_normals, full_mod=False) -> Receiver:
@@ -116,7 +125,9 @@ def sun_as_receiver(basis, smx_path, window_normals, full_mod=False) -> Receiver
     if (smx_path is None) and (window_normals is None):
         str_repr = gensun.gen_full()
         return Receiver(str_repr, basis, modifier=gensun.mod_str)
-    str_repr, mod_str = gensun.gen_cull(smx_path=smx_path, window_normals=window_normals)
+    str_repr, mod_str = gensun.gen_cull(
+        smx_path=smx_path, window_normals=window_normals
+    )
     if full_mod:
         return Receiver(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
     return Receiver(receiver=str_repr, basis=basis, modifier=mod_str)
@@ -130,15 +141,21 @@ def sky_as_receiver(basis) -> Receiver:
         A sky receiver object
     """
 
-    if not basis.startswith('r'):
-        raise ValueError(f'Sky basis need to be Treganza/Reinhart, found {basis}')
+    if not basis.startswith("r"):
+        raise ValueError(f"Sky basis need to be Treganza/Reinhart, found {basis}")
     sky_str = sky.basis_glow(basis)
     logger.debug(sky_str)
     return Receiver(sky_str, basis)
 
 
-def surface_as_receiver(prim_list: Sequence[Primitive], basis: str, out: Union[None, str, Path],
-               offset=None, left=False, source='glow') -> Receiver:
+def surface_as_receiver(
+    prim_list: Sequence[Primitive],
+    basis: str,
+    out: Union[None, str, Path],
+    offset=None,
+    left=False,
+    source="glow",
+) -> Receiver:
     """Instantiate a surface receiver object.
     Args:
         prim_list: list of primitives(dict)
@@ -150,8 +167,9 @@ def surface_as_receiver(prim_list: Sequence[Primitive], basis: str, out: Union[N
     Returns:
         A surface receiver object
     """
-    rcvr_str = prepare_surface(prims=prim_list, basis=basis, offset=offset,
-                               left=left, source=source, out=out)
+    rcvr_str = prepare_surface(
+        prims=prim_list, basis=basis, offset=offset, left=left, source=source, out=out
+    )
     return Receiver(rcvr_str, basis)
 
 
@@ -169,25 +187,25 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
     """
 
     if basis is None:
-        raise ValueError('Sampling basis cannot be None')
-    upvector = str(utils.up_vector(prims)).replace(' ', ',')
+        raise ValueError("Sampling basis cannot be None")
+    upvector = str(utils.up_vector(prims)).replace(" ", ",")
     upvector = "-" + upvector if left else upvector
     modifier_set = {p.modifier for p in prims}
     if len(modifier_set) != 1:
         logger.warning("Primitives don't share modifier")
     src_mod = f"rflx{prims[0].modifier}"
     src_mod += utils.id_generator()
-    header = f'#@rfluxmtx h={basis} u={upvector}\n'
+    header = f"#@rfluxmtx h={basis} u={upvector}\n"
     if out is not None:
         header += f'#@rfluxmtx o="{out}"\n\n'
     if source is not None:
         source_line = f"void {source} {src_mod}\n0\n0\n4 1 1 1 0\n\n"
         header += source_line
     modifiers = [p.modifier for p in prims]
-    content = ''
+    content = ""
     for prim in prims:
         if prim.identifier in modifiers:
-            _identifier = 'discarded'
+            _identifier = "discarded"
         else:
             _identifier = prim.identifier
         _modifier = src_mod
@@ -199,8 +217,9 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
         else:
             _real_args = prim.real_arg
         new_prim = Primitive(
-            _modifier, prim.ptype, _identifier, prim.str_arg, _real_args)
-        content += str(new_prim) + '\n'
+            _modifier, prim.ptype, _identifier, prim.str_arg, _real_args
+        )
+        content += str(new_prim) + "\n"
     return header + content
 
 
@@ -221,36 +240,36 @@ def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
     """
     if None in (sender, receiver):
         raise ValueError("Sender/Receiver object is None")
-    opt = '' if opt is None else opt
+    opt = "" if opt is None else opt
     with tf.TemporaryDirectory() as tempd:
-        receiver_path = os.path.join(tempd, 'receiver')
-        with open(receiver_path, 'w') as wtr:
+        receiver_path = os.path.join(tempd, "receiver")
+        with open(receiver_path, "w") as wtr:
             wtr.write(receiver.receiver)
         if isinstance(env[0], dict):
-            env_path = os.path.join(tempd, 'env')
-            with open(env_path, 'w') as wtr:
+            env_path = os.path.join(tempd, "env")
+            with open(env_path, "w") as wtr:
                 [wtr.write(str(prim)) for prim in env]
             env_paths = [env_path]
         else:
             env_paths = env
-        cmd = ['rfluxmtx'] + opt.split()
+        cmd = ["rfluxmtx"] + opt.split()
         stdin = None
-        if sender.form == 's':
-            sender_path = os.path.join(tempd, 'sender')
-            with open(sender_path, 'wb') as wtr:
+        if sender.form == "s":
+            sender_path = os.path.join(tempd, "sender")
+            with open(sender_path, "wb") as wtr:
                 wtr.write(sender.sender)
             cmd.extend([sender_path, receiver_path])
-        elif sender.form == 'p':
-            cmd.extend(['-I+', '-faa', '-y', str(sender.yres), '-', receiver_path])
+        elif sender.form == "p":
+            cmd.extend(["-I+", "-faa", "-y", str(sender.yres), "-", receiver_path])
             stdin = sender.sender
-        elif sender.form == 'v':
+        elif sender.form == "v":
             cmd.extend(["-ffc", "-x", str(sender.xres), "-y", str(sender.yres), "-ld-"])
             if out is not None:
                 out = Path(out)
                 out.mkdir(exist_ok=True)
-                out = out / '%04d.hdr'
+                out = out / "%04d.hdr"
                 cmd.extend(["-o", str(out)])
-            cmd.extend(['-', receiver_path])
+            cmd.extend(["-", receiver_path])
             stdin = sender.sender
         cmd.extend(env_paths)
         return utils.spcheckout(cmd, inp=stdin)
@@ -265,12 +284,12 @@ def rcvr_oct(receiver, env, oct_path: Union[str, Path]):
     """
 
     with tf.TemporaryDirectory() as tempd:
-        receiver_path = os.path.join(tempd, 'rcvr_path')
-        with open(receiver_path, 'w') as wtr:
+        receiver_path = os.path.join(tempd, "rcvr_path")
+        with open(receiver_path, "w") as wtr:
             wtr.write(receiver.receiver)
-        ocmd = ['oconv', '-f'] + env + [receiver_path]
+        ocmd = ["oconv", "-f"] + env + [receiver_path]
         octree = utils.spcheckout(ocmd)
-        with open(oct_path, 'wb') as wtr:
+        with open(oct_path, "wb") as wtr:
             wtr.write(octree)
 
 
@@ -289,19 +308,19 @@ def rcontrib(*, sender, modifier: str, octree: Union[str, Path], out, opt) -> No
 
     """
     lopt = opt.split()
-    lopt.append('-fo+')
+    lopt.append("-fo+")
     with tf.TemporaryDirectory() as tempd:
-        modifier_path = os.path.join(tempd, 'modifier')
-        with open(modifier_path, 'w') as wtr:
+        modifier_path = os.path.join(tempd, "modifier")
+        with open(modifier_path, "w") as wtr:
             wtr.write(modifier)
-        cmd = ['rcontrib'] + lopt
+        cmd = ["rcontrib"] + lopt
         stdin = sender.sender
-        if sender.form == 'p':
-            cmd += ['-I+', '-faf', '-y', str(sender.yres)]
-        elif sender.form == 'v':
+        if sender.form == "p":
+            cmd += ["-I+", "-faf", "-y", str(sender.yres)]
+        elif sender.form == "v":
             out = Path(out)
             out.mkdir(exist_ok=True)
-            out = out / '%04d.hdr'
-            cmd += ['-ffc', '-x', str(sender.xres), '-y', str(sender.yres)]
-        cmd += ['-o', out, '-M', modifier_path, str(octree)]
+            out = out / "%04d.hdr"
+            cmd += ["-ffc", "-x", str(sender.xres), "-y", str(sender.yres)]
+        cmd += ["-o", out, "-M", modifier_path, str(octree)]
         sp.run(cmd, check=True, input=stdin)

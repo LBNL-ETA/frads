@@ -7,20 +7,20 @@ import shutil
 import subprocess as sp
 import sys
 
+__version__ = "0.2.7"
 
-__version__ = "0.2.3"
-
-logger = logging.getLogger('frads')
+logger = logging.getLogger("frads")
 
 # Check if Radiance is installed more or less
 rad_progs = [
-    'rfluxmtx',
-    'total',
-    'getinfo',
-    'pcomb',
-    'dctimestep',
-    'rmtxop',
-    'gendaymtx',
+    "rfluxmtx",
+    "total",
+    "getinfo",
+    "pcomb",
+    "dctimestep",
+    "rmtxop",
+    "gendaymtx",
+    "rtrace",
 ]
 
 for prog in rad_progs:
@@ -30,7 +30,9 @@ for prog in rad_progs:
 
 try:
     # Check Radiance version, need to be at least 5.X
-    version_check = sp.run(["rtrace", "-version"], check=True, stdout=sp.PIPE).stdout.decode()
+    version_check = sp.run(
+        ["rtrace", "-version"], check=True, stdout=sp.PIPE
+    ).stdout.decode()
     msg = "Please upgrade to Radiance version 5.3 or later"
     try:
         rad_version = float(version_check.split()[1][:3])
@@ -40,10 +42,3 @@ try:
         logger.info(msg)
 except FileNotFoundError as err:
     logger.info(err)
-
-
-# if not sys.platform.startswith('win'):
-    # import resource
-    # slimit, hlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-    # if slimit < 10000 or hlimit < 10000:
-        # resource.setrlimit(resource.RLIMIT_NOFILE, (131072, 131072))

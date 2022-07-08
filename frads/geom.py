@@ -305,7 +305,7 @@ class Polygon:
         sp, index = self.shared_pts(other)
         if sp != 2:
             raise ValueError("Trying to merge two polygons without shared sides")
-        t1 = self.vertices[index[0]:] + self.vertices[:index[0]]
+        t1 = self.vertices[index[0] :] + self.vertices[: index[0]]
         oid = other.vertices.index(self.vertices[index[0]])
         t2 = other.vertices[oid:] + other.vertices[:oid]
         if t1[-1] == t2[1]:
