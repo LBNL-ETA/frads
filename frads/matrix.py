@@ -1,10 +1,6 @@
-""" Support matrices generation.
-
-radmtx module contains two class objects: sender and receiver, representing
-the ray sender and receiver in the rfluxmtx operation. sender object is can
-be instantiated as a surface, a list of points, or a view, and these are
-typical forms of a sender. Similarly, a receiver object can be instantiated as
-a surface, sky, or suns.
+"""
+This module contains routines to generate sender and receiver objects, generate
+matrices by calling either rfluxmtx or rcontrib.
 """
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+"""
+This module contains all utility functions used throughout frads.
+"""
 from io import TextIOWrapper
 import logging
 import math

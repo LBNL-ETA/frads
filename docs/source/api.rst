@@ -4,30 +4,36 @@ API
 This part of the documentation lists the full API reference of all public
 classes and functions.
 
-radgeom
+types
 ----------
 This a module that handles the geometry
 
-.. automodule:: frads.radgeom
+.. automodule:: frads.types
    :members:
 
-radutil
----------
-.. automodule:: frads.radutil
+geom
+----------
+This a module that handles the geometry
+
+.. automodule:: frads.geom
    :members:
 
-
-radmtx
+utils
 ---------
-.. automodule:: frads.radmtx
+.. automodule:: frads.utils
+   :members:
+
+matrix
+---------
+.. automodule:: frads.matrix
    :members:
 
 makesky
 ---------
-.. automodule:: frads.makesky
+.. automodule:: frads.sky
    :members:
 
-mtxmethod
+methods
 ---------
-.. automodule:: frads.mtxmethod
+.. automodule:: frads.methods
    :members:

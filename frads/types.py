@@ -1,7 +1,6 @@
 """
 This module contains all data types used across frads.
 The exceptions are the Vector and Polygon class in the geom.py module.
-Sender, Receiver
 
 """
 
@@ -21,6 +20,9 @@ Matrix = List[List[float]]
 
 
 class Primitive(NamedTuple):
+    """
+    Radiance Primitive, with attributes one-to-one mapped from Radiance.
+    """
     modifier: str
     ptype: str
     identifier: str
@@ -44,7 +46,7 @@ class Primitive(NamedTuple):
 @dataclass(frozen=True)
 class Sender:
     """
-    Sender object for matrix generation with the following attributes:
+    Sender object for matrix generation.
 
     Attributes:
         form(str): types of sender, {surface(s)|view(v)|points(p)}
@@ -78,6 +80,14 @@ class Receiver:
 
 @dataclass
 class ScatteringData:
+    """
+    Scattering data object.
+
+    Attributes:
+        sdata(list[list[float]]): scattering data in nested lists.
+        ncolumn(int): number of columns
+        nrow(int): number of rows
+    """
     sdata: Matrix
     ncolumn: int = field(init=False)
     nrow: int = field(init=False)
@@ -109,6 +119,14 @@ class ScatteringData:
 
 @dataclass
 class BSDFData:
+    """
+    BSDF data object.
+
+    Attributes:
+        bsdf(list[list[float]]): BSDF data in nested lists.
+        ncolumn(int): number of columns
+        nrow(int): number of rows
+    """
     bsdf: Matrix
     ncolumn: int = field(init=False)
     nrow: int = field(init=False)
@@ -120,11 +138,19 @@ class BSDFData:
 
 @dataclass(frozen=True)
 class RadMatrix:
+    """
+    Radiance matrix object.
+
+    Attributes:
+        tf(ScatteringData): front-side transmission
+        tb(ScatteringData): back-side transmission
+    """
     tf: ScatteringData
     tb: ScatteringData
 
 
 class PaneProperty(NamedTuple):
+    """Window pane property object."""
     name: str
     thickness: float
     gtype: str
@@ -148,6 +174,7 @@ class PaneProperty(NamedTuple):
 
 
 class PaneRGB(NamedTuple):
+    """Pane color data object."""
     measured_data: PaneProperty
     coated_rgb: List[float]
     glass_rgb: List[float]
@@ -155,6 +182,7 @@ class PaneRGB(NamedTuple):
 
 
 class WeaMetaData(NamedTuple):
+    """Weather related meta data object."""
     city: str
     country: str
     latitude: float
@@ -173,6 +201,7 @@ class WeaMetaData(NamedTuple):
 
 
 class WeaDataRow(NamedTuple):
+    """Weather related data object."""
     month: int
     day: int
     hour: int
@@ -190,6 +219,7 @@ class WeaDataRow(NamedTuple):
 
 
 class MradModel(NamedTuple):
+    """Mrad model object."""
     material_path: str
     window_groups: Dict[str, List[Primitive]]
     window_normals: List[Vector]
@@ -204,6 +234,12 @@ class MradModel(NamedTuple):
 
 @dataclass
 class MradPath:
+    """
+    This object holds all the paths during a mrad run.
+
+    Attributes:
+        smx(Path): sky matrix file path
+    """
     smx: Optional[Path] = None
     pvmx: Dict[str, Path] = field(default_factory=dict)
     vvmx: Dict[str, Path] = field(default_factory=dict)

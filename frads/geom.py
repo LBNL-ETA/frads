@@ -1,5 +1,6 @@
 """
-Utilities for handling geometries.
+This module contains definitions of Vector and Polygon objects
+and other geometry related routines.
 """
 
 from __future__ import annotations
