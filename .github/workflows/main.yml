@@ -44,12 +44,16 @@ jobs:
       run: |
         ver=$(gh release list -R LBNL-ETA/Radiance -L 1 | cut -f 3)
         gh release download $ver -R LBNL-ETA/Radiance -p '*Linux.zip'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Download latest EnergyPlus
       id: download_energyplus_asset
       run: |
         ver=$(gh release list -R NREL/EnergyPlus -L 1 | cut -f 3)
         gh release download $ver -R NREL/EnergyPlus -p '*Ubuntu2*.tar.gz'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # with:
         # repo: 'NREL/EnergyPlus'
         # file: 'EnergyPlus-9.6.0-9f02123d77-Linux-Ubuntu20.04-x86_64.tar.gz'
