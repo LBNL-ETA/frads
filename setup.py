@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="frads",
-    version="0.2.5",
+    version="0.2.6",
     author="LBNL",
     author_email="taoningwang@lbl.gov",
     long_description=long_description,
