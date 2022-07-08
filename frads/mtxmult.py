@@ -13,6 +13,7 @@ from frads import parsers
 
 try:
     import numpy as np
+
     NUMPY_FOUND = True
 except ModuleNotFoundError:
     NUMPY_FOUND = False
@@ -40,6 +41,7 @@ def batch_dctimestep(
             proc = sp.Popen(cmd, stdout=wtr)
         if i % nproc == 0:
             proc.wait()
+    proc.wait()
 
 
 def batch_pcomb(
@@ -94,6 +96,7 @@ def batch_pcomb(
             proc = sp.Popen(cmd, stdout=wtr)
         if ni % nproc == 0:
             proc.wait()
+    proc.wait()
 
 
 def rpxop():
@@ -283,10 +286,13 @@ def rad_mtxmult3(*mtxs, weights: tuple = (), no_header=True):
 
 def mtxmult(*mtxs):
     if NUMPY_FOUND:
+
         def mtx_parser(fpath):
             if fpath.suffix == ".xml":
                 proc = sp.run(
-                    ["rmtxop", fpath], check=True, stdout=sp.PIPE,
+                    ["rmtxop", fpath],
+                    check=True,
+                    stdout=sp.PIPE,
                 )
                 raw = proc.stdout
             else:

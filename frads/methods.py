@@ -17,6 +17,7 @@ from typing import Tuple
 from frads import geom
 from frads import sky
 from frads import matrix
+
 # from frads import ncp
 from frads import mtxmult
 from frads import parsers
@@ -139,11 +140,11 @@ def assemble_model(config: ConfigParser) -> MradModel:
     if glow_mat not in material_primitives:
         material_primitives.append(glow_mat)
     # _, material_path = tf.mkstemp(suffix="all_material")
-    material_path = "all_material" + utils.id_generator()
+    material_path = "all_material_{utils.id_generator()}.rad"
     with open(material_path, "w") as wtr:
         [wtr.write(str(primitive) + "\n") for primitive in material_primitives]
-    _blackenvpath = "blackened.rad"
-    with open(_blackenvpath, "w") as wtr:
+    black_env_path = f"blackened_{utils.id_generator()}.rad"
+    with open(black_env_path, "w") as wtr:
         for path in config["Model"]["scene"].split():
             wtr.write(f"\n!xform -m black {path}")
     return MradModel(
@@ -156,7 +157,7 @@ def assemble_model(config: ConfigParser) -> MradModel:
         rcvr_sky,
         bsdf_mat,
         cfs_path,
-        _blackenvpath,
+        black_env_path,
     )
 
 
@@ -208,7 +209,7 @@ def view_matrix_pt(
     if direct:
         logger.info("Computing direct view matrix for sensor grid:")
         _opt += " -ab 1"
-        _env = [model.material_path, model.blackenvpath]
+        _env = [model.material_path, model.black_env_path]
     else:
         logger.info("Computing view matrix for sensor grid:")
     receiver_windows = Receiver(receiver="", basis=config["SimControl"]["vmx_basis"])
@@ -252,18 +253,15 @@ def view_matrix_vu(
     """Prepare matrices using three-phase methods."""
     _opt = config["SimControl"]["vmx_opt"]
     _env = [model.material_path] + config["Model"]["scene"].split()
-    direct_msg = " "
+    direct_msg = ""
     if direct:
         _opt += " -i -ab 1"
-        _env = [model.material_path, model.blackenvpath]
-        direct_msg = " direct-only matrix "
+        _env = [model.material_path, model.black_env_path]
+        direct_msg = " direct-only"
     _opt += f' -n {config["SimControl"]["nprocess"]}'
     overwrite = config.getboolean("SimControl", "overwrite", fallback=False)
-    logger.info("Computing image-based view matrix:")
     for view, sender_view in model.sender_view.items():
-        vrcvr_windows = Receiver(
-            receiver="", basis=config["SimControl"]["vmx_basis"]
-        )
+        vrcvr_windows = Receiver(receiver="", basis=config["SimControl"]["vmx_basis"])
         for wname, window_prim in model.window_groups.items():
             _name = view + wname
             if direct:
@@ -279,11 +277,24 @@ def view_matrix_vu(
                 out=out,
             )
         if direct:
-            exists = all([any(d.iterdir()) for d in mpath.vvmxd[_name].parents[1].glob("vvmx*_d")])
+            exists = all(
+                [
+                    any(d.iterdir())
+                    for d in mpath.vvmxd[_name].parents[1].glob("vvmx*_d")
+                ]
+            )
         else:
-            exists = all([any(d.iterdir()) for d in mpath.vvmx[_name].parents[1].glob("vvmx*[!_d]")])
-        if (not exists) or config.getboolean("SimControl", "overwrite"):
-            matrix.rfluxmtx(sender=sender_view, receiver=vrcvr_windows, env=_env, opt=_opt, out=None)
+            exists = all(
+                [
+                    any(d.iterdir())
+                    for d in mpath.vvmx[_name].parents[1].glob("vvmx*[!_d]")
+                ]
+            )
+        if (not exists) or overwrite:
+            logger.info(f"Computing{direct_msg} image-based view matrix")
+            matrix.rfluxmtx(
+                sender=sender_view, receiver=vrcvr_windows, env=_env, opt=_opt, out=None
+            )
 
 
 # def facade_matrix(mpath: MradPath, model: MradModel, config: ConfigParser, direct=False) -> None:
@@ -303,7 +314,7 @@ def view_matrix_vu(
 #     overwrite = config.getboolean("SimControl", "overwrite", fallback=False)
 #     if direct:
 #         fmx_opt += " -ab 0"
-#         _env = [model.material_path, model.blackenvpath]
+#         _env = [model.material_path, model.black_env_path]
 #     ncp_prims = {}
 #     for ncppath in config["Model"]["ncppath"].split():
 #         name: str = Path(ncppath).stem
@@ -331,7 +342,9 @@ def view_matrix_vu(
 #     return fmxs
 
 
-def daylight_matrix(mpath: MradPath, model: MradModel, config: ConfigParser, direct=False) -> None:
+def daylight_matrix(
+    mpath: MradPath, model: MradModel, config: ConfigParser, direct=False
+) -> None:
     """Call rfluxmtx to generate daylight matrices for each sender surface."""
     logger.info("Computing daylight matrix...")
     dmx_opt = config["SimControl"]["dmx_opt"]
@@ -339,15 +352,15 @@ def daylight_matrix(mpath: MradPath, model: MradModel, config: ConfigParser, dir
     dmx_env = [model.material_path] + config["Model"]["scene"].split()
     if direct:
         dmx_opt += " -ab 0"
-        dmx_env = [model.material_path, model.blackenvpath]
+        dmx_env = [model.material_path, model.black_env_path]
     for sname, surface_primitives in model.window_groups.items():
         _name = sname
         if direct:
             mpath.dmxd[sname] = Path("Matrices", f"dmx_{_name}_d.mtx")
-            out=mpath.dmxd[sname]
+            out = mpath.dmxd[sname]
         else:
             mpath.dmx[sname] = Path("Matrices", f"dmx_{_name}.mtx")
-            out=mpath.dmx[sname]
+            out = mpath.dmx[sname]
         sndr_window = matrix.surface_as_sender(
             prim_list=surface_primitives, basis=config["SimControl"]["vmx_basis"]
         )
@@ -396,10 +409,18 @@ def blacken_env(model, config: ConfigParser):
         wtr.write("\n".join(list(map(str, glowing_window))))
     vmap_oct = "vmap.oct"
     cdmap_oct = "cdmap.oct"
-    vmap_cmd = ["oconv", "-f", model.material_path] + config["Model"]["scene"].split() + [bwindow_path]
+    vmap_cmd = (
+        ["oconv", "-f", model.material_path]
+        + config["Model"]["scene"].split()
+        + [bwindow_path]
+    )
     with open(vmap_oct, "wb") as wtr:
         sp.run(vmap_cmd, check=True, stdout=wtr)
-    cdmap_cmd = ["oconv", "-f", model.material_path] + config["Model"]["scene"].split() + [gwindow_path]
+    cdmap_cmd = (
+        ["oconv", "-f", model.material_path]
+        + config["Model"]["scene"].split()
+        + [gwindow_path]
+    )
     with open(cdmap_oct, "wb") as wtr:
         sp.run(cdmap_cmd, check=True, stdout=wtr)
     os.remove(bwindow_path)
@@ -407,7 +428,9 @@ def blacken_env(model, config: ConfigParser):
     return vmap_oct, cdmap_oct
 
 
-def calc_4phase_pt(mpath, model, datetime_stamps, vmx, fmx, dmx, smx, config: ConfigParser):
+def calc_4phase_pt(
+    mpath, model, datetime_stamps, vmx, fmx, dmx, smx, config: ConfigParser
+):
     """."""
     logger.info("Computing for 4-phase sensor grid results")
     presl = []
@@ -442,7 +465,7 @@ def calc_4phase_pt(mpath, model, datetime_stamps, vmx, fmx, dmx, smx, config: Co
 #     _env = [model.material_path] + config["Model"]["scene"].split()
 #     if direct:
 #         # need to add ncp path
-#         _env = [model.material_path, model.blackenvpath]
+#         _env = [model.material_path, model.black_env_path]
 #         _opt += " -ab 0"
 #     ncp_prims = None
 #     for wname in model.window_groups:
@@ -478,7 +501,9 @@ def calc_4phase_pt(mpath, model, datetime_stamps, vmx, fmx, dmx, smx, config: Co
 #         )
 
 
-def direct_sun_matrix_pt(mpath: MradPath, model: MradModel, config: ConfigParser) -> None:
+def direct_sun_matrix_pt(
+    mpath: MradPath, model: MradModel, config: ConfigParser
+) -> None:
     """Compute direct sun matrix for sensor points.
     Args:
         smx_path: path to sun only sky matrix
@@ -487,8 +512,6 @@ def direct_sun_matrix_pt(mpath: MradPath, model: MradModel, config: ConfigParser
     """
 
     logger.info("Direct sun matrix for sensor grid")
-    overwrite = config.getboolean("SimControl", "overwrite", fallback=False)
-    pcdsmx = {}
     for grid_name, sender_grid in model.sender_grid.items():
         mpath.pcdsmx[grid_name] = Path("Matrices", f"pcdsmx_{grid_name}.mtx")
         if regen(mpath.pcdsmx[grid_name], config):
@@ -501,7 +524,7 @@ def direct_sun_matrix_pt(mpath: MradPath, model: MradModel, config: ConfigParser
             )
             cdsmx_opt = config["SimControl"]["cdsmx_opt"]
             cdsmx_opt += f' -n {config["SimControl"]["nprocess"]}'
-            cdsenv = [model.material_path, model.blackenvpath, *model.cfs_paths]
+            cdsenv = [model.material_path, model.black_env_path, *model.cfs_paths]
             sun_oct = Path("sun.oct")
             matrix.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
             matrix.rcontrib(
@@ -535,7 +558,7 @@ def direct_sun_matrix_vu(
         "%04d" % (int(line[3:]) - 1) for line in rcvr_sun.modifier.splitlines()
     ]
     sun_oct = Path("sun.oct")
-    cdsenv = [model.material_path, model.blackenvpath, *model.cfs_paths]
+    cdsenv = [model.material_path, model.black_env_path, *model.cfs_paths]
     matrix.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
     cdsmx_opt = config["SimControl"]["cdsmx_opt"]
     cdsmx_opt += f' -n {config["SimControl"]["nprocess"]}'
@@ -588,7 +611,10 @@ def direct_sun_matrix_vu(
 
 
 def calc_2phase_pt(
-    mpath: MradPath, model: MradModel, datetime_stamps: Sequence[str], config: ConfigParser
+    mpath: MradPath,
+    model: MradModel,
+    datetime_stamps: Sequence[str],
+    config: ConfigParser,
 ) -> None:
     """."""
     logger.info("Computing for 2-phase sensor grid results.")
@@ -638,7 +664,10 @@ def calc_3phase_pt(
         presl = []
         for wname in model.window_groups:
             _res = mtxmult.mtxmult(
-                mpath.pvmx[grid_name + wname], model.bsdf_xml[wname], mpath.dmx[wname], mpath.smx
+                mpath.pvmx[grid_name + wname],
+                model.bsdf_xml[wname],
+                mpath.dmx[wname],
+                mpath.smx,
             )
             if isinstance(_res, bytes):
                 presl.append(
@@ -657,7 +686,9 @@ def calc_3phase_pt(
                 wtr.write(",".join(map(str, val)) + "\n")
 
 
-def calc_3phase_vu(mpath: MradPath, model: MradModel, datetime_stamps, config: ConfigParser):
+def calc_3phase_vu(
+    mpath: MradPath, model: MradModel, datetime_stamps, config: ConfigParser
+):
     """."""
     logger.info("Computing for 3-phase image-based results:")
     for view in model.sender_view:
@@ -713,10 +744,16 @@ def calc_5phase_pt(
             prescd = mult_cds.T.tolist()
         for wname in model.window_groups:
             _res = mtxmult.mtxmult(
-                mpath.pvmx[grid_name + wname], model.bsdf_xml[wname], mpath.dmx[wname], mpath.smx
+                mpath.pvmx[grid_name + wname],
+                model.bsdf_xml[wname],
+                mpath.dmx[wname],
+                mpath.smx,
             )
             _resd = mtxmult.mtxmult(
-                mpath.pvmxd[grid_name + wname], model.bsdf_xml[wname], mpath.dmxd[wname], mpath.smxd
+                mpath.pvmxd[grid_name + wname],
+                model.bsdf_xml[wname],
+                mpath.dmxd[wname],
+                mpath.smxd,
             )
             if isinstance(_res, bytes):
                 _res = [
@@ -803,7 +840,7 @@ def calc_5phase_vu(
                 # proc = sp.Popen(cmd)
                 sp.run(cmd, check=True)
                 # if i % nprocess == 0:
-                    # proc.wait()
+                # proc.wait()
             # proc.wait()
             logger.info("Combine results for each window groups.")
             res3 = Path(tf.mkdtemp(dir=td))
@@ -848,11 +885,10 @@ def calc_5phase_vu(
                 for idx, stamp in enumerate(datetime_stamps_d6)
             ]
             opath.mkdir(exist_ok=True)
-            ni = 0
+            cmds = []
             for hdr3 in os.listdir(res3):
                 if hdr3 in os.listdir(vrescd):
-                    ni += 1
-                    cmd = [
+                    cmds.append([
                         "pcomb",
                         "-o",
                         str(res3 / hdr3),
@@ -861,13 +897,20 @@ def calc_5phase_vu(
                         "-o",
                         str(res3d / hdr3),
                         "-o",
-                        str(vrescd / hdr3)]
-                    with open(opath / hdr3, "wb") as wtr:
-                        proc = sp.Popen(cmd, stdout=wtr)
+                        str(vrescd / hdr3),
+                        opath / hdr3,
+                    ])
+                else:
+                    os.replace(res3 / hdr3, opath / hdr3)
+            if len(cmds) > 0:
+                ni = 0
+                for cmd in cmds:
+                    ni += 1
+                    with open(cmd[-1], "wb") as wtr:
+                        proc = sp.Popen(cmd[:-1], stdout=wtr)
                     if ni % nprocess == 0:
                         proc.wait()
-                else:
-                    os.replace(res3/hdr3, opath/hdr3)
+                proc.wait()
             logger.info(f"Done computing for {view}")
 
 
@@ -882,9 +925,7 @@ def regen(path: Path, config) -> bool:
         exist = True
     else:
         exist = False
-    return (not exist) or config.getboolean(
-        "SimControl", "overwrite", fallback=False
-    )
+    return (not exist) or config.getboolean("SimControl", "overwrite", fallback=False)
 
 
 def two_phase(model: MradModel, config: ConfigParser) -> MradPath:
@@ -901,15 +942,16 @@ def two_phase(model: MradModel, config: ConfigParser) -> MradPath:
     )
     if regen(mpath.smx, config):
         sky.gendaymtx(
-            mpath.smx, int(config["SimControl"]["smx_basis"][-1]), data=wea_data, meta=wea_meta
+            mpath.smx,
+            int(config["SimControl"]["smx_basis"][-1]),
+            data=wea_data,
+            meta=wea_meta,
         )
     prep_2phase_pt(mpath, model, config)
     prep_2phase_vu(mpath, model, config)
     if not config.getboolean("SimControl", "no_multiply", fallback=False):
         calc_2phase_pt(mpath, model, datetime_stamps, config)
         calc_2phase_vu(mpath, datetime_stamps, config)
-    os.remove(model.material_path)
-    os.remove(model.blackenvpath)
     return mpath
 
 
@@ -927,7 +969,10 @@ def three_phase(model: MradModel, config: ConfigParser, direct=False) -> MradPat
     )
     if regen(mpath.smx, config):
         sky.gendaymtx(
-            mpath.smx, int(config["SimControl"]["smx_basis"][-1]), data=wea_data, meta=wea_meta
+            mpath.smx,
+            int(config["SimControl"]["smx_basis"][-1]),
+            data=wea_data,
+            meta=wea_meta,
         )
     view_matrix_pt(mpath, model, config)
     view_matrix_vu(mpath, model, config)
@@ -944,7 +989,11 @@ def three_phase(model: MradModel, config: ConfigParser, direct=False) -> MradPat
         )
         mpath.smxd = Path("Matrices") / (wea_name + "_d.smx")
         sky.gendaymtx(
-            mpath.smxd, int(config["SimControl"]["smx_basis"][-1]), data=wea_data, meta=wea_meta, direct=True
+            mpath.smxd,
+            int(config["SimControl"]["smx_basis"][-1]),
+            data=wea_data,
+            meta=wea_meta,
+            direct=True,
         )
         mpath.smx_sun_img = Path("Matrices") / (wea_name + "_d6_img.smx")
         sky.gendaymtx(
@@ -972,7 +1021,6 @@ def three_phase(model: MradModel, config: ConfigParser, direct=False) -> MradPat
         view_matrix_vu(mpath, model, config, direct=True)
         os.remove(vmap_oct)
         os.remove(cdmap_oct)
-        os.remove(model.blackenvpath)
         if not config.getboolean("SimControl", "no_multiply", fallback=False):
             calc_5phase_pt(
                 mpath,
@@ -991,7 +1039,6 @@ def three_phase(model: MradModel, config: ConfigParser, direct=False) -> MradPat
         if not config.getboolean("SimControl", "no_multiply", fallback=False):
             calc_3phase_pt(mpath, model, datetime_stamps, config)
             calc_3phase_vu(mpath, model, datetime_stamps, config)
-    os.remove(model.material_path)
     return mpath
 
 
@@ -1059,7 +1106,7 @@ def three_phase(model: MradModel, config: ConfigParser, direct=False) -> MradPat
 #         )
 #     else:
 #         calc_4phase_pt(mpath, model, datetime_stamps, config)
-        # calc_4phase_vu(vvmxs, fmxs, dmxs, smx)
+# calc_4phase_vu(vvmxs, fmxs, dmxs, smx)
 
 
 #     def prep_4phase_vu(self):
