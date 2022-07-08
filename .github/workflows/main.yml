@@ -53,7 +53,7 @@ jobs:
       with:
         repo: 'NREL/Radiance'
         regex: true
-        file: "EnergyPlus.+Ubuntu2.+x86_64.tar.gz"
+        file: "EnergyPlus.*\\Ubuntu2.*\\86_64.tar.gz"
           # uses: i3h/download-release-asset@v1
           # with:
           # owner: NREL
@@ -113,21 +113,19 @@ jobs:
 
     - name: Download latest Radiance binaries
       id: download_release_asset
-      uses: i3h/download-release-asset@v1
+      uses: dsaltares/fetch-gh-release-asset@master
       with:
-        owner: LBNL-ETA
-        repo: Radiance
-        tag: latest
-        file: /OSX.zip$/
+        repo: 'LBNL-ETA/Radiance'
+        regex: true
+        file: ".*\\OSX.zip"
 
-    - name: Download EnergyPlus
+    - name: Download latest EnergyPlus
       id: download_energyplus_asset
-      uses: i3h/download-release-asset@v1
+      uses: dsaltares/fetch-gh-release-asset@master
       with:
-        owner: NREL
-        repo: EnergyPlus
-        tag: latest
-        file: /EnergyPlus.+macOS11.+x86_64.tar.gz/
+        repo: 'NREL/Radiance'
+        regex: true
+        file: "EnergyPlus.*\\macOS11.*\\86_64.tar.gz"
 
     - name: Install Radiance
       run: |
@@ -183,21 +181,19 @@ jobs:
 
     - name: Download latest Radiance binaries
       id: download_release_asset
-      uses: i3h/download-release-asset@v1
+      uses: dsaltares/fetch-gh-release-asset@master
       with:
-        owner: LBNL-ETA
-        repo: Radiance
-        tag: latest
-        file: /Windows.zip$/
+        repo: 'LBNL-ETA/Radiance'
+        regex: true
+        file: ".*\\Windows.zip"
 
-    - name: Download EnergyPlus
+    - name: Download latest EnergyPlus
       id: download_energyplus_asset
-      uses: i3h/download-release-asset@v1
+      uses: dsaltares/fetch-gh-release-asset@master
       with:
-        owner: NREL
-        repo: EnergyPlus
-        tag: latest
-        file: /EnergyPlus.+Windows.+x86_64.zip/
+        repo: 'NREL/Radiance'
+        regex: true
+        file: "EnergyPlus.*\\Windows.*\\86_64.tar.gz"
 
     - name: Install Radiance
       run: |
