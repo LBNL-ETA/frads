@@ -1,10 +1,10 @@
 import unittest
 import os
+from frads import parsers
 from frads import sky
 
 
 class TestSky(unittest.TestCase):
-
     def test_basis_glow(self):
         basis = "r1"
         result = sky.basis_glow(basis)
@@ -48,7 +48,11 @@ class TestSky(unittest.TestCase):
 
     def test_gendaylit_cmd(self):
         """Get a gendaylit command as a list."""
-        pass
+        result = sky.gendaylit_cmd(
+            "1", "2", "13.5", "37", "122.2", "120", year="2022", dir_norm_ir="500", dif_hor_ir="300"
+        )
+        answer = "gendaylit 1 2 13.5 -a 37 -o 122.2 -m 120 -y 2022 -W 500 300"
+        self.assertEqual(" ".join(result), answer)
 
     def test_solar_angle(self):
         pass
@@ -66,7 +70,7 @@ class TestSky(unittest.TestCase):
         """Remove non-daylight hour entries."""
         pass
 
-    def test_remove_wea_zero_entry(self):
+    def test_filter_wea_zero_entry(self):
         """Remove wea data entries with zero solar luminance.
         If window normal supplied, eliminate entries not seen by window.
         Solar luminance determined using Perez sky model.
@@ -74,24 +78,14 @@ class TestSky(unittest.TestCase):
         """
         pass
 
-    def test_parse_wea(self):
-        pass
-
-    def test_parse_epw(self) -> tuple:
-        """Parse epw file and return wea header and data."""
-        pass
-
-    def test_epw2wea(self):
-        """epw2wea with added filter."""
-        pass
-
     def test_culled_sun(self):
         with open("Resources/USA_CA_Oakland.Intl.AP.724930_TMY3.epw") as rdr:
-            epw = rdr.read()
-        wea_metadata, wea_data = sky.epw2wea(
-            epw, dhour=True, shour=6, ehour=20, remove_zero=True
+            wea_metadata, wea_data = parsers.parse_epw(rdr.read())
+
+        wea_data, _ = sky.filter_wea(wea_data, wea_metadata, start_hour=6, end_hour=20, remove_zero=True, daylight_hours_only=True)
+        sky.gendaymtx(
+            "sun.mtx", 6, data=wea_data, meta=wea_metadata, direct=True, onesun=True
         )
-        sky.gendaymtx("sun.mtx", 6, data=wea_data, meta=wea_metadata, direct=True, onesun=True)
         gensun = sky.Gensun(6)
         suns, mod = gensun.gen_cull(smx_path="sun.mtx")
         self.assertEqual(len(suns.splitlines()), 5186)

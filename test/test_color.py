@@ -15,7 +15,7 @@ class TestUtils(unittest.TestCase):
     def test_load_cie_tristi(self):
         wvl = list(range(300, 1000, 5))
         observer = "2"
-        trix, triy, triz, mlnp_i = color.load_cie_tristi(wvl, observer)
+        trix, triy, triz, mlnp_i, widx = color.load_cie_tristi(wvl, observer)
         answer_path = os.path.join(self.data_path, "sample_tri.dat")
         with open(answer_path, "r") as rdr:
             answer = rdr.readlines()

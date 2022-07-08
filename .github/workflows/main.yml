@@ -45,7 +45,7 @@ jobs:
       with:
         repo: 'LBNL-ETA/Radiance'
         regex: true
-        file: "*Linux.zip"
+        file: ".*\\Linux.zip"
 
     - name: Download latest EnergyPlus
       id: download_energyplus_asset
