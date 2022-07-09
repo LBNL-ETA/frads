@@ -76,7 +76,7 @@ def batch_pcomb(
     if not equal_len:
         logger.warning("Input directories don't the same number of files")
     grouped = [list(i) for i in zip(*expanded_inp)]
-    rstr_list = [f"ri({i})" for i, _ in enumerate(expanded_inp)]
+    rstr_list = [f"ri({i+1})" for i, _ in enumerate(expanded_inp)]
     frstr_list = rstr_list + ops
     frstr_list[::2] = rstr_list
     frstr_list[1::2] = ops
