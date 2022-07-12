@@ -82,15 +82,12 @@ def gen_sun_source_full(mf: int) -> Tuple[str, str]:
         and associated modifier string.
     """
     runlen = 144 * mf**2 + 3
-    rsrc = utils.Reinsrc(mf)
     mod_str = os.linesep.join([f"sol{i}" for i in range(1, runlen)])
-    out_lines = []
-    for i in range(1, runlen):
-        dirs = rsrc.dir_calc(i)
-        line = f"void light sol{i} 0 0 3 1 1 1 sol{i} "
-        line += "source sun 0 0 4 {:.6g} {:.6g} {:.6g} 0.533".format(*dirs[:-1])
-        out_lines.append(line)
-    return os.linesep.join(out_lines) + os.linesep, mod_str
+    dirs, omgs = utils.calc_reinsrc_dir(mf)
+    lines = []
+    for i, d in enumerate(dirs):
+        lines.append(f"void light sol{i} 0 0 3 1 1 1 sol{i} source sun 0 0 4 {d.x:.6g} {d.y:.6g} {d.z:.6g} 0.533")
+    return os.linesep.join(lines) + os.linesep, mod_str
 
 
 def gen_sun_source_culled(mf, smx_path=None, window_normals=None) -> Tuple[str, str, str]:
@@ -108,43 +105,42 @@ def gen_sun_source_culled(mf, smx_path=None, window_normals=None) -> Tuple[str, 
         corresponding modifier strings, and the full set of modifier string.
     """
     runlen = 144 * mf**2 + 3
-    rsrc = utils.Reinsrc(mf)
+    # rsrc = utils.Reinsrc(mf)
+    dirs, omgs = utils.calc_reinsrc_dir(mf)
     full_mod_str = os.linesep.join([f"sol{i}" for i in range(1, runlen)])
     win_norm = []
     if smx_path is not None:
-        cmd = f"rmtxop -ff -c .3 .6 .1 -t {smx_path} "
-        cmd += "| getinfo - | total -if5186 -t,"
-        dtot = [float(i) for i in sp.check_output(cmd, shell=True).split(b",")]
+        cmd1 = ["rmtxop", "-ff", "-c", ".3", ".6", ".1", "-t", smx_path]
+        cmd2 = ["getinfo", "-"]
+        cmd3 = ["total", f"-if{runlen-1}", "-t,"]
+        proc1 = sp.run(cmd1, stdout=sp.PIPE)
+        proc2 = sp.run(cmd2, input=proc1.stdout, stdout=sp.PIPE)
+        proc3 = sp.run(cmd3, input=proc2.stdout, stdout=sp.PIPE)
+        dtot = [float(i) for i in proc3.stdout.split(b",")]
     else:
         dtot = [1] * runlen
     out_lines = []
     mod_str = []
     if window_normals is not None:
         win_norm = window_normals
-        for i in range(1, runlen):
-            dirs = geom.Vector(*rsrc.dir_calc(i)[:-1])
+        for i, d in enumerate(dirs):
             _mod = "sol" + str(i)
             v = 0
-            if dtot[i - 1] > 0:
+            if dtot[i] > 0:
                 for norm in win_norm:
-                    if norm * dirs < 0:
+                    if norm * d < 0:
                         v = 1
                         mod_str.append(_mod)
                         break
-            line = f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} "
-            line += f"source sun 0 0 4 {dirs.z:.6g} {dirs.x:.6g} {dirs.z:.6g} 0.533"
-            out_lines.append(line)
+            out_lines.append(f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} source sun 0 0 4 {d.x:.6g} {d.y:.6g} {d.z:.6g} 0.533")
     else:
-        for i in range(1, runlen):
-            dirs = geom.Vector(*rsrc.dir_calc(i)[:-1])
-            _mod = "sol" + str(i)
+        for i, d in enumerate(dirs):
+            _mod = f"sol{i}"
             v = 0
-            if dtot[i - 1] > 0:
+            if dtot[i] > 0:
                 v = 1
                 mod_str.append(_mod)
-            line = f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} "
-            line += f"source sun 0 0 4 {dirs.z:.6g} {dirs.x:.6g} {dirs.z:.6g} 0.533"
-            out_lines.append(line)
+            out_lines.append(f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} source sun 0 0 4 {d.x:.6g} {d.y:.6g} {d.z:.6g} 0.533")
     logger.debug(out_lines)
     logger.debug(mod_str)
     return os.linesep.join(out_lines), os.linesep.join(mod_str), full_mod_str
@@ -205,6 +201,26 @@ def gendaymtx(
     with open(out, "wb") as wtr:
         sp.run(cmd, input=stdin, stdout=wtr)
     return cmd
+
+
+def gen_perez_sky(row, meta, grefl=0.2, spect="0", rotate=None) -> str:
+    gendaylit = gendaylit_cmd(
+        str(row.month),
+        str(row.day),
+        str(row.hours),
+        str(meta.latitude),
+        str(meta.longitude),
+        str(meta.timezone),
+        dir_norm_ir=str(row.dni),
+        dif_hor_ir=str(row.dhi),
+    )
+    out = []
+    rot = f"| xform -rz {rotate}" if rotate is not None else ""
+    out.append(f"!{' '.join(gendaylit)}{rot} \n")
+    out.append("skyfunc glow sglow 0 0 4 1 1 1 0\n")
+    out.append("sglow source sky 0 0 4 0 0 1 180\n")
+    out.append("sglow source ground 0 0 4 0 0 -1 180\n")
+    return " ".join(out)
 
 
 def gendaylit_cmd(
@@ -349,8 +365,9 @@ def filter_data_by_direct_sun(
                 if window_normal is not None:
                     for normal in window_normal:
                         if normal * dirs < -0.035:  # 2deg tolerance
+                        # if normal * dirs < 0:  # 2deg tolerance
                             logger.debug(
-                                f"{row.month} {row.day} {row.hours} inside of 176deg of {normal}"
+                                f"{row.month} {row.day} {row.hours} inside of 176deg of {normal} at {dirs}"
                             )
                             new_dataline.append(row)
                             break
@@ -368,7 +385,7 @@ def filter_wea(
     end_hour: Optional[float] = None,
     daylight_hours_only=False,
     remove_zero=False,
-    window_normals: Optional[List[geom.Vector]]=None,
+    window_normals: Optional[List[geom.Vector]] = None,
 ) -> Tuple[List[WeaDataRow], List[Any]]:
     """
     Obtain and prepare weather file data.
