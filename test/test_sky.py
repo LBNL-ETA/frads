@@ -1,10 +1,15 @@
 import unittest
-import os
+from pathlib import Path
 from frads import parsers
 from frads import sky
+from frads import utils
 
 
 class TestSky(unittest.TestCase):
+
+    epw_path = Path("Resources", "USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
+    reinsrc4_path = Path("data", "reinsrc4.rad")
+
     def test_basis_glow(self):
         basis = "r1"
         result = sky.basis_glow(basis)
@@ -20,30 +25,31 @@ class TestSky(unittest.TestCase):
         answer += "0\n0\n4 0 0 1 180\n"
         self.assertEqual(result, answer)
 
-    def test_gensun(self):
+    def test_gen_sun_source_full(self):
         """Generate sun sources for matrix generation."""
-        pass
-
-    def test_epw2sunmtx(self):
-        """Generate reinhart 6 sun matrix file from a epw file."""
-        pass
-
-    def test_loc2sunmtx(self):
-        """Generate a psuedo reinhart 6 sun matrix file given lat, lon, etc..."""
-        pass
+        mf = 4
+        prim_str, mod_str = sky.gen_sun_source_full(mf)
+        prims = parsers.parse_primitive(prim_str.splitlines())
+        answer_prims = utils.unpack_primitives(self.reinsrc4_path)
+        for aprim, prim in zip(prims, answer_prims):
+            self.assertEqual(str(aprim), str(prim))
 
     def test_gendaymtx(self):
+        """Generate a psuedo reinhart 6 sun matrix file given lat, lon, etc..."""
+        # sky.gendaymtx(
+        #     sun_mtx, 6, data=wea_data, meta=wea_metadata, direct=True, onesun=True
+        # )
+        pass
+
+    def test_filter_wea(self):
         """."""
+        # wea_data, _ = sky.filter_wea(
+        #     wea_data, wea_metadata, start_hour=6, end_hour=20,
+        #     remove_zero=True, daylight_hours_only=True)
         pass
 
-    def test_gendaymtx_cmd(self):
-        """."""
-        pass
-
-    def test_parse_csv(self):
-        pass
-
-    def test_sky_cont(self):
+    def test_check_sun_above_horizon(self):
+        sky.check_sun_above_horizon()
         pass
 
     def test_gendaylit_cmd(self):
@@ -55,6 +61,7 @@ class TestSky(unittest.TestCase):
         self.assertEqual(" ".join(result), answer)
 
     def test_solar_angle(self):
+        # sky.filter_data_by_direct_sun()
         pass
 
     def test_start_end_hour(self):
@@ -78,19 +85,13 @@ class TestSky(unittest.TestCase):
         """
         pass
 
-    def test_culled_sun(self):
-        with open("Resources/USA_CA_Oakland.Intl.AP.724930_TMY3.epw") as rdr:
-            wea_metadata, wea_data = parsers.parse_epw(rdr.read())
-
-        wea_data, _ = sky.filter_wea(wea_data, wea_metadata, start_hour=6, end_hour=20, remove_zero=True, daylight_hours_only=True)
-        sky.gendaymtx(
-            "sun.mtx", 6, data=wea_data, meta=wea_metadata, direct=True, onesun=True
-        )
-        gensun = sky.Gensun(6)
-        suns, mod = gensun.gen_cull(smx_path="sun.mtx")
-        self.assertEqual(len(suns.splitlines()), 5186)
-        self.assertEqual(len(mod.splitlines()), 615)
-        os.remove("sun.mtx")
+    def test_gen_sun_source_culled(self):
+        # mf = 6
+        # suns, mod, full_mod = sky.gen_sun_source_culled(mf, smx_path=self.sunmtx_path)
+        # self.assertEqual(len(suns.splitlines()), 5186)
+        # self.assertEqual(len(mod.splitlines()), 615)
+        # sun_mtx.unlink()
+        pass
 
 
 if __name__ == "__main__":

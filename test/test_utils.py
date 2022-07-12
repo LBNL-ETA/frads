@@ -1,5 +1,8 @@
 import os
+from pathlib import Path
 import unittest
+
+from frads import geom
 from frads import utils
 from frads.types import PaneProperty
 from frads.types import PaneRGB
@@ -10,6 +13,8 @@ class TestUtils(unittest.TestCase):
     test_dir_path = os.path.dirname(__file__)
     data_path = os.path.join(test_dir_path, "data")
     check_decimal_to = 6
+    reinsrc6_path = Path("data", "reinsrc6.rad")
+
 
     pane_property_1 = PaneProperty(
         "VE1-2M_Low-E",  # name
@@ -86,8 +91,19 @@ class TestUtils(unittest.TestCase):
     def test_opt2str(self):
         pass
 
-    def test_reinsrc(self):
-        pass
+    def test_calc_reinsrc_dir(self):
+        mf = 6
+        vecs, omgs = utils.calc_reinsrc_dir(mf)
+        with open(self.reinsrc6_path) as rdr:
+            answer_lines = rdr.readlines()
+        answer_vecs = []
+        answer_omgs = []
+        for vec, omg, line in zip(vecs, omgs, answer_lines):
+            x, y, z, aomg = map(float, line.strip().split())
+            self.assertAlmostEqual(vec.x, x, 6)
+            self.assertAlmostEqual(vec.y, y, 6)
+            self.assertAlmostEqual(vec.z, z, 6)
+            self.assertAlmostEqual(omg, aomg, 6)
 
     def test_pt_inclusion(self):
         pass
