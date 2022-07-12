@@ -57,6 +57,12 @@ def mrad_init(args: argparse.Namespace) -> None:
         raise ValueError("Site not defined")
 
     config = ConfigParser(allow_no_value=False)
+    config["DEFAULT"] = {
+        "start_hour": 0,
+        "end_hour": 0,
+        "daylight_hours_only": True,
+        "overwrite": True,
+    }
     config["SimControl"] = {
         "vmx_basis": "kf",
         "vmx_opt": "-ab 5 -ad 65536 -lw 1e-5",
@@ -249,17 +255,12 @@ def glazing():
     aparser = argparse.ArgumentParser(
         prog="glazing", description="Generate BRTDfunc for a glazing system"
     )
-    aparser.add_argument(
-        "-X", "--optics", nargs="+", type=Path, help="Optics file path"
-    )
-    aparser.add_argument(
-        "-C", "--cspace", default="radiance", help="Color space to determine primaries"
-    )
-    aparser.add_argument(
-        "-V", "--observer", default="2", help="CIE Obvserver 2° or 10°"
-    )
-    aparser.add_argument("-D", "--igsdb", nargs="+", help="IGSDB json file path or ID")
-    aparser.add_argument("-T", "--token", help="IGSDB token")
+    egroup = aparser.add_mutually_exclusive_group(required=True)
+    egroup.add_argument("-x", "--optics", nargs="+", type=Path, help="Optics file path")
+    egroup.add_argument("-d", "--igsdb", nargs="+", help="IGSDB json file path or ID")
+    aparser.add_argument("-t", "--token", help="IGSDB token")
+    aparser.add_argument("-c", "--cspace", default="radiance", help="Color space to determine primaries")
+    aparser.add_argument("-s", "--observer", default="2", help="CIE Obvserver 2° or 10°")
     args = aparser.parse_args()
     if args.optics is not None:
         panes = [parsers.parse_optics(fpath) for fpath in args.optics]
@@ -321,7 +322,19 @@ def gengrid():
     if args.op:
         polygon = polygon.flip()
     grid_list = utils.gen_grid(polygon, args.height, args.spacing)
-    grid_str = "\n".join([" ".join(map(str, row)) for row in grid_list])
+    cleanedup = []
+    for row in grid_list:
+        new_row = []
+        for val in row:
+            if val.is_integer():
+                new_row.append(int(val))
+            else:
+                if (rounded := round(val, 1)).is_integer():
+                    new_row.append(int(rounded))
+                else:
+                    new_row.append(rounded)
+        cleanedup.append(new_row)
+    grid_str = "\n".join([" ".join(map(str, row)) for row in cleanedup])
     print(grid_str)
 
 

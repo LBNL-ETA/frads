@@ -89,8 +89,11 @@ COLOR_PRIMARIES["2020"] = {
 
 
 def get_tristi_paths() -> Dict[str, Path]:
-    """Get CIE tri-stimulus file paths.
-    In addition, also getmelanopic action spetra path
+    """Get CIE tri-stimulus and melanopic action spectra data file paths from frads.
+
+    Returns:
+        A dictionary mapping data name to pathlib.Path object.
+
     """
     standards_path = Path(__file__).parent / "data" / "standards"
     cie_path = {}
@@ -110,11 +113,13 @@ def get_tristi_paths() -> Dict[str, Path]:
 def load_cie_tristi(inp_wvl: list, observer: str) -> tuple:
     """Load CIE tristimulus data according to input wavelength.
     Also load melanopic action spectra data as well.
+
     Args:
-        inp_wvl: input wavelength in nm
-        observer: 2° or 10° observer for the colar matching function.
+        inp_wvl(list): a list of input wavelength in nm
+        observer(str): 2° or 10° observer for the colar matching function.
     Returns:
-        Tristimulus XYZ and melanopic action spectra
+        A tuple of cie-x, cie-y, cie-z, melanopic action spectra, and
+        index of input wavelength corresponding to available tristimulus data.
     """
     header_lines = 3
     cie_path = get_tristi_paths()
@@ -139,8 +144,17 @@ def load_cie_tristi(inp_wvl: list, observer: str) -> tuple:
     return trix_i, triy_i, triz_i, mlnp_i, oidx
 
 
-def get_conversion_matrix(prims, reverse=False):
-    # The whole calculation is based on the CIE (x,y) chromaticities below
+def get_conversion_matrix(prims: str, reverse=False) -> Tuple[float]:
+    """
+    Get CIE conversion matrix based on colorspace.
+
+    Args:
+        prims(str): The name of the colorspace, available choices are
+            radiance, adobe, sharp, rimm, 709, p3, 2020
+        reverse(bool): get RGB to XYZ conversion matrix instead
+    Returns:
+        The conversion matrix coefficients in a 1-dimensional tuple.
+    """
 
     cie_x_r = COLOR_PRIMARIES[prims]["cie_x_r"]
     cie_y_r = COLOR_PRIMARIES[prims]["cie_y_r"]
@@ -301,7 +315,7 @@ def spec2xyz(
     return cie_X, cie_Y, cie_Z
 
 
-def xyz2xy(cie_x: float, cie_y: float, cie_z: float) -> tuple:
+def xyz2xy(cie_x: float, cie_y: float, cie_z: float) -> Tuple[float]:
     """Convert CIE XYZ to xy chromaticity."""
     _sum = cie_x + cie_y + cie_z
     if _sum == 0:

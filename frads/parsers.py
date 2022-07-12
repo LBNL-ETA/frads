@@ -267,8 +267,16 @@ def parse_igsdb_json(json_obj: dict):
 
 
 def parse_bsdf_xml(path: str) -> dict:
-    """Parse BSDF file in XML format.
-    TODO: validate xml first before parsing
+    """
+    Parse BSDF file in XML format.
+    This function semi-validate the xml data as it parse through it.
+
+    Args:
+        path(str): filename or file object of a xml file.
+    Returns:
+        A dictionary containing def, Solar, and Visible data.
+    Raises:
+        ValueError if tags not found
     """
     error_msg = f"Error parsing {path}: "
     data_dict: dict = {"Def": "", "Solar": {}, "Visible": {}}
@@ -305,7 +313,16 @@ def parse_bsdf_xml(path: str) -> dict:
 
 
 def parse_rad_header(header_str: str) -> tuple:
-    """Parse a Radiance matrix file header."""
+    """Parse a Radiance matrix file header.
+
+    Args:
+        header_str(str): header as string
+    Returns:
+        A tuple contain nrow, ncol, ncomp, datatype
+    Raises:
+        ValueError if any of NROWs NCOLS NCOMP FORMAT is not found.
+        (This is problematic as it can happen)
+    """
     compiled = re.compile(
         r" NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ", flags=re.X
     )

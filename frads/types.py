@@ -222,6 +222,8 @@ class WeaDataRow(NamedTuple):
     hours: float
     dni: float
     dhi: float
+    aod: float = 0
+    cc: float = 0
 
     def __str__(self):
         return f"{self.month} {self.day} {self.hours} {self.dni} {self.dhi}"
@@ -276,6 +278,7 @@ class MradPath:
 
 @dataclass
 class EPlusWindowGas:
+    """EnergyPlus Window Gas material data container."""
     name: str
     thickness: float
     type: list
@@ -285,6 +288,7 @@ class EPlusWindowGas:
 
 @dataclass
 class EPlusOpaqueMaterial:
+    """EnergyPlus Opaque material data container."""
     name: str
     roughness: str
     solar_absorptance: float
@@ -296,6 +300,7 @@ class EPlusOpaqueMaterial:
 
 @dataclass
 class EPlusWindowMaterial:
+    """EnergyPlus regular window material data container."""
     name: str
     visible_transmittance: float
     primitive: Primitive
@@ -303,6 +308,7 @@ class EPlusWindowMaterial:
 
 @dataclass
 class EPlusConstruction:
+    """EnergyPlus construction data container."""
     name: str
     type: str
     layers: list
@@ -310,6 +316,7 @@ class EPlusConstruction:
 
 @dataclass
 class EPlusOpaqueSurface:
+    """EnergyPlus opaque surface data container."""
     name: str
     type: str
     polygon: Polygon
@@ -322,6 +329,7 @@ class EPlusOpaqueSurface:
 
 @dataclass
 class EPlusFenestration:
+    """EnergyPlus fenestration data container."""
     name: str
     type: str
     polygon: Polygon
@@ -331,6 +339,7 @@ class EPlusFenestration:
 
 @dataclass
 class EPlusZone:
+    """EnergyPlus zone data container."""
     name: str
     wall: Dict[str, EPlusOpaqueSurface]
     ceiling: Dict[str, EPlusOpaqueSurface]

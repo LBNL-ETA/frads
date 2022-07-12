@@ -92,7 +92,8 @@ def view_as_sender(vu_dict: dict, ray_cnt: int, xres: int, yres: int) -> Sender:
 
 
 def points_as_sender(pts_list: list, ray_cnt: Optional[int] = None) -> Sender:
-    """Construct a sender from a list of points.
+    """
+    Construct a sender from a list of points.
 
     Args:
         pts_list(list): a list of list of float
@@ -112,7 +113,9 @@ def points_as_sender(pts_list: list, ray_cnt: Optional[int] = None) -> Sender:
 
 
 def sun_as_receiver(basis, smx_path, window_normals, full_mod=False) -> Receiver:
-    """Instantiate a sun receiver object.
+    """
+    Instantiate a sun receiver object.
+
     Args:
         basis: receiver sampling basis {kf | r1 | sc25...}
         smx_path: sky/sun matrix file path
@@ -121,20 +124,21 @@ def sun_as_receiver(basis, smx_path, window_normals, full_mod=False) -> Receiver
         A sun receiver object
     """
 
-    gensun = sky.Gensun(int(basis[-1]))
+    # gensun = sky.Gensun(int(basis[-1]))
     if (smx_path is None) and (window_normals is None):
-        str_repr = gensun.gen_full()
-        return Receiver(str_repr, basis, modifier=gensun.mod_str)
-    str_repr, mod_str = gensun.gen_cull(
-        smx_path=smx_path, window_normals=window_normals
-    )
+        str_repr, mod_str = sky.gen_sun_source_full(int(basis[-1]))
+        return Receiver(str_repr, basis, modifier=mod_str)
+    str_repr, mod_str, mod_str_full = sky.gen_sun_source_culled(
+        int(basis[-1]), smx_path=smx_path, window_normals=window_normals)
     if full_mod:
-        return Receiver(receiver=str_repr, basis=basis, modifier=gensun.mod_str)
+        return Receiver(receiver=str_repr, basis=basis, modifier=mod_str_full)
     return Receiver(receiver=str_repr, basis=basis, modifier=mod_str)
 
 
 def sky_as_receiver(basis) -> Receiver:
-    """Instantiate a sky receiver object.
+    """
+    Instantiate a sky receiver object.
+
     Args:
         basis: receiver sampling basis {kf | r1 | sc25...}
     Returns:
@@ -156,7 +160,9 @@ def surface_as_receiver(
     left=False,
     source="glow",
 ) -> Receiver:
-    """Instantiate a surface receiver object.
+    """
+    Instantiate a surface receiver object.
+
     Args:
         prim_list: list of primitives(dict)
         basis: receiver sampling basis {kf | r1 | sc25...}
@@ -174,7 +180,9 @@ def surface_as_receiver(
 
 
 def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
-    """Prepare the sender or receiver surface, adding appropriate tags.
+    """
+    Prepare the sender or receiver surface, adding appropriate tags.
+
     Args:
         prims(list): list of primitives
         basis(str): sampling basis
@@ -183,7 +191,7 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
         source(str): surface light source for receiver
         out: output path
     Returns:
-        The receiver as string
+        The surface sender/receiver primitive as string
     """
 
     if basis is None:
@@ -224,7 +232,8 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
 
 
 def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
-    """Calling rfluxmtx to generate the matrices.
+    """
+    Calling rfluxmtx to generate the matrices.
 
     Args:
         sender: Sender object
@@ -235,8 +244,7 @@ def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
         out: output path
 
     Returns:
-        return the stdout of the command
-
+        return the stdout of the rfluxmtx run.
     """
     if None in (sender, receiver):
         raise ValueError("Sender/Receiver object is None")
@@ -276,11 +284,15 @@ def rfluxmtx(*, sender, receiver, env, opt=None, out=None):
 
 
 def rcvr_oct(receiver, env, oct_path: Union[str, Path]):
-    """Generate an octree of the environment and the receiver.
+    """
+    Generate an octree of the environment and the receiver.
+
     Args:
         receiver: receiver object
         env: environment file paths
         oct_path: Path to write the octree to
+    Returns:
+        None
     """
 
     with tf.TemporaryDirectory() as tempd:
@@ -294,7 +306,8 @@ def rcvr_oct(receiver, env, oct_path: Union[str, Path]):
 
 
 def rcontrib(*, sender, modifier: str, octree: Union[str, Path], out, opt) -> None:
-    """Calling rcontrib to generate the matrices.
+    """
+    Calling rcontrib to generate the matrices.
 
     Args:
         sender: Sender object

@@ -308,7 +308,7 @@ def main():
     wvl_range = end_wvl - start_wvl + wvl_step
     wavelengths = list(wavelengths)
     wvl_length = len(wavelengths)
-    trix, triy, triz, mlnp = color.load_cie_tristi(wavelengths, args.observer)
+    trix, triy, triz, mlnp, wvl_idx = color.load_cie_tristi(wavelengths, args.observer)
     columns = [col for col in zip(*result)]
     # Carry out additional full solar spectra run if pmt requested
     if args.pmt:
