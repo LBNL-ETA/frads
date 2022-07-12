@@ -140,7 +140,7 @@ def assemble_model(config: ConfigParser) -> MradModel:
     if glow_mat not in material_primitives:
         material_primitives.append(glow_mat)
     # _, material_path = tf.mkstemp(suffix="all_material")
-    material_path = "all_material_{utils.id_generator()}.rad"
+    material_path = f"all_material_{utils.id_generator()}.rad"
     with open(material_path, "w") as wtr:
         [wtr.write(str(primitive) + "\n") for primitive in material_primitives]
     black_env_path = f"blackened_{utils.id_generator()}.rad"
@@ -555,7 +555,7 @@ def direct_sun_matrix_vu(
         basis="r6", smx_path=mpath.smx_sun_img, window_normals=model.window_normals
     )
     mod_names = [
-        "%04d" % (int(line[3:]) - 1) for line in rcvr_sun.modifier.splitlines()
+        "%04d" % (int(line[3:])) for line in rcvr_sun.modifier.splitlines()
     ]
     sun_oct = Path("sun.oct")
     cdsenv = [model.material_path, model.black_env_path, *model.cfs_paths]
@@ -662,6 +662,8 @@ def calc_3phase_pt(
     logger.info("Computing for 3-phase sensor grid results")
     for grid_name in model.sender_grid:
         presl = []
+        grid_lines = model.sender_grid[grid_name].sender.decode().strip().splitlines()
+        xyzpos = [",".join(line.split()[:3]) for line in grid_lines]
         for wname in model.window_groups:
             _res = mtxmult.mtxmult(
                 mpath.pvmx[grid_name + wname],
@@ -681,9 +683,10 @@ def calc_3phase_pt(
         res = [[sum(tup) for tup in zip(*line)] for line in zip(*presl)]
         respath = Path("Results", f'grid_{config["Model"]["name"]}_{grid_name}.txt')
         with open(respath, "w") as wtr:
+            wtr.write("\t" + "\t".join(xyzpos) + "\n")
             for idx, val in enumerate(res):
-                wtr.write(datetime_stamps[idx] + ",")
-                wtr.write(",".join(map(str, val)) + "\n")
+                wtr.write(datetime_stamps[idx] + "\t")
+                wtr.write("\t".join(map(str, val)) + "\n")
 
 
 def calc_3phase_vu(
@@ -734,6 +737,8 @@ def calc_5phase_pt(
     for grid_name in model.sender_grid:
         presl = []
         pdresl = []
+        grid_lines = model.sender_grid[grid_name].sender.decode().strip().splitlines()
+        xyzpos = [",".join(line.split()[:3]) for line in grid_lines]
         mult_cds = mtxmult.mtxmult(mpath.pcdsmx[grid_name], mpath.smx_sun)
         if isinstance(mult_cds, bytes):
             prescd = [
@@ -777,9 +782,10 @@ def calc_5phase_pt(
         ]
         respath = Path("Results", f'grid_{config["Model"]["name"]}_{grid_name}.txt')
         with open(respath, "w") as wtr:
+            wtr.write("\t" + "\t".join(xyzpos) + "\n")
             for idx in range(len(res)):
-                wtr.write(datetime_stamps[idx] + ",")
-                wtr.write(",".join(map(str, res[idx])) + "\n")
+                wtr.write(datetime_stamps[idx] + "\t")
+                wtr.write("\t".join(map(str, res[idx])) + "\n")
 
 
 def calc_5phase_vu(
