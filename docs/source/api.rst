@@ -4,23 +4,25 @@ API
 This part of the documentation lists the full API reference of all public
 classes and functions.
 
-types
-----------
-This a module that handles the geometry
 
-.. automodule:: frads.types
+color
+----------
+.. automodule:: frads.color
    :members:
 
 geom
 ----------
-This a module that handles the geometry
-
 .. automodule:: frads.geom
    :members:
 
-utils
+parsers
 ---------
-.. automodule:: frads.utils
+.. automodule:: frads.parsers
+   :members:
+
+mtxmult
+---------
+.. automodule:: frads.mtxmult
    :members:
 
 matrix
@@ -28,7 +30,7 @@ matrix
 .. automodule:: frads.matrix
    :members:
 
-makesky
+sky
 ---------
 .. automodule:: frads.sky
    :members:
@@ -36,4 +38,14 @@ makesky
 methods
 ---------
 .. automodule:: frads.methods
+   :members:
+
+utils
+---------
+.. automodule:: frads.utils
+   :members:
+
+types
+----------
+.. automodule:: frads.types
    :members:

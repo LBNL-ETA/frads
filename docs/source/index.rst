@@ -3,10 +3,10 @@
 frads documentation
 ================
 
-**Date**: 2022-07-06  **Version**: 0.2.5
+**Version**: |release| 
 
 **Useful links**:
-`Source Repository <https://github.com/LBNL-ETA/frads>`__ |
+`Source Repository <https://github.com/LBNL-ETA/frads>`__ | `Radiance Homepage <https://www.radiance-online.org>`__ | `Radiance Discourse <https://discourse.radiance-online.org>`__ | `Radiance Tutorial <https://www.radiance-online.org/learning/tutorials>`__
 
 *frads* is an open-source library providing high-level abstraction of Radiance matrix-based simulation workflows.
 

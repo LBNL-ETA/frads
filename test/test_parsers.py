@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import unittest
 from frads import parsers
 
@@ -8,6 +9,8 @@ class TestUtils(unittest.TestCase):
     test_dir_path = os.path.dirname(__file__)
     data_path = os.path.join(test_dir_path, "data")
     check_decimal_to = 6
+    epw_path = Path("Resources", "USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
+    wea_path = Path("Resources", "oak.wea")
 
     def test_parse_vu(self):
         inp_str = "-vta -vv 180 -vh 180 -vp 0 0 0 -vd 0 -1 0"
@@ -28,6 +31,24 @@ class TestUtils(unittest.TestCase):
             "lw": 1e-8,
         }
         self.assertEqual(res, answer)
+
+    def test_parser_epw(self):
+        with open(self.epw_path) as rdr:
+            wea_metadata, wea_data = parsers.parse_epw(rdr.read())
+        self.assertEqual(wea_data[0].month, 1)
+        self.assertEqual(wea_data[-1].month, 12)
+        self.assertEqual(wea_data[-1].day, 31)
+        self.assertEqual(wea_metadata.latitude, 37.72)
+
+
+    def test_parser_wea(self):
+        with open(self.wea_path) as rdr:
+            wea_metadata, wea_data = parsers.parse_wea(rdr.read())
+        self.assertEqual(wea_data[0].month, 1)
+        self.assertEqual(wea_data[-1].month, 12)
+        self.assertEqual(wea_data[-1].day, 31)
+        self.assertEqual(wea_data[-1].dni, 0)
+        self.assertEqual(wea_metadata.latitude, 37.72)
 
     def test_parse_idf(self):
         pass

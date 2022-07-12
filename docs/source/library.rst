@@ -8,25 +8,25 @@ The frads library consists of Python modules needed by the command-line programs
 
 .. _radmtx:
 
-radmtx
+matrix
 ------
    radmtx
 
 .. _mtxmethod:
 
-mtxmethod
+methods
 ----------------
    mtxmethod
 
 .. _radutil:
 
-radutil
+utils
 --------
    radutil
 
 .. _radgeom:
 
-radgeom
+geom
 ---------
    radgeom
 
