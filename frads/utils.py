@@ -13,6 +13,7 @@ import subprocess as sp
 from typing import Generator
 from typing import List
 from typing import Set
+from typing import Tuple
 from typing import Union
 
 from frads import geom
@@ -270,8 +271,7 @@ def tokenize(inp: str) -> Generator[str, None, None]:
         next token
     """
     tokens = re.compile(
-        " +|[-+]?(\d+([.,]\d*)?|[.,]\d+)([eE][-+]?\d+)+|[\d*\.\d+]+|[{}]"
-    )
+        " +|[-+]?(\d+([.,]\d*)?|[.,]\d+)([eE][-+]?\d+)+|[\d*\.\d+]+|[{}]")
     for match in tokens.finditer(inp):
         if match.group(0)[0] in " ,":
             continue
@@ -483,9 +483,10 @@ def opt2str(opt: dict) -> str:
     return out_str
 
 
-def opt2list(opt: dict) -> list:
+def opt2list(opt: dict) -> List[str]:
     out = []
     for k, v in opt.items():
+        val: Union[str, list]
         if isinstance(v, list):
             val = list(map(str, v))
         else:
@@ -500,6 +501,67 @@ def opt2list(opt: dict) -> list:
             else:
                 out.extend(["-" + k, val])
     return out
+
+
+def calc_reinsrc_dir(mf, x1=0.5, x2=0.5) -> Tuple[List[geom.Vector], List[float]]:
+    """
+    Calculate Reinhart/Treganza sampling directions.
+    Direct translation of Radiance reinsrc.cal file.
+
+    Args:
+        mf(int): multiplication factor.
+        x1(float, optional): bin position 1
+        x2(float, optional): bin position 2
+    Returns:
+        A list of geom.Vector
+        A list of solid angle associated with each vector
+    """
+    def rnaz(r):
+        """."""
+        if r > (mf * 7 - 0.5):
+            return 1
+        else:
+            return mf * TNAZ[int(math.floor((r + 0.5) / mf))]
+
+    def raccum(r):
+        """."""
+        if r > 0.5:
+            return rnaz(r - 1) + raccum(r - 1)
+        else:
+            return 0
+
+    def rfindrow(r, rem):
+        """."""
+        if (rem - rnaz(r)) > 0.5:
+            return rfindrow(r + 1, rem - rnaz(r))
+        else:
+            return r
+
+    TNAZ = [30, 30, 24, 24, 18, 12, 6]
+    rowMax = 7 * mf + 1
+    runlen = 144 * mf**2 + 3
+    rmax = raccum(rowMax)
+    alpha = 90 / (mf * 7 + 0.5)
+    dvecs = []
+    omegas = []
+    for rbin in range(1, runlen):
+        rrow = rowMax - 1 if rbin > (rmax - 0.5) else rfindrow(0, rbin)
+        rcol = rbin - raccum(rrow) - 1
+        razi_width = 2 * math.pi / rnaz(rrow)
+        rah = alpha * math.pi / 180
+        razi = (rcol + x2 - 0.5) * razi_width if rbin > 0.5 else 2 * math.pi * x2
+        ralt = (rrow + x1) * rah if rbin > 0.5 else math.asin(-x1)
+        cos_alt = math.cos(ralt)
+        if rmax - 0.5 > rbin:
+            romega = razi_width * (math.sin(rah * (rrow + 1)) - math.sin(rah * rrow))
+        else:
+            romega = 2 * math.pi * (1 - math.cos(rah / 2))
+        dx = math.sin(razi) * cos_alt
+        dy = math.cos(razi) * cos_alt
+        dz = math.sin(ralt)
+        dvecs.append(geom.Vector(dx, dy, dz))
+        omegas.append(romega)
+    return dvecs, omegas
 
 
 class Reinsrc:
