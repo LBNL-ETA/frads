@@ -87,7 +87,7 @@ def get_sender_grid(config: ConfigParser) -> Dict[str, matrix.Sender]:
     return sender_grid
 
 
-def get_sender_view(config: ConfigParser):
+def get_sender_view(config: ConfigParser) -> Tuple[dict, dict]:
     """Get a single view as a sender.
     Args:
         config: MradConfig object"""
@@ -377,7 +377,7 @@ def daylight_matrix(
                 wtr.write(dmx_res)
 
 
-def blacken_env(model, config: ConfigParser):
+def blacken_env(model: MradModel, config: ConfigParser) -> Tuple[str, str]:
     """."""
     bwindow_path = "blackened_window.rad"
     gwindow_path = "glowing_window.rad"
@@ -601,7 +601,7 @@ def direct_sun_matrix_vu(
                 modifier=rcvr_sun.modifier,
                 octree=sun_oct,
                 out=tempr,
-                opt=cdsmx_opt,
+                opt=cdsmx_opt + " -i+",
             )
             mpath.vcdrmx[view].mkdir(exist_ok=True)
             for idx, file in enumerate(sorted(tempr.glob("*.hdr"))):
@@ -657,7 +657,7 @@ def calc_3phase_pt(
     model: MradModel,
     datetime_stamps: list,
     config: ConfigParser,
-):
+) -> None:
     """."""
     logger.info("Computing for 3-phase sensor grid results")
     for grid_name in model.sender_grid:
@@ -691,7 +691,7 @@ def calc_3phase_pt(
 
 def calc_3phase_vu(
     mpath: MradPath, model: MradModel, datetime_stamps, config: ConfigParser
-):
+) -> None:
     """."""
     logger.info("Computing for 3-phase image-based results:")
     for view in model.sender_view:
