@@ -8,7 +8,7 @@ from frads import utils
 class TestSky(unittest.TestCase):
 
     epw_path = Path("Resources", "USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
-    reinsrc4_path = Path("data", "reinsrc4.rad")
+    reinsrc4_path = Path("Resources", "reinsrc4.rad")
 
     def test_basis_glow(self):
         basis = "r1"

@@ -7,7 +7,7 @@ from frads import parsers
 class TestUtils(unittest.TestCase):
 
     test_dir_path = os.path.dirname(__file__)
-    data_path = os.path.join(test_dir_path, "data")
+    data_path = os.path.join(test_dir_path, "Resources")
     check_decimal_to = 6
     epw_path = Path("Resources", "USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
     wea_path = Path("Resources", "oak.wea")

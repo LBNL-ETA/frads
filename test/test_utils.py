@@ -14,9 +14,9 @@ class TestUtils(unittest.TestCase):
     test_dir_path = os.path.dirname(__file__)
     data_path = os.path.join(test_dir_path, "data")
     check_decimal_to = 6
-    reinsrc6_path = Path("data", "reinsrc6.rad")
-    grid_path = Path("data", "grid.pts")
-    prim_path = Path("data/model/Objects/floor_openroom.rad")
+    reinsrc6_path = Path("Resources", "reinsrc6.rad")
+    grid_path = Path("Resources", "grid.pts")
+    prim_path = Path("Resources/model/Objects/floor_openroom.rad")
 
 
     pane_property_1 = PaneProperty(

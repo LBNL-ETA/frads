@@ -7,7 +7,7 @@ from frads import mtxmult
 class TestMtxmult(unittest.TestCase):
 
     test_dir_path = os.path.dirname(__file__)
-    data_path = os.path.join(test_dir_path, "data")
+    data_path = os.path.join(test_dir_path, "Resources")
     check_decimal_to = 6
 
     def test_pcomb(self):
