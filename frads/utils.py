@@ -564,106 +564,27 @@ def calc_reinsrc_dir(mf, x1=0.5, x2=0.5) -> Tuple[List[geom.Vector], List[float]
     return dvecs, omegas
 
 
-class Reinsrc:
-    """Calculate Reinhart/Treganza sampling directions.
-
-    Direct translation of Radiance reinsrc.cal file.
-    """
-
-    TNAZ = [30, 30, 24, 24, 18, 12, 6]
-
-    def __init__(self, mf: int):
-        """Initialize with multiplication factor."""
-        self.mf = mf
-        self.rowMax = 7 * mf + 1
-        self.rmax = self.raccum(self.rowMax)
-        self.alpha = 90 / (mf * 7 + 0.5)
-
-    def dir_calc(self, rbin: int, x1=0.5, x2=0.5) -> tuple:
-        """Calculate the ray direction.
-
-        Parameter:
-            rbin: bin count
-            x1, x2: sampling position (0.5, 0.5) is at the center
-        Return:
-            Sampling direction (tuple)
-        """
-        rrow = self.rowMax - 1 if rbin > (self.rmax - 0.5) else self.rfindrow(0, rbin)
-        rcol = rbin - self.raccum(rrow) - 1
-        razi_width = 2 * math.pi / self.rnaz(rrow)
-        rah = self.alpha * math.pi / 180
-        razi = (rcol + x2 - 0.5) * razi_width if rbin > 0.5 else 2 * math.pi * x2
-        ralt = (rrow + x1) * rah if rbin > 0.5 else math.asin(-x1)
-        cos_alt = math.cos(ralt)
-        if rbin < 0.5:
-            romega = 2 * math.pi
-        else:
-            if self.rmax - 0.5 > rbin:
-                romega = razi_width * (
-                    math.sin(rah * (rrow + 1)) - math.sin(rah * rrow)
-                )
-            else:
-                romega = 2 * math.pi * (1 - math.cos(rah / 2))
-        dx = math.sin(razi) * cos_alt
-        dy = math.cos(razi) * cos_alt
-        dz = math.sin(ralt)
-        return (dx, dy, dz, romega)
-
-    def rnaz(self, r):
-        """."""
-        if r > (self.mf * 7 - 0.5):
-            return 1
-        else:
-            return self.mf * self.TNAZ[int(math.floor((r + 0.5) / self.mf))]
-
-    def raccum(self, r):
-        """."""
-        if r > 0.5:
-            return self.rnaz(r - 1) + self.raccum(r - 1)
-        else:
-            return 0
-
-    def rfindrow(self, r, rem):
-        """."""
-        if (rem - self.rnaz(r)) > 0.5:
-            return self.rfindrow(r + 1, rem - self.rnaz(r))
-        else:
-            return r
-
-
-class pt_inclusion(object):
+def pt_inclusion(pt: geom.Vector, polygon_pts: List[geom.Vector]) -> int:
     """Test whether a point is inside a polygon
     using winding number algorithm."""
 
-    def __init__(self, polygon_pts):
-        """Initialize the polygon."""
-        self.pt_cnt = len(polygon_pts)
-        polygon_pts.append(polygon_pts[0])
-        self.polygon_pts = polygon_pts
-
-    def isLeft(self, pt0, pt1, pt2):
+    def isLeft(pt0, pt1, pt2):
         """Test whether a point is left to a line."""
         return (pt1.x - pt0.x) * (pt2.y - pt0.y) - (pt2.x - pt0.x) * (pt1.y - pt0.y)
 
-    def test_inside(self, pt):
-        """Test if a point is inside the polygon."""
-        wn = 0
-        for i in range(self.pt_cnt):
-            if self.polygon_pts[i].y <= pt.y:
-                if self.polygon_pts[i + 1].y > pt.y:
-                    if (
-                        self.isLeft(self.polygon_pts[i], self.polygon_pts[i + 1], pt)
-                        > 0
-                    ):
-                        wn += 1
-            else:
-                if self.polygon_pts[i + 1].y <= pt.y:
-                    if (
-                        self.isLeft(self.polygon_pts[i], self.polygon_pts[i + 1], pt)
-                        < 0
-                    ):
-                        wn -= 1
-        return wn
+    # Close the polygon for looping
+    polygon_pts.append(polygon_pts[0])
+    wn = 0
+    for i in range(len(polygon_pts)-1):
+        if polygon_pts[i].y <= pt.y:
+            if polygon_pts[i + 1].y > pt.y:
+                if (isLeft(polygon_pts[i], polygon_pts[i + 1], pt) > 0):
+                    wn += 1
+        else:
+            if polygon_pts[i + 1].y <= pt.y:
+                if (isLeft(polygon_pts[i], polygon_pts[i + 1], pt) < 0):
+                    wn -= 1
+    return wn
 
 
 def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> list:
@@ -698,10 +619,12 @@ def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> list:
     )
     _vertices = _polygon.vertices
     if polygon.normal() == geom.Vector(0, 0, 1):
-        pt_incls = pt_inclusion(_vertices)
+        # pt_incls = pt_inclusion(_vertices)
+        _grid = [p for p in raw_pts if pt_inclusion(p, _vertices) > 0]
     else:
-        pt_incls = pt_inclusion(_vertices[::-1])
-    _grid = [p for p in raw_pts if pt_incls.test_inside(p) > 0]
+        # pt_incls = pt_inclusion(_vertices[::-1])
+        _grid = [p for p in raw_pts if pt_inclusion(p, _vertices[::-1]) > 0]
+    # _grid = [p for p in raw_pts if pt_incls.test_inside(p) > 0]
     grid = [p.to_list() + grid_dir.to_list() for p in _grid]
     return grid
 

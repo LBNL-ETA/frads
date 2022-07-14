@@ -6,6 +6,7 @@ from frads import geom
 from frads import utils
 from frads.types import PaneProperty
 from frads.types import PaneRGB
+from frads.types import Primitive
 
 
 class TestUtils(unittest.TestCase):
@@ -14,6 +15,8 @@ class TestUtils(unittest.TestCase):
     data_path = os.path.join(test_dir_path, "data")
     check_decimal_to = 6
     reinsrc6_path = Path("data", "reinsrc6.rad")
+    grid_path = Path("data", "grid.pts")
+    prim_path = Path("data/model/Objects/floor_openroom.rad")
 
 
     pane_property_1 = PaneProperty(
@@ -51,9 +54,6 @@ class TestUtils(unittest.TestCase):
         (0.11, 0.11, 0.11),
         (0.63, 0.63, 0.63),
     )
-
-    def test_unpack_primitive(self):
-        pass
 
     def test_polygon2prim(self):
         pass
@@ -109,7 +109,22 @@ class TestUtils(unittest.TestCase):
         pass
 
     def test_gen_grid(self):
-        pass
+        polygon = geom.Polygon([
+            geom.Vector(0, 0, 0),
+            geom.Vector(0, 14, 0),
+            geom.Vector(12, 14, 0),
+            geom.Vector(12, 0, 0),
+        ])
+        height = 0.76
+        spacing = 1
+        result = utils.gen_grid(polygon, height, spacing)
+        with open(self.grid_path) as rdr:
+            lines = rdr.readlines()
+        self.assertEqual(len(result), len(lines))
+        for res, ans in zip(result, lines):
+            for r, a in zip(res, ans.split()):
+                self.assertEqual(r, float(a))
+
 
     def test_gen_blinds(self):
         pass
@@ -118,9 +133,6 @@ class TestUtils(unittest.TestCase):
         pass
 
     def test_varays(self):
-        pass
-
-    def test_gen_glazing_primitive(self):
         pass
 
     def test_get_glazing_primitive(self):
@@ -135,8 +147,9 @@ class TestUtils(unittest.TestCase):
         answer += "0 0 0 0 0 0 0 0"
         self.assertEqual(res, answer)
 
-    def test_unpack_idf(self):
-        pass
+    def test_unpack_primitives(self):
+        prims = utils.unpack_primitives(self.prim_path)
+        self.assertTrue(isinstance(prims[0], Primitive))
 
     def test_nest_list(self):
         pass
