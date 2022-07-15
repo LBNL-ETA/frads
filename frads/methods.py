@@ -274,6 +274,7 @@ def view_matrix_vu(
             vrcvr_windows += matrix.surface_as_receiver(
                 prim_list=window_prim,
                 basis=config["SimControl"]["vmx_basis"],
+                source="glow",
                 out=out,
             )
         if direct:
@@ -412,14 +413,14 @@ def blacken_env(model: MradModel, config: ConfigParser) -> Tuple[str, str]:
     vmap_cmd = (
         ["oconv", "-f", model.material_path]
         + config["Model"]["scene"].split()
-        + [bwindow_path]
+        + [gwindow_path]
     )
     with open(vmap_oct, "wb") as wtr:
         sp.run(vmap_cmd, check=True, stdout=wtr)
     cdmap_cmd = (
         ["oconv", "-f", model.material_path]
         + config["Model"]["scene"].split()
-        + [gwindow_path]
+        + [bwindow_path]
     )
     with open(cdmap_oct, "wb") as wtr:
         sp.run(cdmap_cmd, check=True, stdout=wtr)
