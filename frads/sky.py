@@ -20,7 +20,6 @@ from frads import parsers
 from frads.types import WeaMetaData
 from frads.types import WeaData
 from frads import utils
-from typing_extensions import SupportsIndex
 
 logger: logging.Logger = logging.getLogger("frads.sky")
 
@@ -274,9 +273,9 @@ def gendaylit_cmd(
 
 
 def solar_angle(
-    lat: Union[SupportsFloat, SupportsIndex],
-    lon: Union[SupportsFloat, SupportsIndex],
-    mer: Union[SupportsFloat, SupportsIndex],
+    lat: float,
+    lon: float,
+    mer: float,
     month,
     day: int,
     hour,
