@@ -1,154 +1,226 @@
 """Generic room model"""
+from typing import List
+from typing import Optional
 
 from frads import geom
+from frads import utils
 from frads.types import Primitive
 
 
-class Room(object):
+class Surface:
+    """Surface object."""
+
+    def __init__(self, base: geom.Polygon) -> None:
+        """."""
+        self.base = base
+        self._vertices = base.vertices
+        self._vect1 = (base.vertices[1] - base.vertices[0]).normalize()
+        self._vect2 = (base.vertices[2] - base.vertices[1]).normalize()
+        self.polygons: List[geom.Polygon] = [self.base]
+        self.windows: List[Surface] = []
+        self._modifier: str = "void"
+        self._identifier: str = "void"
+        self._primitives: Optional[List[Primitive]] = None
+
+    @property
+    def modifier(self):
+        """."""
+        return self._modifier
+
+    @property
+    def identifier(self):
+        """."""
+        return self._identifier
+
+    @modifier.setter
+    def modifier(self, mod):
+        """."""
+        self._modifier = mod
+
+    @identifier.setter
+    def identifier(self, identifier):
+        """."""
+        self._identifier = identifier
+
+    @property
+    def primitives(self) -> Optional[List[Primitive]]:
+        """."""
+        self._primitives = []
+        for idx, polygon in enumerate(self.polygons):
+            self._primitives.append(
+                Primitive(
+                    self.modifier,
+                    "polygon",
+                    f"{self.identifier}_{idx:02d}",
+                    ["0"],
+                    polygon.to_real(),
+                )
+            )
+        return self._primitives
+
+    def make_window_wwr(self, wwr: float) -> None:
+        """Make a window based on window-to-wall ratio."""
+        window_polygon = self.base.scale(geom.Vector(*[wwr] * 3), self.base.centroid)
+        self.base = self.base - window_polygon
+        self.windows.append(Surface(window_polygon))
+
+    def make_window(
+        self, dist_left: float, dist_bot: float, width: float, height: float
+    ) -> None:
+        """Make a window and punch a hole."""
+        win_pt1 = (
+            self._vertices[0]
+            + self._vect1.scale(dist_bot)
+            + self._vect2.scale(dist_left)
+        )
+        win_pt2 = win_pt1 + self._vect1.scale(height)
+        win_pt3 = win_pt1 + self._vect2.scale(width)
+        window_polygon = geom.Polygon.rectangle3pts(win_pt3, win_pt1, win_pt2)
+        self.base = self.base - window_polygon
+        self.windows.append(Surface(window_polygon))
+
+    def thicken(self, thickness: float) -> None:
+        """Thicken the surface."""
+        direction = self.base.normal.scale(thickness)
+        polygons = self.base.extrude(direction)
+        counts = [polygons.count(plg) for plg in polygons]
+        self.polygons = [plg for plg, cnt in zip(polygons, counts) if cnt == 1]
+
+    def move_window(self, distance: float) -> None:
+        """Move windows in its normal direction."""
+        direction = self.base.normal.scale(distance)
+        self.windows = [Surface(window.base.move(direction)) for window in self.windows]
+
+    def rotate(self, deg):
+        """Rotate the surface counter clock-wise."""
+        polygons = []
+        for plg in self.polygons:
+            polygons.append(plg.rotate3d(deg, geom.Vector(0, 0, 1)))
+        self.polygons = polygons
+        for window in self.windows:
+            wpolygons = []
+            for plg in window.polygons:
+                wpolygons.append(plg.rotate3d(deg, geom.Vector(0, 0, 1)))
+
+
+class Room:
     """Make a shoebox."""
 
-    def __init__(self, width, depth, height, origin=geom.Vector()):
-        self.width = width
-        self.depth = depth
-        self.height = height
-        self.origin = origin
-        flr_pt2 = origin + geom.Vector(width, 0, 0)
-        flr_pt3 = flr_pt2 + geom.Vector(0, depth, 0)
-        self.floor = geom.Polygon.rectangle3pts(origin, flr_pt2, flr_pt3)
-        extrusion = self.floor.extrude(geom.Vector(0, 0, height))
-        self.clng = extrusion[1]
-        self.wall_south = Surface(extrusion[2], "wall.south")
-        self.wall_east = Surface(extrusion[3], "wall.east")
-        self.wall_north = Surface(extrusion[4], "wall.north")
-        self.wall_west = Surface(extrusion[5], "wall.west")
-        self.surfaces = [
-            self.clng,
-            self.floor,
-            self.wall_west,
-            self.wall_north,
-            self.wall_east,
-            self.wall_south,
+    def __init__(self, floor: Surface, ceiling, swall, ewall, nwall, wwall) -> None:
+        """."""
+        self.floor = floor
+        self.ceiling = ceiling
+        self.swall = swall
+        self.ewall = ewall
+        self.nwall = nwall
+        self.wwall = wwall
+        self.materials = utils.material_lib()
+
+    @classmethod
+    def from_wdh(
+        cls,
+        width: float,
+        depth: float,
+        floor_floor: float,
+        floor_ceiling: float,
+        origin: Optional[geom.Vector] = None,
+    ) -> "Room":
+        """Generate a room from width, depth, and height."""
+        pt1 = geom.Vector(0, 0, 0) if origin is None else origin
+        pt2 = pt1 + geom.Vector(width, 0, 0)
+        pt3 = pt2 + geom.Vector(0, depth, 0)
+        floor = geom.Polygon.rectangle3pts(pt1, pt2, pt3)
+        _, ceiling, swall, ewall, nwall, wwall = floor.extrude(
+            geom.Vector(0, 0, floor_floor)
+        )
+        ceiling = ceiling.move(geom.Vector(0, 0, floor_ceiling - floor_floor))
+        return cls(
+            Surface(floor),
+            Surface(ceiling),
+            Surface(swall),
+            Surface(ewall),
+            Surface(nwall),
+            Surface(wwall),
+        )
+
+    @property
+    def primitives(self):
+        """."""
+        return [
+            *self.materials.values(),
+            *self.floor.primitives,
+            *self.ceiling.primitives,
+            *self.swall.primitives,
+            *self.ewall.primitives,
+            *self.nwall.primitives,
+            *self.wwall.primitives,
         ]
 
-    def surface_prim(self):
-        self.srf_prims = []
-        ceiling = Primitive(
-            "white_paint_70", "polygon", "ceiling", "0", self.clng.to_real()
-        )
-        self.srf_prims.append(ceiling)
+    @property
+    def window_primitives(self):
+        """."""
+        return [
+            *[prim for srf in self.ceiling.windows for prim in srf.primitives],
+            *[prim for srf in self.swall.windows for prim in srf.primitives],
+            *[prim for srf in self.ewall.windows for prim in srf.primitives],
+            *[prim for srf in self.nwall.windows for prim in srf.primitives],
+            *[prim for srf in self.wwall.windows for prim in srf.primitives],
+        ]
 
-        floor = Primitive("carpet_20", "polygon", "floor", "0", self.floor.to_real())
-        self.srf_prims.append(floor)
+    def get_material_names(self) -> List[str]:
+        """Get material identifiers."""
+        return [prim.identifier for prim in self.materials.values()]
 
-        nwall = Primitive(
-            "white_paint_50",
-            "polygon",
-            self.wall_north.name,
-            "0",
-            self.wall_north.polygon.to_real(),
-        )
-        self.srf_prims.append(nwall)
+    def add_material(self, primitive) -> None:
+        """Add a material to the material library."""
+        self.materials[primitive.identifier] = primitive
 
-        ewall = Primitive(
-            "white_paint_50",
-            "polygon",
-            self.wall_east.name,
-            "0",
-            self.wall_east.polygon.to_real(),
-        )
-        self.srf_prims.append(ewall)
+    def validate(self) -> None:
+        """Validate the room model."""
+        for prim in [
+            *self.floor.primitives,
+            *self.ceiling.primitives,
+            *self.swall.primitives,
+            *self.ewall.primitives,
+            *self.nwall.primitives,
+            *self.wwall.primitives,
+        ]:
+            if prim.modifier not in self.materials:
+                raise ValueError(
+                    f"Unknown modifier {prim.modifier} in {prim.identifier}"
+                )
 
-        wwall = Primitive(
-            "white_paint_50",
-            "polygon",
-            self.wall_west.name,
-            "0",
-            self.wall_west.polygon.to_real(),
-        )
-        self.srf_prims.append(wwall)
-
-        # Windows on south wall only, for now.
-        for idx, swall in enumerate(self.wall_south.facade):
-            _identifier = "{}.{:02d}".format(self.wall_south.name, idx)
-            _id = Primitive(
-                "white_paint_50", "polygon", _identifier, "0", swall.to_real()
-            )
-            self.srf_prims.append(_id)
-
-    def window_prim(self):
-        self.wndw_prims = {}
-        for wpolygon in self.wall_south.windows:
-            _real_args = self.wall_south.windows[wpolygon].to_real()
-            win_prim = Primitive("glass_60", "polygon", wpolygon, "0", _real_args)
-            self.wndw_prims[wpolygon] = win_prim
+    def rotate(self, deg):
+        """Rotate the room counter clock-wise."""
+        self.floor.rotate(deg)
+        self.ceiling.rotate(deg)
+        self.swall.rotate(deg)
+        self.ewall.rotate(deg)
+        self.wwall.rotate(deg)
+        self.nwall.rotate(deg)
 
 
-class Surface(object):
-    """Room wall object."""
-
-    def __init__(self, polygon, name):
-        self.centroid = polygon.centroid()
-        self.polygon = polygon
-        self.vertices = polygon.vertices
-        self.vect1 = (self.vertices[1] - self.vertices[0]).normalize()
-        self.vect2 = (self.vertices[2] - self.vertices[1]).normalize()
-        self.name = name
-        self.windows = {}
-
-    def make_window(self, dist_left, dist_bot, width, height, wwr=None):
-        if wwr is not None:
-            assert type(wwr) == float, "WWR must be float"
-            win_polygon = self.polygon.scale(geom.Vector(*[wwr] * 3), self.centroid)
-        else:
-            win_pt1 = (
-                self.vertices[0]
-                + self.vect1.scale(dist_bot)
-                + self.vect2.scale(dist_left)
-            )
-            win_pt2 = win_pt1 + self.vect1.scale(height)
-            win_pt3 = win_pt1 + self.vect2.scale(width)
-            win_polygon = geom.Polygon.rectangle3pts(win_pt3, win_pt1, win_pt2)
-        return win_polygon
-
-    def add_window(self, name, window_polygon):
-        self.polygon = self.polygon - window_polygon
-        self.windows[name] = window_polygon
-
-    def facadize(self, thickness):
-        direction = self.polygon.normal().scale(thickness)
-        if thickness > 0:
-            self.facade = self.polygon.extrude(direction)[:2]
-            [
-                self.facade.extend(self.windows[wname].extrude(direction)[2:])
-                for wname in self.windows
-            ]
-            uniq = []
-            uniq = self.facade.copy()
-            for idx in range(len(self.facade)):
-                for re in self.facade[:idx] + self.facade[idx + 1 :]:
-                    if set(self.facade[idx].to_list()) == set(re.to_list()):
-                        uniq.remove(re)
-            self.facade = uniq
-        else:
-            self.facade = [self.polygon]
-        offset_wndw = {}
-        for wndw in self.windows:
-            offset_wndw[wndw] = geom.Polygon(
-                [v + direction for v in self.windows[wndw].vertices]
-            )
-        self.windows = offset_wndw
-
-
-def make_room(dimension: dict):
+def make_room(
+    width: float,
+    depth: float,
+    floor_floor: float,
+    floor_ceiling: float,
+    windows,
+    swall_thickness=None,
+):
     """Make a side-lit shoebox room as a Room object."""
-    theroom = Room(
-        float(dimension["width"]), float(dimension["depth"]), float(dimension["height"])
-    )
-    wndw_names = [i for i in dimension if i.startswith("window")]
-    for wd in wndw_names:
-        wdim = map(float, dimension[wd].split())
-        theroom.wall_south.add_window(wd, theroom.wall_south.make_window(*wdim))
-    theroom.wall_south.facadize(float(dimension["facade_thickness"]))
-    theroom.surface_prim()
-    theroom.window_prim()
-    return theroom
+    aroom = Room.from_wdh(width, depth, floor_floor, floor_ceiling)
+    if windows is not None:
+        for window in windows:
+            aroom.swall.make_window(*window)
+        for window in aroom.swall.windows:
+            window.modifier = "glass_60"
+    if swall_thickness is not None:
+        aroom.swall.thicken(swall_thickness)
+    aroom.swall.modifier = "neutral_lambertian_0.5"
+    aroom.ewall.modifier = "neutral_lambertian_0.5"
+    aroom.nwall.modifier = "neutral_lambertian_0.5"
+    aroom.wwall.modifier = "neutral_lambertian_0.5"
+    aroom.ceiling.modifier = "neutral_lambertian_0.7"
+    aroom.floor.modifier = "neutral_lambertian_0.2"
+    return aroom
