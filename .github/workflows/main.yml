@@ -48,8 +48,8 @@ jobs:
 
     - name: Install EnergyPlus
       run: |
-        tar -xvf EnergyPlus*Ubuntu*.tar.gz
         ls
+        tar -xvf EnergyPlus*Ubuntu*.tar.gz
         rm EnergyPlus*.tar.gz
         mv EnergyPlus* EnergyPlus
         ls
