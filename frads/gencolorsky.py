@@ -12,82 +12,52 @@ import math
 import os
 from pathlib import Path
 import subprocess as sp
+from typing import List
+from typing import Sequence
+from typing import Tuple
+from typing import Union
 
 from frads import sky
 from frads import parsers
 from frads import color
+from frads import color_data
+from frads.types import Primitive
+from frads.types import WeaMetaData
 
 
-# TODO:
-# 1) add rgb sampling at 440, 550, 680 nm:
-#   L(r), L(g), L(b) to sRGB
-#   sRGB to CIE XYZ to xyY
-#   xyY to spectrum S(l) = S1(l) + S2(l) + S3(l)
+# Wavelength range and step
+START_WVL = 360
+END_WVL = 800
+WVL_STEP = 10
+
+# Approximate spectrum from 3 samples at 440, 550, and 660nm
+# These coefficients are generated using apm_1nm.dat solar spectrum
+# with alpha = 0, spectral range 360 - 800 nm
+KR0, KG0, KB0 = 90487.185526, 68805.727959, 70873.299179
+
+# These coefficiens are derived from CIE Colorimetry S0, S1, and S2 (Table T.2)
+# integrated with cie_y_bar over 360 - 800 nm
+YS0, YS1, YS2 = 10700.685138588558, 193.0296802325152, 76.46615567113169
 
 
-def get_local_input(
-    dt: str,
-    latitude: float,
-    longitude: float,
-    altitude: float,
-    zenith: float,
-    azimuth: float,
-) -> str:
-    """Get geographical and solar geometry input to uvspec.
-    args:
-        dt: datetime string
-        latitude: in deg
-        longitude: in deg
-        altitude: in km
-        zenith: solar zenith angle (deg)
-        azimuth: solar azimuth (deg) (0deg -> south)
-        doy: day of year
-    return
-        uvspec input string
-    """
-    if longitude > 0:
-        longitude_str = f"W {longitude:.2f}"
-    else:
-        longitude_str = f"E {abs(longitude):.2f}"
-    if latitude > 0:
-        latitude_str = f"N {latitude:.2f}"
-    else:
-        latitude_str = f"S {abs(latitude):.2f}"
-    inp = f"latitude {latitude_str}\n"
-    inp += f"longitude {longitude_str}\n"
-    inp += f"time {dt}\n"
-    inp += f"altitude {altitude}\n"
-    inp += "albedo 0.2\n"
-    inp += f"sza {zenith}\n"
-    inp += f"phi0 {azimuth}\n"
-    return inp
-
-
-def get_output_input(
-    umu: list, phis: list, output=None, silent=True, verbose=False
-) -> str:
-    """Get sampling angles and output format input for uvspec.
-    args:
-        umu:
-        phis:
-        output:
-        silent:
-    return:
-        uvspec input string
-    """
-    if output is None:
-        output = "lambda edir edn uu"
-    inp = ""
-    if umu is not None:
-        inp += f"umu {' '.join(map(str, umu))}\n"
-    if phis is not None:
-        inp += f"phi {' '.join(map(str, phis))}\n"
-    inp += f"output_user {output}\n"
-    if silent:
-        inp += "quiet\n"
-    if verbose:
-        inp += "verbose\n"
-    return inp
+def samples2spec(l_r, l_g, l_b) -> dict:
+    """Approximate full spectrum from three samples."""
+    c_r, c_g, c_b = l_r * KR0, l_g * KG0, l_b * KB0
+    cie_x, cie_y, cie_z = color.rgb2xyz(c_r, c_g, c_b, color_data.RGB2XYZ_SRGB)
+    chrom_x, chrom_y = color.xyz2xy(cie_x, cie_y, cie_z)
+    scale_y = cie_y / color_data.LEMAX
+    m1 = (-1.3515 - 1.7703 * chrom_x + 5.9114 * chrom_y) / (
+        0.0241 + 0.2562 * chrom_x - 0.7341 * chrom_y
+    )
+    m2 = (0.0300 - 31.4424 * chrom_x + 30.0717 * chrom_y) / (
+        0.0241 + 0.2562 * chrom_x - 0.7341 * chrom_y
+    )
+    spec = {
+        wvl: scale_y * (_s[0] + _s[1] * m1 + _s[2] * m2) / (YS0 + YS1 * m1 + YS2 * m2)
+        for wvl, _s in color_data.CIE_S012.items()
+        if START_WVL <= wvl <= END_WVL
+    }
+    return spec
 
 
 def get_uniform_samples(step: int) -> tuple:
@@ -106,26 +76,35 @@ def get_uniform_samples(step: int) -> tuple:
     return cos_thetas, phis
 
 
-def get_solar(
-    year: str, month: str, day: str, hours: str, lat: str, lon: str, tzone: str
-):
+def get_solar(dt, meta) -> Tuple[Primitive, Sequence[Union[float, int]], float, float]:
+    # year: str, month: str, day: str, hours: str, lat: str, lon: str, tzone: str
+    # )
     """Call gendaylit to get solar angles."""
-    cmd = sky.gendaylit_cmd(month, day, hours, lat, lon, tzone, year=year)
+    hours = dt.hour + dt.minute / 60.0
+    cmd = sky.gendaylit_cmd(
+        dt.month,
+        dt.day,
+        hours,
+        meta.latitude,
+        meta.longitude,
+        meta.timezone,
+        year=dt.year,
+    )
     gdl_proc = sp.run(list(map(str, cmd)), check=True, stdout=sp.PIPE, stderr=sp.PIPE)
     gdl_prims = parsers.parse_primitive(gdl_proc.stdout.decode().splitlines())
     source_prim = [prim for prim in gdl_prims if prim.ptype == "source"][0]
-    source_dir = list(map(float, source_prim.real_arg.split()[1:4]))
+    source_dir = source_prim.real_arg[1:4]
     zenith_angle = math.degrees(math.acos(source_dir[2]))
     azimuth_angle = math.degrees(math.atan2(-source_dir[0], -source_dir[1])) % 360
     return source_prim, source_dir, zenith_angle, azimuth_angle
 
 
 def gen_rad_template() -> str:
-    """Generate sky.rad file template.
-    This function generates a static string for now.
-    """
+    """Generate sky.rad file template."""
     sky_template = "void colordata skyfunc\n"
-    sky_template += "9 noop noop noop red.dat green.dat blue.dat . "
+    sky_template += (
+        "9 noop noop noop {path}/red.dat {path}/green.dat {path}/blue.dat . "
+    )
     sky_template += '"Acos(Dz)/DEGREE" "mod(atan2(-Dx, -Dy)/DEGREE,360)"\n'
     sky_template += "0\n0\n\n"
     sky_template += "skyfunc glow skyglow 0 0 4 1 1 1 0\n"
@@ -142,7 +121,7 @@ def gen_header(anglestep: int) -> str:
     return header
 
 
-def get_logger(verbosity: int):
+def get_logger(verbosity: int) -> logging.Logger:
     """Setup logger.
     args:
         verbosity: verbosity levels 0-5
@@ -162,7 +141,7 @@ def get_logger(verbosity: int):
     return logger
 
 
-def parse_cli_args():
+def parse_cli_args() -> argparse.Namespace:
     """Parse commandline interface arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument("year", type=int)
@@ -218,141 +197,413 @@ def parse_cli_args():
     return args
 
 
-def main():
+class UvspecConfig:
+    """Uvspec configuration.
+    Attributes:
+        aerosol: aerosol species file name (the file should reside in lib_path)
+        albedo: surface reflectance
+        altitude: altitude
+        atmosphere: atmosphere composition profile
+        azimuth: solar azimuth
+        cloudcover: cloucover (0-1)
+        latitude: latitude
+        longitude: longitude
+        output: user output setting (default: lambda ed edn uu)
+        phis: Phi angles to sample
+        solver: solver
+        source: solar source file path
+        time: date-time str (%Y %m %d %H %M %S)
+        umu: cos(theta) angles to sample
+        verbose: verbosity (verbose | quiet)
+        wavelength: wavelength to sample
+        zenith: solar zenith angle
+    """
+
+    def __init__(self):
+        try:
+            self.lib_path = Path(os.environ["LIBRADTRAN_DATA_FILES"])
+        except KeyError as ke:
+            raise "Can't find LIBRADTRAN_DATA_FILES in environment" from ke
+        self._aerosol = ""
+        self._albedo = 0.2
+        self._altitude = 100
+        self._aod = 0
+        self._atmosphere = ""
+        self._azimuth = 90
+        self._band = ""
+        self._cloudcover = 0
+        self._latitude = "N 37"
+        self._longitude = "W 122"
+        self._output = "lambda edir edn uu"
+        self._phis = ""
+        self._post_process = ""
+        self._solver = "pseudospherical"
+        self._source = "apm_1nm"
+        self._time = "2022 07 06 12 00 00"
+        self._umu = ""
+        self._verbose = "quiet"
+        self._wavelength = 0
+        self._zenith = 30
+        self.wc_path = Path(__file__).parent / "data" / "WC.DAT"
+
+    @property
+    def config(self):
+        """Get the uvpsec input string."""
+        cfg = [f"data_files_path {str(self.lib_path)}"]
+        cfg.append(f"source solar {str(self._source)}")
+        if self._atmosphere:
+            cfg.append(f"atmosphere_file {self._atmosphere}")
+        cfg.append(self._solver)
+        if self._band:
+            cfg.append(f"mol_abs_param {self._band}")
+        cfg.append(f"latitude {self._latitude}")
+        cfg.append(f"longitude {self._longitude}")
+        cfg.append(f"time {self._time}")
+        cfg.append(f"altitude {self._altitude}")
+        cfg.append(f"albedo {self._albedo}")
+        cfg.append(f"sza {self._zenith}")
+        cfg.append(f"phi0 {self._azimuth}")
+        if self._cloudcover:
+            cfg.append(f"wc_file 1D {self.wc_path}")
+            cfg.append(f"cloudcover wc {self.cloudcover}")
+            cfg.append("interpret_as_level wc")  # use independent pixel approximation
+        if self._aerosol:
+            cfg.append("aerosol_default")
+            cfg.append(f"aerosol_species_file {self._aerosol}")
+        if self._aod:
+            cfg.append(f"aerosol_modify tau set {self._aod}")
+        if self._umu:
+            cfg.append(f"umu {self._umu}")
+        if self._phis:
+            cfg.append(f"phi {self._phis}")
+        cfg.append(f"output_user {self._output}")
+        if self._post_process:
+            cfg.append(f"output_process {self._post_process}")
+        cfg.append(self._verbose)
+        if self._wavelength:
+            cfg.append(f"wavelength {self._wavelength}")
+        return "\n".join(cfg)
+
+    @property
+    def aerosol(self):
+        """Get aerosol."""
+        return self._azimuth
+
+    @aerosol.setter
+    def aerosol(self, path):
+        self._aerosol = path
+
+    @property
+    def albedo(self):
+        """Get ground albedo."""
+        return self._albedo
+
+    @albedo.setter
+    def albedo(self, refl):
+        self._albedo = refl
+
+    @property
+    def altitude(self):
+        """Get site altitude."""
+        return self._altitude
+
+    @altitude.setter
+    def altitude(self, alt):
+        self._altitude = alt
+
+    @property
+    def aod(self):
+        """Get aerosol optical depth."""
+        return self._aod
+
+    @aod.setter
+    def aod(self, aod_):
+        self._aod = aod_
+
+    @property
+    def atmosphere(self):
+        """Get atmosphere file path."""
+        return f"atmosphere_file {self._atmosphere}"
+
+    @atmosphere.setter
+    def atmosphere(self, atmosphere_file):
+        self._atmosphere = atmosphere_file
+
+    @property
+    def azimuth(self):
+        """Get solar azimuth angle."""
+        return self._azimuth
+
+    @azimuth.setter
+    def azimuth(self, azimuth):
+        self._azimuth = azimuth
+
+    @property
+    def band(self):
+        """Get solar source band."""
+        return self._band
+
+    @band.setter
+    def band(self, params):
+        self._band = params
+
+    @property
+    def cloudcover(self):
+        """Get cloudcover value."""
+        return self._cloudcover
+
+    @cloudcover.setter
+    def cloudcover(self, cc):
+        self._cloudcover = cc
+
+    @property
+    def latitude(self):
+        """Get site latitude."""
+        return self._latitude
+
+    @latitude.setter
+    def latitude(self, lat: float):
+        if lat < 0:
+            self._latitude = f"S {abs(lat):.2f}"
+        else:
+            self._latitude = f"N {lat:.2f}"
+
+    @property
+    def longitude(self):
+        """Get site longitude."""
+        return self._longitude
+
+    @longitude.setter
+    def longitude(self, lon: float):
+        if lon < 0:
+            self._longitude = f"E {abs(lon):.2f}"
+        else:
+            self._longitude = f"E {lon:.2f}"
+
+    @property
+    def output(self):
+        return self._output
+
+    @output.setter
+    def output(self, ouput_user: str):
+        self._output = ouput_user
+
+    @property
+    def post_process(self):
+        return self._post_process
+
+    @post_process.setter
+    def post_process(self, process: str):
+        self._post_process = process
+
+    @property
+    def phis(self):
+        return self._phis
+
+    @phis.setter
+    def phis(self, phi: List[float]):
+        self._phis = " ".join(map(str, phi))
+
+    @property
+    def solver(self):
+        return self._solver
+
+    @solver.setter
+    def solver(self, solver):
+        self._solver = solver
+
+    @property
+    def source(self):
+        return self._source
+
+    @source.setter
+    def source(self, source: str):
+        self._source = source
+
+    @property
+    def time(self):
+        return self._time
+
+    @time.setter
+    def time(self, dt_: str):
+        self._time = dt_
+
+    @property
+    def umu(self):
+        return self._umu
+
+    @umu.setter
+    def umu(self, ct: List[float]):
+        self._umu = " ".join(map(str, ct))
+
+    @property
+    def verbose(self):
+        return self._verbose
+
+    @verbose.setter
+    def verbose(self, v_q: str):
+        if v_q.startswith("q"):
+            self._verbose = "quiet"
+        elif v_q.startswith("v"):
+            self._verbose = "verbose"
+
+    @property
+    def wavelength(self):
+        return self._wavelength
+
+    @wavelength.setter
+    def wavelength(self, wvl: float):
+        self._wavelength = wvl
+
+    @property
+    def zenith(self):
+        return self._zenith
+
+    @zenith.setter
+    def zenith(self, zenith: float):
+        self._zenith = zenith
+
+
+def genskylrt_total(config):
+    """."""
+    config.band = "kato2"
+    config.output = "edir edn"
+    config.post_process = "sum"
+    proc = sp.run(
+        "uvspec",
+        encoding="utf-8",
+        input=config.config,
+        stderr=sp.PIPE,
+        stdout=sp.PIPE,
+    )
+    direct_hor, diff_hor = list(map(float, proc.stdout.strip().split()))
+    return direct_hor, diff_hor
+
+
+def genskylrt_solar(config):
+    """."""
+    config.band = "kato2"
+    config.post_process = "sum"
+    proc = sp.run(
+        "uvspec",
+        encoding="utf-8",
+        input=config.config,
+        stderr=sp.PIPE,
+        stdout=sp.PIPE,
+    )
+    return [i / 1e3 for i in map(float, proc.stdout.strip().split())]
+
+
+def genskylrt(config: UvspecConfig, wavelengths):
+    """."""
+    result = []
+    for wvl in wavelengths:
+        config.wavelength = wvl
+        proc = sp.run(
+            "uvspec",
+            encoding="utf-8",
+            input=config.config,
+            stdout=sp.PIPE,
+        )
+        result.append(proc.stdout.strip().split())
+    return list(zip(*result))
+
+
+def main() -> None:
     """gencolorsky entry point."""
-    # Solar disk solid angle
-    solar_sa = 6.7967e-5
-    start_wvl = 360
-    end_wvl = 800
-    wvl_step = 10
-    direct_sun = True
-    try:
-        lib_path = os.environ["LIBRADTRAN_DATA_FILES"]
-    except KeyError:
-        raise KeyError("Can't find LIBRADTRAN_DATA_FILES in environment")
     args = parse_cli_args()
     logger = get_logger(args.verbose)
-    verbose = True if args.verbose < 3 else False
-    hours = args.hour + args.minute / 60.0
+    verbose = args.verbose == 1
     if args.rgb:
         wavelengths = [440, 550, 680]
     else:
-        wavelengths = range(start_wvl, end_wvl + 1, wvl_step)
+        wavelengths = list(range(START_WVL, END_WVL + 1, WVL_STEP))
     dt = datetime(args.year, args.month, args.day, args.hour, args.minute)
-    dt_str = (dt + timedelta(hours=int(args.tzone / (-15)))).strftime(
-        "%Y %m %d %H %M %S"
+    meta = WeaMetaData(
+        "country", "city", args.latitude, args.longitude, args.tzone, args.altitude
     )
     ct, phis = get_uniform_samples(args.anglestep)
-    source_prim, source_dir, zenith_angle, azimuth_angle = get_solar(
-        args.year,
-        args.month,
-        args.day,
-        hours,
-        args.latitude,
-        args.longitude,
-        args.tzone,
+    direct_sun = True
+    source_prim, source_dir, zenith_angle, azimuth_angle = get_solar(dt, meta)
+    uvspec = UvspecConfig()
+    uvspec.source = uvspec.lib_path / "solar_flux" / "apm_1nm"
+    uvspec.solver = "pseudospherical"
+    uvspec.time = (dt + timedelta(hours=int(meta.timezone / (-15)))).strftime(
+        "%Y %m %d %H %M %S"
     )
-    # Generate input to uvspec
-    model = f"data_files_path {lib_path}\n"
-    model += f"source solar {lib_path}solar_flux/apm_1nm\n"
-    model += "pseudospherical\n"
-    model += "aerosol_default\n"
-    model += get_local_input(
-        dt_str,
-        args.latitude,
-        args.longitude,
-        args.altitude,
-        zenith_angle,
-        azimuth_angle,
-    )
+    uvspec.latitude = meta.latitude
+    uvspec.longitude = meta.longitude
+    uvspec.altitude = meta.elevation
+    uvspec.zenith = zenith_angle
+    uvspec.azimuth = azimuth_angle
+    uvspec.verbose = "verbose" if verbose else "quiet"
     if args.atm:
-        model += f"atmosphere_file {args.atm}\n"
+        uvspec.atmosphere = args.atm
     if args.cloudcover:
         if args.cloudprofile:
-            wc_path = args.cloudprofile
-        else:
-            wc_path = Path(__file__).parent / "data" / "WC.DAT"
-        model += f"wc_file 1D {wc_path}\n"
-        model += f"cloudcover wc {args.cloudcover}\n"
-        model += "interpret_as_level wc\n"  # use independent pixel approximation
-        if args.cloudcover == 1:
-            direct_sun = False
+            uvspec.wc_path = args.cloudprofile
+        uvspec.cloudcover = args.cloudcover
+        direct_sun = args.cloudcover != 1.0
     if args.aerosol:
-        model += f"aerosol_species_file {args.aerosol}\n"
-    if args.aod:
-        model += f"aerosol_modify tau set {args.aod}\n"
+        uvspec.aerosol = args.aerosol
+    uvspec.aod = args.aod
     if args.total:
-        inp = model
-        inp += "mol_abs_param kato2\n"
-        inp += get_output_input(None, None, output="edir edn", verbose=verbose)
-        inp += "output_process sum\n"
-        logger.info(inp)
-        proc = sp.run("uvspec", input=inp.encode(), stderr=sp.PIPE, stdout=sp.PIPE)
-        direct_hor, diff_hor = list(map(float, proc.stdout.decode().strip().split()))
+        logger.info(uvspec.config)
+        direct_hor, diff_hor = genskylrt_total(uvspec)
         direct_normal = direct_hor / source_dir[2]
         print(f"DNI: {direct_normal:.2f} W/m2")
         print(f"DHI: {diff_hor:.2f} W/m2")
         print(f"GHI: {direct_hor + diff_hor:.2f} W/m2")
         exit()
-    elif not direct_sun:
-        model += get_output_input(ct, phis, output="lambda uu")
-    else:
-        model += get_output_input(ct, phis)
-    result = []
-    for wvl in wavelengths:
-        inp = model
-        inp += f"wavelength {wvl}\n"
-        logger.info(inp)
-        proc = sp.run("uvspec", input=inp.encode(), stdout=sp.PIPE)
-        result.append(proc.stdout.decode().strip().split())
-    wvl_range = end_wvl - start_wvl + wvl_step
-    wavelengths = list(wavelengths)
-    wvl_length = len(wavelengths)
-    trix, triy, triz, mlnp, wvl_idx = color.load_cie_tristi(wavelengths, args.observer)
-    columns = [col for col in zip(*result)]
-    # Carry out additional full solar spectra run if pmt requested
+    uvspec.umu = ct
+    uvspec.phis = phis
+    uvspec.output = "lambda edir edn uu"
+    if not direct_sun:
+        uvspec.output = "lambda uu"
+    logger.info(uvspec.config)
+    columns = genskylrt(uvspec, wavelengths)
+    if args.rgb:
+        wavelengths = range(360, 801, 5)
+        new_columns = [list(range(360, 801, 5))]
+        for col in columns[1:]:
+            new_columns.append(list(samples2spec(*map(float, col[::-1])).values()))
+        columns = new_columns
+    wvl_range = END_WVL - START_WVL + WVL_STEP
+    cie_xyz_bar = color.get_interpolated_cie_xyz(wavelengths, args.observer)
     if args.pmt:
-        inp = model
-        inp += "mol_abs_param kato2\n"
-        inp += get_output_input(ct, phis, output="lambda edir edn uu", verbose=verbose)
-        inp += "output_process sum\n"
-        logger.info(inp)
-        proc = sp.run("uvspec", input=inp.encode(), stderr=sp.PIPE, stdout=sp.PIPE)
-        blue = [i / 1e3 for i in map(float, proc.stdout.decode().strip().split())]
-        pfact = color.LEMAX * wvl_range / wvl_length / 1e3
-        mfact = color.MLEMAX * wvl_range / wvl_length / 1e3
+        blue = genskylrt_solar(uvspec)
+        pfact = color_data.LEMAX * wvl_range / wvl_length / 1e3
+        mfact = color_data.MLEMAX * wvl_range / wvl_length / 1e3
         red = []
         green = []
+        mlnp = color.get_interpolated_mlnp(wavelengths)
         for col in columns[1:]:
             col = list(map(float, col))
-            cieys = [i * j for i, j in zip(col, triy)]
+            cieys = [i * j[1] for i, j in zip(col, cie_xyz_bar)]
             edis = [i * j for i, j in zip(col, mlnp)]
             cie_y = pfact * sum(cieys)
             edi = mfact * sum(edis)
             red.append(cie_y)
             green.append(edi)
     else:
-        coeffs = color.get_conversion_matrix(args.colorspace)
-        pfact = color.LEMAX * wvl_range / wvl_length / 1e3 / 179
-        # Get RGB for each sampled point from sky
+        coeffs = color_data.XYZ2RGB_RAD
+        pfact = color_data.LEMAX / 1e3 / 179
         red = []
         green = []
         blue = []
         for col in columns[1:]:
             col = list(map(float, col))
-            ciexs = [i * j for i, j in zip(col, trix)]
-            cieys = [i * j for i, j in zip(col, triy)]
-            ciezs = [i * j for i, j in zip(col, triz)]
-            cie_x = pfact * sum(ciexs)
-            cie_y = pfact * sum(cieys)
-            cie_z = pfact * sum(ciezs)
+            cie_x, cie_y, cie_z = color.spec2xyz(cie_xyz_bar, col, wvl_range, emis=True)
+            cie_x *= pfact
+            cie_y *= pfact
+            cie_z *= pfact
             _r, _g, _b = color.xyz2rgb(cie_x, cie_y, cie_z, coeffs)
             red.append(_r)
             green.append(_g)
             blue.append(_b)
-
     out_dir = Path(
-        f"cs_{args.month:02d}{args.day:02d}{args.hour:02d}_{args.minute:02d}_{args.latitude}_{args.longitude}"
+        f"lrt_{args.month:02d}{args.day:02d}_{args.hour:02d}"
+        f"{args.minute:02d}_{args.latitude}_{args.longitude}"
     )
     out_dir.mkdir(exist_ok=True)
     if direct_sun:
@@ -373,8 +624,8 @@ def main():
     with open(out_dir / "sky.rad", "w") as wtr:
         if direct_sun:
             wtr.write("void light solar\n0\n0\n3 ")
-            wtr.write(f"{red[0]/solar_sa/source_dir[2]} ")
-            wtr.write(f"{green[0]/solar_sa/source_dir[2]} ")
-            wtr.write(f"{blue[0]/solar_sa/source_dir[2]}\n")
+            wtr.write(f"{red[0]/sky.SOLAR_SA/source_dir[2]} ")
+            wtr.write(f"{green[0]/sky.SOLAR_SA/source_dir[2]} ")
+            wtr.write(f"{blue[0]/sky.SOLAR_SA/source_dir[2]}\n")
             wtr.write(str(source_prim) + "\n")
-        wtr.write(sky_template)
+        wtr.write(sky_template.format(path=out_dir))
