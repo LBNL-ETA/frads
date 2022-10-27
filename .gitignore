@@ -8,14 +8,11 @@ tags
 *.log
 *.vf
 *.mtx
-*.epw
 *.smx
 *.hdr
 .env
 .vim
-*.rad
-*.wea
 *.mat
 *.oct
-*.end
-*.err
+.venv
+.coverage
