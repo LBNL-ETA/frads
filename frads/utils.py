@@ -4,14 +4,11 @@ This module contains all utility functions used throughout frads.
 from io import TextIOWrapper
 import logging
 import math
-import os
 from pathlib import Path
 import random
-import re
 import string
 import subprocess as sp
-from typing import Generator
-from typing import List
+from typing import Any, Dict, Optional, List
 from typing import Set
 from typing import Tuple
 from typing import Union
@@ -24,7 +21,7 @@ from frads.types import ScatteringData
 from frads.types import BSDFData
 
 
-logger = logging.getLogger("frads.utils")
+logger: logging.Logger = logging.getLogger("frads.utils")
 
 
 GEOM_TYPE = ["polygon", "ring", "tube", "cone"]
@@ -89,21 +86,7 @@ def tmit2tmis(tmit: float) -> float:
 
 def polygon2prim(polygon: geom.Polygon, modifier: str, identifier: str) -> Primitive:
     """Generate a primitive from a polygon."""
-    return Primitive(modifier, "polygon", identifier, "0", polygon.to_real())
-
-
-# def get_igsdb_json(igsdb_id, token, xml=False):
-#     """Get igsdb data by igsdb_id"""
-#     if token is None:
-#         raise ValueError("Need IGSDB token")
-#     url = "https://igsdb.lbl.gov/api/v1/products/{}"
-#     if xml:
-#         url += "/datafile"
-#     header = {"Authorization": "Token " + token}
-#     response = request(url.format(igsdb_id), header)
-#     if response == '{"detail":"Not found."}':
-#         raise ValueError("Unknown igsdb id: ", igsdb_id)
-#     return response
+    return Primitive(modifier, "polygon", identifier, ["0"], polygon.to_real())
 
 
 def unpack_idf(path: str) -> dict:
@@ -112,56 +95,26 @@ def unpack_idf(path: str) -> dict:
         return parsers.parse_idf(rdr.read())
 
 
-def nest_list(inp: list, col_cnt: int) -> List[list]:
-    """Make a list of list give the column count."""
-    nested = []
-    if len(inp) % col_cnt != 0:
-        raise ValueError("Missing value in matrix data")
-    for i in range(0, len(inp), col_cnt):
-        sub_list = []
-        for n in range(col_cnt):
-            try:
-                sub_list.append(inp[i + n])
-            except IndexError:
-                break
-        nested.append(sub_list)
-    return nested
-
-
-def write_square_matrix(opath, sdata):
-    nrow = len(sdata)
-    ncol = len(sdata[0])
-    with open(opath, "w") as wt:
-        header = "#?RADIANCE\nNCOMP=3\n"
-        header += "NROWS=%d\nNCOLS=%d\n" % (nrow, ncol)
-        header += "FORMAT=ascii\n\n"
-        wt.write(header)
-        for row in sdata:
-            for val in row:
-                string = "\t".join(["%07.5f" % val] * 3)
-                wt.write(string)
-                wt.write("\t")
-            wt.write("\n")
-
-
 def sdata2bsdf(sdata: ScatteringData) -> BSDFData:
+    """Convert sdata object to bsdf object."""
     basis = BASIS_DICT[str(sdata.ncolumn)]
     lambdas = angle_basis_coeff(basis)
-    bsdf = [list(map(lambda x, y: x / y, i, lambdas)) for i in sdata.sdata]
-    return BSDFData(bsdf)
+    bsdf = []
+    for irow in range(sdata.nrow):
+        for icol, lam in zip(range(sdata.ncolumn), lambdas):
+            bsdf.append(sdata.sdata[icol + irow * sdata.ncolumn] / lam)
+    return BSDFData(bsdf, sdata.ncolumn, sdata.nrow)
 
 
 def bsdf2sdata(bsdf: BSDFData) -> ScatteringData:
+    """Covert a bsdf object into a sdata object."""
     basis = BASIS_DICT[str(bsdf.ncolumn)]
     lambdas = angle_basis_coeff(basis)
-    sdata = [list(map(lambda x, y: x / y, i, lambdas)) for i in bsdf.bsdf]
-    return ScatteringData(sdata)
-
-
-def dhi2dni(GHI: float, DHI: float, alti: float) -> float:
-    """Calculate direct normal from global horizontal
-    and diffuse horizontal irradiance."""
-    return (GHI - DHI) / math.cos(math.radians(90 - alti))
+    sdata = []
+    for irow in range(bsdf.nrow):
+        for icol, lam in zip(range(bsdf.ncolumn), lambdas):
+            sdata.append(bsdf.bsdf[icol + irow * bsdf.ncolumn] * lam)
+    return ScatteringData(sdata, bsdf.ncolumn, bsdf.nrow)
 
 
 def frange_inc(start, stop, step):
@@ -170,39 +123,6 @@ def frange_inc(start, stop, step):
     while r < stop:
         yield r
         r += step
-
-
-def frange_des(start, stop, step):
-    """Generate descending non-integer range."""
-    r = start
-    while r > stop:
-        yield r
-        r -= step
-
-
-def basename(fpath, keep_ext=False):
-    """Get the basename from a file path."""
-    name = os.path.basename(fpath)
-    if not keep_ext:
-        name = os.path.splitext(name)[0]
-    return name
-
-
-def is_number(string):
-    """Test is string is a number."""
-    try:
-        float(string)
-        return True
-    except ValueError:
-        return False
-
-
-def silent_remove(path):
-    """Remove a file, silent if file does not exist."""
-    try:
-        os.remove(path)
-    except FileNotFoundError as e:
-        logger.error(e)
 
 
 def square2disk(in_square_a: float, in_square_b: float) -> tuple:
@@ -238,45 +158,11 @@ def square2disk(in_square_a: float, in_square_b: float) -> tuple:
     return out_disk_x, out_disk_y, out_disk_r, out_disk_phi
 
 
-def sprun(cmd):
-    """Call subprocess run"""
-    logger.debug(cmd)
-    proc = sp.run(cmd, check=True, stderr=sp.PIPE)
-    if proc.stderr != b"":
-        logger.warning(proc.stderr)
-
-
-def spcheckout(cmd, inp=None):
-    """Call subprocess run and return results."""
-    logger.debug(cmd)
-    proc = sp.run(cmd, input=inp, stderr=sp.PIPE, stdout=sp.PIPE)
-    if proc.stderr != b"":
-        logger.warning(proc.stderr)
-    return proc.stdout
-
-
-def id_generator(size=3, chars=None):
+def id_generator(size: int = 3, chars: Optional[str] = None) -> str:
     """Generate random characters."""
     if chars is None:
         chars = string.ascii_uppercase + string.digits
     return "".join(random.choice(chars) for _ in range(size))
-
-
-def tokenize(inp: str) -> Generator[str, None, None]:
-    """Generator for tokenizing a string that
-    is seperated by a space or a comma.
-    Args:
-       inp: input string
-    Yields:
-        next token
-    """
-    tokens = re.compile(
-        " +|[-+]?(\d+([.,]\d*)?|[.,]\d+)([eE][-+]?\d+)+|[\d*\.\d+]+|[{}]")
-    for match in tokens.finditer(inp):
-        if match.group(0)[0] in " ,":
-            continue
-        else:
-            yield match.group(0)
 
 
 def unpack_primitives(file: Union[str, Path, TextIOWrapper]) -> List[Primitive]:
@@ -284,7 +170,7 @@ def unpack_primitives(file: Union[str, Path, TextIOWrapper]) -> List[Primitive]:
     if isinstance(file, TextIOWrapper):
         lines = file.readlines()
     else:
-        with open(file, "r") as rdr:
+        with open(file, "r", encoding="ascii") as rdr:
             lines = rdr.readlines()
     return parsers.parse_primitive(lines)
 
@@ -295,18 +181,18 @@ def primitive_normal(primitive_paths: List[str]) -> Set[geom.Vector]:
     _normals: List[geom.Vector]
     for path in primitive_paths:
         _primitives.extend(unpack_primitives(path))
-    _normals = [parsers.parse_polygon(prim.real_arg).normal() for prim in _primitives]
+    _normals = [parsers.parse_polygon(prim.real_arg).normal for prim in _primitives]
     return set(_normals)
 
 
 def samp_dir(primlist: list) -> geom.Vector:
     """Calculate the primitives' average sampling
     direction weighted by area."""
-    primlist = [p for p in primlist if p.ptype == "polygon" or p.ptype == "ring"]
+    primlist = [p for p in primlist if p.ptype in ("polygon", "ring")]
     normal_area = geom.Vector()
     for prim in primlist:
         polygon = parsers.parse_polygon(prim.real_arg)
-        normal_area += polygon.normal().scale(polygon.area())
+        normal_area += polygon.normal.scale(polygon.area)
     sdir = normal_area.scale(1.0 / len(primlist))
     sdir = sdir.normalize()
     return sdir
@@ -348,8 +234,8 @@ def neutral_plastic_prim(
     """
     err_msg = "reflectance, speculariy, and roughness have to be 0-1"
     assert all(0 <= i <= 1 for i in [spec, refl, rough]), err_msg
-    real_args = "5 {0} {0} {0} {1} {2} \n".format(refl, spec, rough)
-    return Primitive(mod, "plastic", ident, "0", real_args)
+    real_args = [5, refl, refl, refl, spec, rough]
+    return Primitive(mod, "plastic", ident, ["0"], real_args)
 
 
 def neutral_trans_prim(
@@ -371,13 +257,11 @@ def neutral_trans_prim(
     tspec = 0
     err_msg = "reflectance, speculariy, and roughness have to be 0-1"
     assert all(0 <= i <= 1 for i in [spec, refl, rough]), err_msg
-    real_args = "7 {0} {0} {0} {1} {2} {3} {4}".format(
-        color, spec, rough, t_diff, tspec
-    )
-    return Primitive(mod, "trans", ident, "0", real_args)
+    real_args = [7, color, color, color, spec, rough, t_diff, tspec]
+    return Primitive(mod, "trans", ident, ["0"], real_args)
 
 
-def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough):
+def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough) -> Primitive:
     """Generate a colored plastic material.
     Args:
         mod(str): modifier to the primitive
@@ -399,11 +283,13 @@ def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough):
     matr = round(red / weighted * refl, 3)
     matg = round(green / weighted * refl, 3)
     matb = round(blue / weighted * refl, 3)
-    real_args = "5 %s %s %s %s %s\n" % (matr, matg, matb, specu, rough)
+    real_args = [5, matr, matg, matb, specu, rough]
     return Primitive(mod, "plastic", ident, "0", real_args)
 
 
-def glass_prim(mod, ident, tr, tg, tb, refrac=1.52):
+def glass_prim(
+    mod, ident, tr: float, tg: float, tb: float, refrac: float = 1.52
+) -> Primitive:
     """Generate a glass material.
 
     Args:
@@ -418,32 +304,39 @@ def glass_prim(mod, ident, tr, tg, tb, refrac=1.52):
     tmsv_red = tmit2tmis(tr)
     tmsv_green = tmit2tmis(tg)
     tmsv_blue = tmit2tmis(tb)
-    real_args = "4 %s %s %s %s" % (tmsv_red, tmsv_green, tmsv_blue, refrac)
-    return Primitive(mod, "glass", ident, "0", real_args)
+    real_args = [4, tmsv_red, tmsv_green, tmsv_blue, refrac]
+    return Primitive(mod, "glass", ident, ["0"], real_args)
 
 
 def bsdf_prim(
-    mod, ident, xmlpath, upvec, pe=False, thickness=0.0, xform=None, real_args="0"
-):
+    mod,
+    ident,
+    xmlpath,
+    upvec,
+    pe: bool = False,
+    thickness: float = 0.0,
+    xform=None,
+    real_args: str = "0",
+) -> Primitive:
     """Create a BSDF primtive."""
-    str_args = '"{}" {} '.format(xmlpath, str(upvec))
+    str_args = [xmlpath, str(upvec)]
     str_args_count = 5
     if pe:
         _type = "aBSDF"
     else:
         str_args_count += 1
-        str_args = "%s " % thickness + str_args
+        str_args = [str(thickness), *str_args]
         _type = "BSDF"
     if xform is not None:
         str_args_count += len(xform.split())
-        str_args += xform
+        str_args.extend(*xform.split())
     else:
-        str_args += "."
-    str_args = "%s " % str_args_count + str_args
+        str_args.append(".")
+    str_args = [str(str_args_count), *str_args]
     return Primitive(mod, _type, ident, str_args, real_args)
 
 
-def lambda_calc(theta_lr, theta_up, nphi):
+def lambda_calc(theta_lr: float, theta_up: float, nphi: float) -> float:
     """."""
     return (
         (
@@ -467,43 +360,39 @@ def angle_basis_coeff(basis: str) -> List[float]:
     return lambdas
 
 
-def opt2str(opt: dict) -> str:
-    out_str = ""
-    for k, v in opt.items():
-        if isinstance(v, list):
-            val = " ".join(map(str, v))
-        else:
-            val = v
-        if k == "vt" or k == "f":
-            out_str += "-{}{} ".format(k, val)
-        elif k == "hd":
-            out_str += "-h "
-        else:
-            out_str += "-{} {} ".format(k, val)
-    return out_str
-
-
 def opt2list(opt: dict) -> List[str]:
+    """Convert option dictionary to list.
+
+    Key: str
+    Value: str | float | int | bool | list
+
+    Args:
+        opt: option dictionary
+    Returns:
+        A list of strings
+    """
     out = []
-    for k, v in opt.items():
-        val: Union[str, list]
-        if isinstance(v, list):
-            val = list(map(str, v))
-        else:
-            val = str(v)
-        if k == "vt" or k == "f":
-            out.append(f"-{k}{val}")
-        elif k == "hd":
-            out.append("-h")
-        else:
-            if isinstance(val, list):
-                out.extend(["-" + k, *val])
+    for key, value in opt.items():
+        if isinstance(value, str):
+            if key == "vf":
+                out.extend(["-" + key, value])
             else:
-                out.extend(["-" + k, val])
+                out.append(f"-{key}{value}")
+        elif isinstance(value, bool):
+            if value:
+                out.append(f"-{key}+")
+            else:
+                out.append(f"-{key}-")
+        elif isinstance(value, (int, float)):
+            out.extend(["-" + key, str(value)])
+        elif isinstance(value, list):
+            out.extend(["-" + key, *map(str, value)])
     return out
 
 
-def calc_reinsrc_dir(mf, x1=0.5, x2=0.5) -> Tuple[List[geom.Vector], List[float]]:
+def calc_reinsrc_dir(
+    mf: int, x1: float = 0.5, x2: float = 0.5
+) -> Tuple[List[geom.Vector], List[float]]:
     """
     Calculate Reinhart/Treganza sampling directions.
     Direct translation of Radiance reinsrc.cal file.
@@ -516,26 +405,24 @@ def calc_reinsrc_dir(mf, x1=0.5, x2=0.5) -> Tuple[List[geom.Vector], List[float]
         A list of geom.Vector
         A list of solid angle associated with each vector
     """
+
     def rnaz(r):
         """."""
         if r > (mf * 7 - 0.5):
             return 1
-        else:
-            return mf * TNAZ[int(math.floor((r + 0.5) / mf))]
+        return mf * TNAZ[int(math.floor((r + 0.5) / mf))]
 
     def raccum(r):
         """."""
         if r > 0.5:
             return rnaz(r - 1) + raccum(r - 1)
-        else:
-            return 0
+        return 0
 
     def rfindrow(r, rem):
         """."""
         if (rem - rnaz(r)) > 0.5:
             return rfindrow(r + 1, rem - rnaz(r))
-        else:
-            return r
+        return r
 
     TNAZ = [30, 30, 24, 24, 18, 12, 6]
     rowMax = 7 * mf + 1
@@ -573,16 +460,17 @@ def pt_inclusion(pt: geom.Vector, polygon_pts: List[geom.Vector]) -> int:
         return (pt1.x - pt0.x) * (pt2.y - pt0.y) - (pt2.x - pt0.x) * (pt1.y - pt0.y)
 
     # Close the polygon for looping
-    polygon_pts.append(polygon_pts[0])
+    # polygon_pts.append(polygon_pts[0])
+    polygon_pts = [*polygon_pts, polygon_pts[0]]
     wn = 0
-    for i in range(len(polygon_pts)-1):
+    for i in range(len(polygon_pts) - 1):
         if polygon_pts[i].y <= pt.y:
             if polygon_pts[i + 1].y > pt.y:
-                if (isLeft(polygon_pts[i], polygon_pts[i + 1], pt) > 0):
+                if isLeft(polygon_pts[i], polygon_pts[i + 1], pt) > 0:
                     wn += 1
         else:
             if polygon_pts[i + 1].y <= pt.y:
-                if (isLeft(polygon_pts[i], polygon_pts[i + 1], pt) < 0):
+                if isLeft(polygon_pts[i], polygon_pts[i + 1], pt) < 0:
                     wn -= 1
     return wn
 
@@ -598,15 +486,15 @@ def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> list:
         List of the points as list
     """
     vertices = polygon.vertices
-    plane_height = sum([i.z for i in vertices]) / len(vertices)
-    imin, imax, jmin, jmax, _, _ = polygon.extreme()
+    plane_height = sum(i.z for i in vertices) / len(vertices)
+    imin, imax, jmin, jmax, _, _ = polygon.extreme
     xlen_spc = (imax - imin) / spacing
     ylen_spc = (jmax - jmin) / spacing
     xstart = ((xlen_spc - int(xlen_spc) + 1)) * spacing / 2
     ystart = ((ylen_spc - int(ylen_spc) + 1)) * spacing / 2
     x0 = [x + xstart for x in frange_inc(imin, imax, spacing)]
     y0 = [x + ystart for x in frange_inc(jmin, jmax, spacing)]
-    grid_dir = polygon.normal().reverse()
+    grid_dir = polygon.normal.reverse()
     grid_hgt = geom.Vector(0, 0, plane_height) + grid_dir.scale(height)
     raw_pts = [
         geom.Vector(round(i, 3), round(j, 3), round(grid_hgt.z, 3))
@@ -615,10 +503,10 @@ def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> list:
     ]
     scale_factor = 1 - 0.3 / (imax - imin)  # scale boundary down .3 meter
     _polygon = polygon.scale(
-        geom.Vector(scale_factor, scale_factor, 0), polygon.centroid()
+        geom.Vector(scale_factor, scale_factor, 0), polygon.centroid
     )
     _vertices = _polygon.vertices
-    if polygon.normal() == geom.Vector(0, 0, 1):
+    if polygon.normal == geom.Vector(0, 0, 1):
         # pt_incls = pt_inclusion(_vertices)
         _grid = [p for p in raw_pts if pt_inclusion(p, _vertices) > 0]
     else:
@@ -629,25 +517,28 @@ def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> list:
     return grid
 
 
-def material_lib():
-    mlib = []
-    # carpet .2
-    mlib.append(neutral_plastic_prim("void", "carpet_20", 0.2, 0, 0))
-    # Paint .5
-    mlib.append(neutral_plastic_prim("void", "white_paint_50", 0.5, 0, 0))
-    # Paint .7
-    mlib.append(neutral_plastic_prim("void", "white_paint_70", 0.7, 0, 0))
-    # Glass .6
+def material_lib() -> Dict[str, Any]:
+    """Generate a list of generic material primitives."""
     tmis = tmit2tmis(0.6)
-    mlib.append(glass_prim("void", "glass_60", tmis, tmis, tmis))
-    return mlib
+    return {
+        "neutral_lambertian_0.2": neutral_plastic_prim(
+            "void", "neutral_lambertian_0.2", 0.2, 0, 0
+        ),
+        "neutral_lambertian_0.5": neutral_plastic_prim(
+            "void", "neutral_lambertian_0.5", 0.5, 0, 0
+        ),
+        "neutral_lambertian_0.7": neutral_plastic_prim(
+            "void", "neutral_lambertian_0.7", 0.7, 0, 0
+        ),
+        "glass_60": glass_prim("void", "glass_60", tmis, tmis, tmis),
+    }
 
 
-def gen_blinds(depth, width, height, spacing, angle, curve, movedown):
+def gen_blinds(depth, width, height, spacing, angle, curve, movedown) -> str:
     """Generate genblinds command for genBSDF."""
     nslats = int(round(height / spacing, 0))
     slat_cmd = "!genblinds blindmaterial blinds "
-    slat_cmd += "{} {} {} {} {} {}".format(depth, width, height, nslats, angle, curve)
+    slat_cmd += f"{depth} {width} {height} {nslats} {angle} {curve}"
     slat_cmd += "| xform -rz -90 -rx -90 -t "
     slat_cmd += f"{-width/2} {-height/2} {-movedown}\n"
     return slat_cmd
@@ -659,47 +550,79 @@ def get_glazing_primitive(panes: List[PaneRGB]) -> Primitive:
         raise ValueError("Only double pane supported")
     name = "+".join([pane.measured_data.name for pane in panes])
     if len(panes) == 1:
-        str_arg = "10 sr_clear_r sr_clear_g sr_clear_b "
-        str_arg += "st_clear_r st_clear_g st_clear_b 0 0 0 glaze1.cal"
-        coated_real = "1" if panes[0].measured_data.coated_side == "front" else "-1"
-        real_arg = f"19 0 0 0 0 0 0 0 0 0 {coated_real} "
-        real_arg += " ".join(map(str, panes[0].glass_rgb)) + " "
-        real_arg += " ".join(map(str, panes[0].coated_rgb)) + " "
-        real_arg += " ".join(map(str, panes[0].trans_rgb))
+        str_arg = [
+            "10",
+            "sr_clear_r",
+            "sr_clear_g",
+            "sr_clear_b",
+            "st_clear_r",
+            "st_clear_g",
+            "st_clear_b",
+            "0",
+            "0",
+            "0",
+            "glaze1.cal",
+        ]
+        coated_real = 1 if panes[0].measured_data.coated_side == "front" else -1
+        real_arg = [
+            19,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            coated_real,
+            *[round(i, 3) for i in panes[0].glass_rgb],
+            *[round(i, 3) for i in panes[0].coated_rgb],
+            *[round(i, 3) for i in panes[0].trans_rgb],
+        ]
     else:
-        s12t_rgb = panes[0].trans_rgb
-        s34t_rgb = panes[1].trans_rgb
+        s12t_r, s12t_g, s12t_b = panes[0].trans_rgb
+        s34t_r, s34t_g, s34t_b = panes[1].trans_rgb
         if panes[0].measured_data.coated_side == "back":
-            s2r_rgb = panes[0].coated_rgb
-            s1r_rgb = panes[0].glass_rgb
+            s2r_r, s2r_g, s2r_b = panes[0].coated_rgb
+            s1r_r, s1r_g, s1r_b = panes[0].glass_rgb
         else:  # front or neither side coated
-            s2r_rgb = panes[0].glass_rgb
-            s1r_rgb = panes[0].coated_rgb
+            s2r_r, s2r_g, s2r_b = panes[0].glass_rgb
+            s1r_r, s1r_g, s1r_b = panes[0].coated_rgb
         if panes[1].measured_data.coated_side == "back":
-            s4r_rgb = panes[1].coated_rgb
-            s3r_rgb = panes[1].glass_rgb
+            s4r_r, s4r_g, s4r_b = panes[1].coated_rgb
+            s3r_r, s3r_g, s3r_b = panes[1].glass_rgb
         else:  # front or neither side coated
-            s4r_rgb = panes[1].glass_rgb
-            s3r_rgb = panes[1].coated_rgb
-        str_arg = "10\nif(Rdot,"
-        str_arg += f"cr(fr({s4r_rgb[0]}),ft({s34t_rgb[0]}),fr({s2r_rgb[0]})),"
-        str_arg += f"cr(fr({s1r_rgb[0]}),ft({s12t_rgb[0]}),fr({s3r_rgb[0]})))\n"
-        str_arg += "if(Rdot,"
-        str_arg += f"cr(fr({s4r_rgb[1]}),ft({s34t_rgb[1]}),fr({s2r_rgb[1]})),"
-        str_arg += f"cr(fr({s1r_rgb[1]}),ft({s12t_rgb[1]}),fr({s3r_rgb[1]})))\n"
-        str_arg += "if(Rdot,"
-        str_arg += f"cr(fr({s4r_rgb[2]}),ft({s34t_rgb[2]}),fr({s2r_rgb[2]})),"
-        str_arg += f"cr(fr({s1r_rgb[2]}),ft({s12t_rgb[2]}),fr({s3r_rgb[2]})))\n"
-        str_arg += f"ft({s34t_rgb[0]})*ft({s12t_rgb[0]})\n"
-        str_arg += f"ft({s34t_rgb[1]})*ft({s12t_rgb[1]})\n"
-        str_arg += f"ft({s34t_rgb[2]})*ft({s12t_rgb[2]})\n"
-        str_arg += "0 0 0 glaze2.cal"
-        real_arg = "9 0 0 0 0 0 0 0 0 0"
+            s4r_r, s4r_g, s4r_b = panes[1].glass_rgb
+            s3r_r, s3r_g, s3r_b = panes[1].coated_rgb
+        str_arg = [
+            "10",
+            (
+                f"if(Rdot,cr(fr({s4r_r:.3f}),ft({s34t_r:.3f}),fr({s2r_r:.3f})),"
+                f"cr(fr({s1r_r:.3f}),ft({s12t_r:.3f}),fr({s3r_r:.3f})))"
+            ),
+            (
+                f"if(Rdot,cr(fr({s4r_g:.3f}),ft({s34t_g:.3f}),fr({s2r_g:.3f})),"
+                f"cr(fr({s1r_g:.3f}),ft({s12t_g:.3f}),fr({s3r_g:.3f})))"
+            ),
+            (
+                f"if(Rdot,cr(fr({s4r_b:.3f}),ft({s34t_b:.3f}),fr({s2r_b:.3f})),"
+                f"cr(fr({s1r_b:.3f}),ft({s12t_b:.3f}),fr({s3r_b:.3f})))"
+            ),
+            f"ft({s34t_r:.3f})*ft({s12t_r:.3f})",
+            f"ft({s34t_g:.3f})*ft({s12t_g:.3f})",
+            f"ft({s34t_b:.3f})*ft({s12t_b:.3f})",
+            "0",
+            "0",
+            "0",
+            "glaze2.cal",
+        ]
+        real_arg = [9, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     return Primitive("void", "BRTDfunc", name, str_arg, real_arg)
 
 
-def flush_corner_rays_cmd(ray_cnt: int, xres: int) -> list:
-    """Flush the corner rays from a fisheye view
+def get_flush_corner_rays_command(ray_cnt: int, xres: int) -> list:
+    """Flush the corner rays from a fisheye view.
 
     Args:
         ray_cnt: ray count;
@@ -727,3 +650,61 @@ def flush_corner_rays_cmd(ray_cnt: int, xres: int) -> list:
         "$1=$1;$2=$2;$3=$3;$4=$4*incir;$5=$5*incir;$6=$6*incir",
     ]
     return cmd
+
+
+def batch_process(
+    commands: List[List[str]],
+    inputs: Optional[List[bytes]] = None,
+    opaths: Optional[List[Path]] = None,
+    nproc: Optional[int] = None,
+) -> None:
+    """Run commands in batches.
+
+    Use subprocess.Popen to run commands.
+
+    Args:
+        commands: commands as a list of strings.
+        inputs: list of standard input to the commands.
+        opaths: list of paths to write standard output to.
+        nproc: number of commands to run in parallel at a time.
+    Returns:
+        None
+    """
+    nproc = 1 if nproc is None else nproc
+    command_groups = [commands[i : i + nproc] for i in range(0, len(commands), nproc)]
+    stdin_groups: List[List[Any]] = [[None] * len(ele) for ele in command_groups]
+    if inputs:
+        if len(inputs) != len(commands):
+            raise ValueError("Number of stdins not equal number of commands.")
+        stdin_groups = [inputs[i : i + nproc] for i in range(0, len(inputs), nproc)]
+    if opaths:
+        if len(opaths) != len(commands):
+            raise ValueError("Number of opaths not equal number of commands.")
+        opath_groups = [opaths[i : i + nproc] for i in range(0, len(opaths), nproc)]
+        for igrp, cgrp, ogrp in zip(stdin_groups, command_groups, opath_groups):
+            processes = []
+            fds = []
+            for command, opath in zip(cgrp, ogrp):
+                fd = open(opath, "wb")
+                processes.append(sp.Popen(command, stdin=sp.PIPE, stdout=fd))
+                fds.append(fd)
+            for proc, sin in zip(processes, igrp):
+                if (proc.stdin is not None) and (sin is not None):
+                    proc.stdin.write(sin)
+            for p, f in zip(processes, fds):
+                p.wait()
+                f.close()
+    else:
+        for igrp, cgrp in zip(stdin_groups, command_groups):
+            processes = [sp.Popen(command, stdin=sp.PIPE) for command in cgrp]
+            for proc, sin in zip(processes, igrp):
+                if (proc.stdin is not None) and (sin is not None):
+                    proc.stdin.write(sin)
+            for proc in processes:
+                proc.wait()
+
+
+def run_write(command, out, stdin=None) -> None:
+    """Run command and write stdout to file."""
+    with open(out, "wb") as wtr:
+        sp.run(command, check=True, input=stdin, stdout=wtr)
