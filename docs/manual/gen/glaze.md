@@ -15,15 +15,13 @@ generate a single or a double-pane glazing system.
 `-d/--igsdb`
 :	IGSDB JSON file path[s]. Either optics files (see above) or IGSDB files are required.
 
-Optional arguments:
-
 `-c/--cspace`:
 
-Color space (color primaries) (default: radiance)
+:	Color space (color primaries) (default: radiance)
 
 `-s/--observer`:
 
-CIE Observer 2° or 10° (default: 2)
+:	CIE Observer 2° or 10° (default: 2)
 
 ## Example
 
