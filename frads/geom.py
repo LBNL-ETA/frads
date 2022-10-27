@@ -7,8 +7,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import List
+from typing import SupportsFloat, Union, List
+from typing import Tuple
 from typing import Sequence
+from typing_extensions import SupportsIndex
 
 
 @dataclass(frozen=True)
@@ -32,7 +34,7 @@ class Vector:
             The string representation of the vector(str)
 
         """
-        return "{:02f} {:02f} {:02f}".format(self.x, self.y, self.z)
+        return f"{self.x:02f} {self.y:02f} {self.z:02f}"
 
     def __add__(self, other) -> Vector:
         """Add the two vectors.
@@ -52,16 +54,9 @@ class Vector:
         """Return the dot produce between two vectors."""
         return self.x * other.x + self.y * other.y + self.z * other.z
 
-    def __eq__(self, other: object) -> bool:
-        """Check if two vectors are the same."""
-        if not isinstance(other, Vector):
-            return NotImplemented
-        return (self.x, self.y, self.z) == (other.x, other.y, other.z)
-
-    def __hash__(self):
-        return hash((self.x, self.y, self.z))
-
-    def length(self):
+    @property
+    def length(self) -> float:
+        """Get vector distance from origin."""
         return math.sqrt(self.x**2 + self.y**2 + self.z**2)
 
     def cross(self, other: Vector) -> Vector:
@@ -74,12 +69,13 @@ class Vector:
             The resulting vector
 
         """
-        x_ = self.y * other.z - self.z * other.y
-        y_ = self.z * other.x - self.x * other.z
-        z_ = self.x * other.y - self.y * other.x
-        return Vector(x_, y_, z_)
+        return Vector(
+            self.y * other.z - self.z * other.y,
+            self.z * other.x - self.x * other.z,
+            self.x * other.y - self.y * other.x,
+        )
 
-    def distance_from(self, other: Vector):
+    def distance_from(self, other: Vector) -> float:
         """Calculate the distance between two points."""
         dx = math.fabs(self.x - other.x)
         dy = math.fabs(self.y - other.y)
@@ -95,14 +91,14 @@ class Vector:
         """Return the reversed vector."""
         return Vector(self.x * -1, self.y * -1, self.z * -1)
 
-    def scale(self, factor) -> Vector:
+    def scale(self, factor: float) -> Vector:
         """Scale the vector by a scalar."""
         return Vector(self.x * factor, self.y * factor, self.z * factor)
 
-    def angle_from(self, other) -> float:
+    def angle_from(self, other: "Vector") -> float:
         """."""
         dot_prod = self * other
-        angle = math.acos(dot_prod / (self.length() * other.length()))
+        angle = math.acos(dot_prod / (self.length * other.length))
         return angle
 
     def rotate_3d(self, vector: Vector, theta: float) -> Vector:
@@ -152,21 +148,26 @@ class Vector:
         phi = math.acos(self.z / r)
         return theta, phi, r
 
-    def coplanar(self, other1, other2):
+    def coplanar(self, other1, other2) -> bool:
         """Test if the vector is coplanar with the other two vectors."""
         triple_prod = self * other1.cross(other2)
         return triple_prod == 0
 
-    def to_list(self):
+    def to_list(self) -> List[float]:
         """Return a list containing the coordinates."""
         return [self.x, self.y, self.z]
 
-    def to_tuple(self):
-        """Return a tuple containing the coordinates, and round to third decimal place."""
-        return (round(self.x, 3), round(self.y, 3), round(self.z, 3))
+    def to_tuple(self) -> Tuple[float, ...]:
+        """Return a tuple containing the coordinates."""
+        return self.x, self.y, self.z
 
     @classmethod
-    def spherical(cls, theta, phi, r) -> Vector:
+    def spherical(
+        cls,
+        theta: Union[SupportsFloat, SupportsIndex],
+        phi: Union[SupportsFloat, SupportsIndex],
+        r: float,
+    ) -> Vector:
         """Construct a vector using spherical coordinates."""
         xcoord = math.sin(theta) * math.cos(phi) * r
         ycoord = math.sin(theta) * math.sin(phi) * r
@@ -174,14 +175,42 @@ class Vector:
         return cls(xcoord, ycoord, zcoord)
 
 
+@dataclass(frozen=True)
 class Polygon:
-    """3D polygon class."""
+    """3D polygon class
 
-    def __init__(self, vertices):
+    Attributes:
+        vertices(List[Vector]): list of vertices of the polygon.
+    """
+
+    vertices: Tuple[Vector]
+
+    def __post_init__(self) -> None:
         """."""
-        self.vert_cnt = len(vertices)
-        assert self.vert_cnt > 2, "Need more than 2 vertices to make a polygon."
-        self.vertices = vertices
+        if len(self.vertices) < 3:
+            raise ValueError("Need more than 2 vertices to make a polygon.")
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Polygon):
+            return NotImplemented
+        if len(other.vertices) != len(self.vertices):
+            return False
+        for vert in self.vertices:
+            if vert not in other.vertices:
+                return False
+        return True
+
+    def __add__(self, other: Polygon) -> Polygon:
+        """Merge two polygons."""
+        sp, index = self.shared_pts(other)
+        if sp != 2:
+            raise ValueError("Trying to merge two polygons without shared sides")
+        t1 = self.vertices[index[0] :] + self.vertices[: index[0]]
+        oid = other.vertices.index(self.vertices[index[0]])
+        t2 = other.vertices[oid:] + other.vertices[:oid]
+        if t1[-1] == t2[1]:
+            return Polygon(t1 + t2[2:])
+        return Polygon(t2 + t1[2:])
 
     def __sub__(self, other: Polygon) -> Polygon:
         """Polygon subtraction.
@@ -208,45 +237,47 @@ class Polygon:
             results.extend(reversed(new_other_vert[1:]))
             results.append(new_other_vert[0])
         results.extend(self.vertices)
-        return Polygon(results)
+        return Polygon(tuple(results))
 
-    def flip(self):
-        """Reverse the vertices order, thus reversing the normal."""
-        return Polygon([self.vertices[0]] + self.vertices[:0:-1])
-
-    def normal(self):
+    @property
+    def normal(self) -> Vector:
         """Calculate the polygon normal."""
-        vect21 = self.vertices[1] - self.vertices[0]
-        vect32 = self.vertices[2] - self.vertices[1]
-        normal = vect21.cross(vect32)
-        normal_u = normal.normalize()
-        return normal_u
+        normal = Vector(0, 0, 0)
+        for idx in range(len(self.vertices) - 2):
+            normal += (self.vertices[idx + 1] - self.vertices[idx]).cross(
+                self.vertices[idx + 2] - self.vertices[idx + 1]
+            )
+        return normal.normalize()
 
-    def centroid(self):
+    @property
+    def centroid(self) -> Vector:
         """Return the geometric center point."""
-        return sum(self.vertices, Vector()).scale(1 / self.vert_cnt)
+        return sum(self.vertices, Vector()).scale(1 / len(self.vertices))
 
-    def area(self):
-        """Calculate the area of the polygon.
+    @property
+    def area(self) -> float:
+        """Calculate the area of the polygon."""
+        total = Vector(0, 0, 0)
+        for idx in range(1, len(self.vertices) - 1):
+            total += (self.vertices[idx] - self.vertices[0]).cross(
+                self.vertices[idx + 1] - self.vertices[0]
+            )
+        return abs(total * Vector(0.5, 0.5, 0.5))
 
-        Returns:
-            polygon area(float)
+    @property
+    def extreme(self) -> Tuple[float, ...]:
+        """."""
+        xs = [v.x for v in self.vertices]
+        ys = [v.y for v in self.vertices]
+        zs = [v.z for v in self.vertices]
+        return min(xs), max(xs), min(ys), max(ys), min(zs), max(zs)
 
-        """
+    def flip(self) -> "Polygon":
+        """Reverse the vertices order, thus reversing the normal."""
+        return Polygon(self.vertices[::-1])
+        # return Polygon([self.vertices[0]] + self.vertices[:0:-1])
 
-        total = Vector()
-        for i in range(self.vert_cnt):
-            vect1 = self.vertices[i]
-            if i == self.vert_cnt - 1:
-                vect2 = self.vertices[0]
-            else:
-                vect2 = self.vertices[i + 1]
-            prod = vect1.cross(vect2)
-            total += prod
-        area = abs(total * self.normal() / 2)
-        return area
-
-    def scale(self, scale_vect, center):
+    def scale(self, scale_vect, center) -> "Polygon":
         """Scale the polygon.
 
         Parameters:
@@ -262,7 +293,7 @@ class Polygon:
             sy = center.y + (vert.y - center.y) * scale_vect.y
             sz = center.z + (vert.z - center.z) * scale_vect.z
             new_vertices.append(Vector(sx, sy, sz))
-        return Polygon(new_vertices)
+        return Polygon(tuple(new_vertices))
 
     def extrude(self, vector: Vector) -> list:
         """Extrude the polygon.
@@ -275,82 +306,66 @@ class Polygon:
 
         """
         polygons = [self]
-        polygon2 = Polygon([i + vector for i in self.vertices])
+        polygon2 = Polygon(([i + vector for i in self.vertices]))
         polygons.append(polygon2)
         for i in range(len(self.vertices) - 1):
             polygons.append(
                 Polygon(
-                    [
+                    (
                         self.vertices[i],
                         polygon2.vertices[i],
                         polygon2.vertices[i + 1],
                         self.vertices[i + 1],
-                    ]
+                    )
                 )
             )
         polygons.append(
             Polygon(
-                [
+                (
                     self.vertices[-1],
                     polygon2.vertices[-1],
                     polygon2.vertices[0],
                     self.vertices[0],
-                ]
+                )
             )
         )
         return polygons
 
-    def __add__(self, other: Polygon) -> Polygon:
-        """Merge two polygons."""
-        sp, index = self.shared_pts(other)
-        if sp != 2:
-            raise ValueError("Trying to merge two polygons without shared sides")
-        t1 = self.vertices[index[0] :] + self.vertices[: index[0]]
-        oid = other.vertices.index(self.vertices[index[0]])
-        t2 = other.vertices[oid:] + other.vertices[:oid]
-        if t1[-1] == t2[1]:
-            return Polygon(t1 + t2[2:])
-        return Polygon(t2 + t1[2:])
-
-    def shared_pts(self, other):
+    def shared_pts(self, other) -> Tuple[int, List[int]]:
         """Return the total number of share points between two polygons."""
         cnt = 0
         index = []
-        for pid in range(len(self.vertices)):
-            if self.vertices[pid].to_list() in other.to_list():
+        for pid, val in enumerate(self.vertices):
+            if val.to_list() in other.to_list():
                 cnt += 1
                 index.append(pid)
         return cnt, index
 
-    def rotate(self, vector, angle):
+    def rotate(self, vector, angle) -> "Polygon":
         """."""
         ro_pts = [v.rotate_3d(vector, angle) for v in self.vertices]
         return Polygon(ro_pts)
 
-    def move(self, vector):
+    def move(self, vector) -> "Polygon":
         """Return the moved polygon along a vector."""
         mo_pts = [v + vector for v in self.vertices]
         return Polygon(mo_pts)
-
-    def extreme(self):
-        """."""
-        xs = [v.x for v in self.vertices]
-        ys = [v.y for v in self.vertices]
-        zs = [v.z for v in self.vertices]
-        return min(xs), max(xs), min(ys), max(ys), min(zs), max(zs)
 
     def to_list(self):
         """Return a list of tuples."""
         return [p.to_tuple() for p in self.vertices]
 
-    def to_real(self):
+    def to_real(self) -> Union[List[float], List[int]]:
         """Convert the vertices to real arg string format."""
-        real_str = "{} ".format(3 * len(self.vertices))
-        vert_str = " ".join([str(i) for i in self.vertices])
-        return real_str + vert_str
+        real_arg = [3 * len(self.vertices)]
+        for vert in self.vertices:
+            real_arg.append(vert.x)
+            real_arg.append(vert.y)
+            real_arg.append(vert.z)
+        return real_arg
 
     @classmethod
-    def rectangle3pts(cls, pt1, pt2, pt3):
+    def rectangle3pts(cls, pt1, pt2, pt3) -> "Polygon":
         """."""
         vect21 = pt2 - pt1
         vect32 = pt3 - pt2
@@ -358,10 +373,10 @@ class Polygon:
         assert vect21.angle_from(vect32) == math.pi / 2, err_msg
         vect12 = pt1 - pt2
         pt4 = pt3 + vect12
-        return cls([pt1, pt2, pt3, pt4])
+        return cls((pt1, pt2, pt3, pt4))
 
 
-def convexhull(points: List[Vector], normal: Vector):
+def convexhull(points: List[Vector], normal: Vector) -> Polygon:
     """Convex hull on coplanar points.
 
     Parameters:
@@ -398,6 +413,20 @@ def convexhull(points: List[Vector], normal: Vector):
         v = max(points, key=lambda p: p.y)
     left, right = toleft(u, v, points), toleft(v, u, points)
     points = [v] + extend_pts(u, v, left) + [u] + extend_pts(v, u, right)
+    points.append(points[0])
+    points.append(points[1])
+    to_remove = []
+    for i, p in enumerate(points):
+        if i < len(points) - 2:
+            p12 = p.distance_from(points[i + 1])
+            p23 = points[i + 1].distance_from(points[i + 2])
+            p13 = p.distance_from(points[i + 2])
+            if (p12 + p23) == p13:
+                to_remove.append(points[i + 1])
+    points.pop()
+    points.pop()
+    for r in to_remove:
+        points.remove(r)
     return Polygon(points)
 
 
@@ -407,9 +436,9 @@ def polygon_center(*polygons):
     return sum(vertices, Vector()).scale(1 / len(vertices))
 
 
-def get_polygon_limits(polygon_list: Sequence[Polygon], offset=0.0):
+def get_polygon_limits(polygon_list: Sequence[Polygon], offset: float = 0.0):
     """Get the x,y,z limits from a list of polygons."""
-    extreme_list = [p.extreme() for p in polygon_list]
+    extreme_list = [p.extreme for p in polygon_list]
     lim = list(zip(*extreme_list))
     xmin = min(lim[0]) - offset
     xmax = max(lim[1]) + offset
@@ -450,3 +479,20 @@ def getbbox(polygons: Sequence[Polygon], offset: float = 0.0):
     wwpg = Polygon([v - e2w_vec for v in ewpg.vertices]).flip()  # -X
 
     return [fpg, cpg, ewpg, swpg, wwpg, nwpg]
+
+
+def merge_polygon(polygons: Sequence[Polygon]) -> Polygon:
+    """Merge polygons into a polygon using Convex Hull.
+
+    Args:
+        polygons: Polygons to be merged
+    Returns:
+        Merged polygon
+    Raises:
+        ValueError if window normals are not the same
+    """
+    normals = [p.normal for p in polygons]
+    if len(set(normals)) > 1:
+        raise ValueError("Windows not co-planar")
+    points = [i for p in polygons for i in p.vertices]
+    return convexhull(points, normals[0])
