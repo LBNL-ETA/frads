@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import SupportsFloat, Union, List
+from typing import Union
+from typing import List
 from typing import Tuple
 from typing import Sequence
-from typing_extensions import SupportsIndex
 
 
 @dataclass(frozen=True)
@@ -164,8 +164,8 @@ class Vector:
     @classmethod
     def spherical(
         cls,
-        theta: Union[SupportsFloat, SupportsIndex],
-        phi: Union[SupportsFloat, SupportsIndex],
+        theta: float,
+        phi: float,
         r: float,
     ) -> Vector:
         """Construct a vector using spherical coordinates."""
