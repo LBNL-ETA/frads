@@ -178,4 +178,4 @@ jobs:
         rtrace -version
         pip install pytest
         pip install numpy
-        python test_mrad.py
+        pytest test

@@ -14,7 +14,6 @@ from frads import utils
 from frads.types import Primitive
 from frads.types import Options
 from frads.types import View
-from subprocess import CompletedProcess
 
 logger = logging.getLogger("frads.raycall")
 
@@ -201,7 +200,7 @@ def render(
     room: Sequence[Primitive],
     sky: Primitive,
     options: Optional[Options] = None,
-) -> CompletedProcess[bytes]:
+):
     """Render a image."""
     oconv_command = get_oconv_command(has_stdin=True)
     input_prim = "\n".join(map(str, room))
@@ -220,7 +219,7 @@ def render(
     return rpict_proc
 
 
-def renderf(*paths, view, wea, meta, options) -> CompletedProcess[bytes]:
+def renderf(*paths, view, wea, meta, options):
     """Render a image."""
     ssky = sky.gen_perez_sky(wea, meta)
     oconv_command = get_oconv_command(*paths, has_stdin=True)
