@@ -2,173 +2,74 @@
 This module contains all data parsing routines.
 """
 import argparse
+import configparser
+from datetime import datetime
+from pathlib import Path
 import re
 import subprocess as sp
-from typing import Any
+from typing import Tuple, Any
 from typing import Dict
 from typing import Generator
 from typing import List
-import xml.etree.ElementTree as ET
+from typing import Sequence
+from typing import Union
 
 from frads import geom
-from frads import utils
 from frads.types import Primitive
 from frads.types import PaneProperty
+from frads.types import View
 from frads.types import WeaMetaData
-from frads.types import WeaDataRow
+from frads.types import WeaData
 
 
-def parse_primitive(lines: list) -> List[Primitive]:
-    """Parse Radiance primitives inside a file path into a list of dictionary.
-    Args:
-        lines: list of lines as strings
+def parse_mrad_config(cfg_path: Path) -> configparser.ConfigParser:
+    """Parse mrad configuration file."""
+    if not cfg_path.is_file():
+        raise FileNotFoundError(cfg_path)
+    config = configparser.ConfigParser(
+        allow_no_value=False,
+        inline_comment_prefixes="#",
+        interpolation=configparser.ExtendedInterpolation(),
+        converters={
+            "path": lambda x: Path(x.strip()),
+            "paths": lambda x: [Path(i) for i in x.split()],
+            "options": parse_opt,
+            "view": parse_vu,
+        },
+    )
+    config.read(Path(__file__).parent / "data" / "mrad_default.cfg")
+    config.read(cfg_path)
+    return config
 
-    Returns:
-        list of primitives as dictionaries
-    """
-    # Expand in-line commands
-    cmd_lines = [(idx, line) for idx, line in enumerate(lines) if line.startswith("!")]
-    cmd_results = []
-    for cmd in cmd_lines:
-        cmd_results.append(
-            sp.run(cmd[1][1:], shell=True, stdout=sp.PIPE).stdout.decode().splitlines()
+
+def parse_epw(epw_str: str) -> tuple:
+    """Parse epw file and return wea header and data."""
+    raw = epw_str.splitlines()
+    epw_header = raw[0].split(",")
+    content = raw[8:]
+    data = []
+    for li in content:
+        line = li.split(",")
+        year = int(line[0])
+        month = int(line[1])
+        day = int(line[2])
+        hour = int(line[3]) - 1
+        hours = hour + 0.5
+        dir_norm = float(line[14])
+        dif_hor = float(line[15])
+        cc = float(line[19])
+        aod = float(line[26])
+        data.append(
+            WeaData(datetime(year, month, day, hour, 30), dir_norm, dif_hor, cc, aod)
         )
-    counter = 0
-    for idx, item in enumerate(cmd_lines):
-        counter += item[0]
-        lines[counter : counter + 1] = cmd_results[idx]
-        counter += len(cmd_results[idx]) - 1 - item[0]
-
-    content = " ".join(
-        [i.strip() for i in lines if i.strip() != "" and i[0] != "#"]
-    ).split()
-    primitives: List[Primitive] = []
-    idx = 0
-    while idx < len(content):
-        _modifier = content[idx]
-        _type = content[idx + 1]
-        if _type == "alias":
-            _name_to = content[idx + 2]
-            _name_from = content[idx + 3]
-            primitives.append(
-                Primitive(_modifier, _type, _name_to, _name_from, "", int_arg="")
-            )
-            idx += 4
-            continue
-        _identifier = content[idx + 2]
-        str_arg_cnt = int(content[idx + 3])
-        _str_args = " ".join(content[idx + 3 : idx + 4 + str_arg_cnt])
-        idx += 5 + str_arg_cnt
-        real_arg_cnt = int(content[idx])
-        _real_args = " ".join(content[idx : idx + 1 + real_arg_cnt])
-        idx += real_arg_cnt + 1
-        primitives.append(
-            Primitive(_modifier, _type, _identifier, _str_args, _real_args)
-        )
-    return primitives
-
-
-def parse_polygon(real_arg: str) -> geom.Polygon:
-    """Parse real arguments to polygon.
-    Args:
-        primitive: a dictionary object containing a primitive
-
-    Returns:
-        modified primitive
-    """
-    real_args = real_arg.split()
-    coords = [float(i) for i in real_args[1:]]
-    arg_cnt = int(real_args[0])
-    vertices = [geom.Vector(*coords[i : i + 3]) for i in range(0, arg_cnt, 3)]
-    return geom.Polygon(vertices)
-
-
-def parse_vu(vu_str: str) -> dict:
-    """Parse view string into a dictionary.
-
-    Args:
-        vu_str: view parameters as a string
-
-    Returns:
-        A view dictionary
-    """
-
-    args_list = vu_str.strip().split()
-    vparser = argparse.ArgumentParser()
-    vparser.add_argument("-v", action="store", dest="vt")
-    vparser.add_argument("-vp", nargs=3, type=float)
-    vparser.add_argument("-vd", nargs=3, type=float)
-    vparser.add_argument("-vu", nargs=3, type=float)
-    vparser.add_argument("-vv", type=float)
-    vparser.add_argument("-vh", type=float)
-    vparser.add_argument("-vo", type=float)
-    vparser.add_argument("-va", type=float)
-    vparser.add_argument("-vs", type=float)
-    vparser.add_argument("-vl", type=float)
-    vparser.add_argument("-x", type=int)
-    vparser.add_argument("-y", type=int)
-    vparser.add_argument("-vf", type=str)
-    args, _ = vparser.parse_known_args(args_list)
-    view_dict = vars(args)
-    if view_dict["vt"] is not None:
-        view_dict["vt"] = view_dict["vt"][-1]
-    view_dict = {k: v for (k, v) in view_dict.items() if v is not None}
-    return view_dict
-
-
-def parse_opt(opt_str: str) -> dict:
-    """Parsing option string into a dictionary.
-
-    Args:
-        opt_str: rtrace option parameters as a string
-
-    Returns:
-        An option dictionary
-    """
-
-    args_list = opt_str.strip().split()
-    oparser = argparse.ArgumentParser()
-    oparser.add_argument("-I", action="store_true", dest="I", default=None)
-    oparser.add_argument("-I+", action="store_true", dest="I", default=None)
-    oparser.add_argument("-I-", action="store_false", dest="I", default=None)
-    oparser.add_argument("-i", action="store_true", dest="i", default=None)
-    oparser.add_argument("-i+", action="store_true", dest="i", default=None)
-    oparser.add_argument("-i-", action="store_false", dest="i", default=None)
-    oparser.add_argument("-V", action="store_true", dest="V", default=None)
-    oparser.add_argument("-V+", action="store_true", dest="V", default=None)
-    oparser.add_argument("-V-", action="store_false", dest="V", default=None)
-    oparser.add_argument("-u", action="store_true", dest="u", default=None)
-    oparser.add_argument("-u+", action="store_true", dest="u", default=None)
-    oparser.add_argument("-u-", action="store_false", dest="u", default=None)
-    oparser.add_argument("-ld", action="store_true", dest="ld", default=None)
-    oparser.add_argument("-ld+", action="store_true", dest="ld", default=None)
-    oparser.add_argument("-ld-", action="store_false", dest="ld", default=None)
-    oparser.add_argument("-w", action="store_true", dest="w", default=None)
-    oparser.add_argument("-w+", action="store_true", dest="w", default=None)
-    oparser.add_argument("-w-", action="store_false", dest="w", default=None)
-    oparser.add_argument("-aa", type=float)
-    oparser.add_argument("-ab", type=int)
-    oparser.add_argument("-ad", type=int)
-    oparser.add_argument("-ar", type=int)
-    oparser.add_argument("-as", type=int)
-    oparser.add_argument("-c", type=int, default=1)
-    oparser.add_argument("-dc", type=int)
-    oparser.add_argument("-dj", type=float)
-    oparser.add_argument("-dp", type=int)
-    oparser.add_argument("-dr", type=int)
-    oparser.add_argument("-ds", type=int)
-    oparser.add_argument("-dt", type=int)
-    oparser.add_argument("-f", action="store")
-    oparser.add_argument("-hd", action="store_const", const="", default=None)
-    oparser.add_argument("-lr", type=int)
-    oparser.add_argument("-lw", type=float)
-    oparser.add_argument("-n", type=int)
-    oparser.add_argument("-ss", type=int)
-    oparser.add_argument("-st", type=int)
-    args, _ = oparser.parse_known_args(args_list)
-    opt_dict = vars(args)
-    opt_dict = {k: v for (k, v) in opt_dict.items() if v is not None}
-    return opt_dict
+    city = epw_header[1]
+    country = epw_header[3]
+    latitude = float(epw_header[6])
+    longitude = -1 * float(epw_header[7])
+    tz = int(float(epw_header[8])) * (-15)
+    elevation = float(epw_header[9].rstrip())
+    meta_data = WeaMetaData(city, country, latitude, longitude, tz, elevation)
+    return meta_data, data
 
 
 def parse_idf(content: str) -> dict:
@@ -194,7 +95,136 @@ def parse_idf(content: str) -> dict:
     return obj_dict
 
 
-def parse_optics(fpath):
+def parse_igsdb_json(json_obj: dict) -> PaneProperty:
+    """Parse a JSON file from IGSDB."""
+    name = json_obj["name"].replace(" ", "_")
+    gtype = json_obj["type"]
+    coated_side = json_obj["coated_side"].lower()
+    thickness = json_obj["measured_data"]["thickness"]
+    spectral_data = json_obj["spectral_data"]["spectral_data"]
+
+    wavelength = []
+    transmittance = []
+    reflectance_front = []
+    reflectance_back = []
+
+    for row in spectral_data:
+        wavelength.append(row["wavelength"] * 1e3)  # um to nm
+        transmittance.append(row["T"])
+        reflectance_front.append(row["Rf"])
+        reflectance_back.append(row["Rb"])
+    return PaneProperty(
+        name,
+        thickness,
+        gtype,
+        coated_side,
+        wavelength,
+        transmittance,
+        reflectance_front,
+        reflectance_back,
+    )
+
+
+def get_rcontrib_options_args(parser):
+    """Add rcontrib specific options to a parser."""
+    parser.add_argument(
+        "-I", action="store_true", dest="I", default=None, help="Toggle Ill"
+    )
+    parser.add_argument(
+        "-I+", action="store_true", dest="I", default=None, help="Ill. On"
+    )
+    parser.add_argument(
+        "-I-", action="store_false", dest="I", default=None, help="Ill. Off"
+    )
+    parser.add_argument(
+        "-i", action="store_true", dest="i", default=None, help="Toggle ill(final)"
+    )
+    parser.add_argument(
+        "-i+", action="store_true", dest="i", default=None, help="Ill(final). On"
+    )
+    parser.add_argument(
+        "-i-", action="store_false", dest="i", default=None, help="Ill(final). Off"
+    )
+    parser.add_argument(
+        "-V",
+        action="store_true",
+        dest="V",
+        default=None,
+        help="Toggle to compute cofficent",
+    )
+    parser.add_argument(
+        "-V+",
+        action="store_true",
+        dest="V",
+        default=None,
+        help="Use actual source value",
+    )
+    parser.add_argument(
+        "-V-", action="store_false", dest="V", default=None, help="Compute coefficients"
+    )
+    parser.add_argument("-ab", type=int, metavar="", help="ambient bounces")
+    parser.add_argument("-ad", type=int, metavar="", help="Ambient division")
+    parser.add_argument("-c", type=int, metavar="", help="ray count")
+    parser.add_argument("-dc", type=int, metavar="", help="direct certainty")
+    parser.add_argument("-dj", type=float, metavar="", help="direct jitter")
+    parser.add_argument("-dp", type=int, metavar="", help="direct pixel")
+    parser.add_argument("-dr", type=int, metavar="", help="direct rely")
+    parser.add_argument("-ds", type=int, metavar="", help="direct sampling")
+    parser.add_argument("-dt", type=int, metavar="", help="direct smapling threshol")
+    parser.add_argument("-lr", type=int, metavar="", help="reflectance limits")
+    parser.add_argument("-lw", type=float, metavar="", help="limit weight")
+    parser.add_argument("-ss", type=int, metavar="", help="specular sampling")
+    parser.add_argument("-st", type=int, metavar="", help="specular sampling threshold")
+    return parser
+
+
+def get_rtrace_options_args(parser):
+    """Add rtrace options and flags to a parser."""
+    parser.add_argument("-u", action="store_true", dest="u", default=None)
+    parser.add_argument("-u+", action="store_true", dest="u", default=None)
+    parser.add_argument("-u-", action="store_false", dest="u", default=None)
+    parser.add_argument("-ld", dest="ld", help="Limit ray distance")
+    parser.add_argument(
+        "-ld-",
+        action="store_false",
+        dest="ld",
+        default=None,
+        help="Unlimit ray distance",
+    )
+    parser.add_argument("-aa", type=float, metavar="", help="ambient accuracy")
+    parser.add_argument("-ar", type=int, metavar="", help="ambient resolution")
+    parser.add_argument("-as", type=int, metavar="", help="ambient super sampling")
+    parser.add_argument("-av", type=float, nargs=3, metavar="", help="ambient values")
+    parser = get_rcontrib_options_args(parser)
+    return parser
+
+
+def parse_opt(opt_str: str) -> dict:
+    """Parsing option string into a dictionary.
+
+    Args:
+        opt_str: rtrace option parameters as a string
+
+    Returns:
+        An option dictionary
+    """
+
+    args_list = opt_str.strip().split()
+    oparser = argparse.ArgumentParser()
+    oparser.add_argument("-w", action="store_true", dest="w", default=None)
+    oparser.add_argument("-w+", action="store_true", dest="w", default=None)
+    oparser.add_argument("-w-", action="store_false", dest="w", default=None)
+    oparser.add_argument("-f", action="store")
+    oparser.add_argument("-hd", action="store_const", const="", default=None)
+    oparser.add_argument("-n", type=int)
+    oparser = get_rtrace_options_args(oparser)
+    args, _ = oparser.parse_known_args(args_list)
+    opt_dict = vars(args)
+    opt_dict = {k: v for (k, v) in opt_dict.items() if v is not None}
+    return opt_dict
+
+
+def parse_optics(fpath) -> PaneProperty:
     """Read and parse an optics file."""
     # enc = 'cp1250' #decoding needed to parse header
     with open(fpath, errors="ignore") as rdr:
@@ -237,79 +267,71 @@ def parse_optics(fpath):
     )
 
 
-def parse_igsdb_json(json_obj: dict):
-    name = json_obj["name"].replace(" ", "_")
-    gtype = json_obj["type"]
-    coated_side = json_obj["coated_side"].lower()
-    thickness = json_obj["measured_data"]["thickness"]
-    spectral_data = json_obj["spectral_data"]["spectral_data"]
-
-    wavelength = []
-    transmittance = []
-    reflectance_front = []
-    reflectance_back = []
-
-    for row in spectral_data:
-        wavelength.append(row["wavelength"] * 1e3)  # um to nm
-        transmittance.append(row["T"])
-        reflectance_front.append(row["Rf"])
-        reflectance_back.append(row["Rb"])
-    return PaneProperty(
-        name,
-        thickness,
-        gtype,
-        coated_side,
-        wavelength,
-        transmittance,
-        reflectance_front,
-        reflectance_back,
-    )
-
-
-def parse_bsdf_xml(path: str) -> dict:
-    """
-    Parse BSDF file in XML format.
-    This function semi-validate the xml data as it parse through it.
-
+def parse_polygon(real_args: Sequence[Union[int, float]]) -> geom.Polygon:
+    """Parse real arguments to polygon.
     Args:
-        path(str): filename or file object of a xml file.
+        primitive: a dictionary object containing a primitive
+
     Returns:
-        A dictionary containing def, Solar, and Visible data.
-    Raises:
-        ValueError if tags not found
+        modified primitive
     """
-    error_msg = f"Error parsing {path}: "
-    data_dict: dict = {"Def": "", "Solar": {}, "Visible": {}}
-    tree = ET.parse(path)
-    if (root := tree.getroot()) is None:
-        raise ValueError(error_msg + "Root not found")
-    tag = root.tag.rstrip("WindowElement")
-    if (optical := root.find(tag + "Optical")) is None:
-        raise ValueError(error_msg + "Optical not found")
-    if (layer := optical.find(tag + "Layer")) is None:
-        raise ValueError(error_msg + "Layer not found")
-    if (data_def := layer.find(tag + "DataDefinition")) is None:
-        raise ValueError(error_msg + "data definition not found")
-    if (data_struct_txt := data_def.findtext(tag + "IncidentDataStructure")) is None:
-        raise ValueError(error_msg + "data structure not found")
-    data_dict["Def"] = data_struct_txt.strip()
-    data_blocks = layer.findall(tag + "WavelengthData")
-    for block in data_blocks:
-        if (wavelength_txt := block.findtext(tag + "Wavelength")) is None:
-            raise ValueError(error_msg + "wavelength not found")
-        if wavelength_txt not in ("Solar", "Visible"):
-            raise ValueError("Unknown %s" % wavelength_txt)
-        if (dblock := block.find(tag + "WavelengthDataBlock")) is None:
-            raise ValueError(error_msg + "wavelength data block not found")
-        if (direction := dblock.findtext(tag + "WavelengthDataDirection")) is None:
-            raise ValueError(error_msg + "wavelength direction not found")
-        if (sdata_txt := dblock.findtext(tag + "ScatteringData")) is None:
-            raise ValueError(error_msg + "scattering data not found")
-        sdata_txt = sdata_txt.strip()
-        if sdata_txt.count("\n") == 21168:
-            sdata_txt = sdata_txt.replace("\n\t", " ")
-        data_dict[wavelength_txt][direction] = sdata_txt
-    return data_dict
+    coords = real_args[1:]
+    arg_cnt = int(real_args[0])
+    vertices = [geom.Vector(*coords[i : i + 3]) for i in range(0, arg_cnt, 3)]
+    return geom.Polygon(vertices)
+
+
+def parse_primitive(lines: list) -> List[Primitive]:
+    """Parse Radiance primitives inside a file path into a list of dictionary.
+    Args:
+        lines: list of lines as strings
+
+    Returns:
+        list of primitives as dictionaries
+
+    Notes:
+        Dropping support for alias type
+    """
+    # Expand in-line commands
+    cmd_lines = [(idx, line) for idx, line in enumerate(lines) if line.startswith("!")]
+    cmd_results = []
+    for cmd in cmd_lines:
+        cmd_results.append(
+            sp.run(cmd[1][1:], check=True, stdout=sp.PIPE).stdout.decode().splitlines()
+        )
+    counter = 0
+    for idx, item in enumerate(cmd_lines):
+        counter += item[0]
+        lines[counter : counter + 1] = cmd_results[idx]
+        counter += len(cmd_results[idx]) - 1 - item[0]
+
+    content = " ".join(
+        [i.strip() for i in lines if i.strip() != "" and i[0] != "#"]
+    ).split()
+    primitives: List[Primitive] = []
+    idx = 0
+    while idx < len(content):
+        _modifier = content[idx]
+        _type = content[idx + 1]
+        if _type == "alias":
+            # _name_to = content[idx + 2]
+            # _name_from = content[idx + 3]
+            # primitives.append(
+            # Alias(_modifier, _name_to, _name_from)
+            # )
+            idx += 4
+            continue
+        _identifier = content[idx + 2]
+        str_arg_cnt = int(content[idx + 3])
+        _str_args = content[idx + 3 : idx + 4 + str_arg_cnt]
+        idx += 5 + str_arg_cnt
+        real_arg_cnt = int(content[idx])
+        _real_args = [float(i) for i in content[idx : idx + 1 + real_arg_cnt]]
+        idx += real_arg_cnt + 1
+        primitives.append(
+            Primitive(_modifier, _type, _identifier, _str_args, _real_args)
+        )
+    return primitives
 
 
 def parse_rad_header(header_str: str) -> tuple:
@@ -334,6 +356,78 @@ def parse_rad_header(header_str: str) -> tuple:
     ncomp = int([mat[2] for mat in matches if mat[2] != ""][0])
     dtype = [mat[3] for mat in matches if mat[3] != ""][0].strip()
     return nrow, ncol, ncomp, dtype
+
+
+def parse_vu(vu_str: str) -> View:
+    """Parse view string into a View object.
+
+    Args:
+        vu_str: view parameters as a string
+
+    Returns:
+        A view object
+    """
+
+    if vu_str.strip() == "":
+        return
+    args_list = vu_str.strip().split()
+    vparser = argparse.ArgumentParser()
+    vparser.add_argument("-v", action="store", dest="vt")
+    vparser.add_argument("-vp", nargs=3, type=float)
+    vparser.add_argument("-vd", nargs=3, type=float)
+    vparser.add_argument("-vu", nargs=3, type=float)
+    vparser.add_argument("-vv", type=float)
+    vparser.add_argument("-vh", type=float)
+    vparser.add_argument("-vo", type=float)
+    vparser.add_argument("-va", type=float)
+    vparser.add_argument("-vs", type=float)
+    vparser.add_argument("-vl", type=float)
+    vparser.add_argument("-x", type=int)
+    vparser.add_argument("-y", type=int)
+    vparser.add_argument("-vf", type=argparse.FileType("r"))
+    args, _ = vparser.parse_known_args(args_list)
+    if args.vf is not None:
+        args, _ = vparser.parse_known_args(args.vf.readline().strip().split(), namespace=args)
+        args.vf.close()
+    if None in (args.vp, args.vd):
+        raise ValueError("Invalid view")
+    view = View(geom.Vector(*args.vp), geom.Vector(*args.vd))
+    if args.vt is not None:
+        view.vtype = args.vt[-1]
+    if args.x is not None:
+        view.xres = args.x
+    if args.y is not None:
+        view.yres = args.y
+    if args.vv is not None:
+        view.vert = args.vv
+    if args.vh is not None:
+        view.hori = args.vh
+    if args.vo is not None:
+        view.fore = args.vo
+    if args.va is not None:
+        view.aft = args.va
+    if args.vs is not None:
+        view.shift = args.vs
+    if args.vl is not None:
+        view.lift = args.vl
+    return view
+
+
+def tokenize(inp: str) -> Generator[str, None, None]:
+    """Generator for tokenizing a string that
+    is seperated by a space or a comma.
+    Args:
+       inp: input string
+    Yields:
+        next token
+    """
+    tokens = re.compile(
+        " +|[-+]?(\d+([.,]\d*)?|[.,]\d+)([eE][-+]?\d+)+|[\d*\.\d+]+|[{}]"
+    )
+    for match in tokens.finditer(inp):
+        if match.group(0)[0] in " ,":
+            continue
+        yield match.group(0)
 
 
 def parse_branch(token: Generator[str, None, None]) -> Any:
@@ -361,7 +455,7 @@ def parse_ttree(data_str: str) -> list:
     Returns:
         A nested list that is the tree
     """
-    tokenized = utils.tokenize(data_str)
+    tokenized = tokenize(data_str)
     if next(tokenized) != "{":
         raise ValueError("Tensor tree data not starting with {")
     return parse_branch(tokenized)
@@ -383,7 +477,7 @@ class TensorTree:
         depth: number of tree levels
     """
 
-    def __init__(self, parsed):
+    def __init__(self, parsed) -> None:
         self.parsed = parsed
         self.depth = get_nested_list_levels(parsed)
 
@@ -393,32 +487,26 @@ class TensorTree:
         quads = [self.parsed[i] for i in branch_idx]
         return [self.traverse(quad, xp, yp) for quad in quads]
 
-    def get_leaf_index(self, xp, yp):
+    def get_leaf_index(self, xp, yp) -> range:
         if xp < 0:
             if yp < 0:
                 return range(0, 4)
-            else:
-                return range(4, 8)
-        else:
-            if yp < 0:
-                return range(8, 12)
-            else:
-                return range(12, 16)
+            return range(4, 8)
+        if yp < 0:
+            return range(8, 12)
+        return range(12, 16)
 
-    def get_branch_index(self, xp, yp):
+    def get_branch_index(self, xp, yp) -> range:
         """Gets a set of index."""
         if xp < 0:
             if yp < 0:
                 return range(0, 16, 4)
-            else:
-                return range(2, 16, 4)
-        else:
-            if yp < 0:
-                return range(1, 16, 4)
-            else:
-                return range(3, 16, 4)
+            return range(2, 16, 4)
+        if yp < 0:
+            return range(1, 16, 4)
+        return range(3, 16, 4)
 
-    def traverse(self, quad, xp, yp, n=1) -> list:
+    def traverse(self, quad, xp, yp, n: int = 1) -> list:
         """Traverse a quadrant."""
         if len(quad) == 1:  # single leaf
             res = quad
@@ -445,7 +533,7 @@ class TensorTree:
         return res
 
 
-def parse_wea(wea_str: str):
+def parse_wea(wea_str: str) -> Tuple[WeaMetaData, List[WeaData]]:
     """Parse a wea file in its entirety."""
     lines = wea_str.splitlines()
     place = lines[0].split(" ", 1)[1]
@@ -454,6 +542,7 @@ def parse_wea(wea_str: str):
     tz = int(float(lines[3].split(" ", 1)[1]))
     ele = float(lines[4].split(" ", 1)[1])
     meta_data = WeaMetaData(place, "", lat, lon, tz, ele)
+    year = datetime.today().year
     data = []
     for li in lines[6:]:
         if li.strip() == "":
@@ -466,30 +555,7 @@ def parse_wea(wea_str: str):
         minute = int((hours - hour) * 60)
         dir_norm = float(line[3])
         dif_hor = float(line[4])
-        data.append(WeaDataRow(month, day, hour, minute, 0, hours, dir_norm, dif_hor))
-    return meta_data, data
-
-
-def parse_epw(epw_str: str) -> tuple:
-    """Parse epw file and return wea header and data."""
-    raw = epw_str.splitlines()
-    epw_header = raw[0].split(",")
-    content = raw[8:]
-    data = []
-    for li in content:
-        line = li.split(",")
-        month = int(line[1])
-        day = int(line[2])
-        hour = int(line[3]) - 1
-        hours = hour + 0.5
-        dir_norm = float(line[14])
-        dif_hor = float(line[15])
-        data.append(WeaDataRow(month, day, hour, 30, 0, hours, dir_norm, dif_hor))
-    city = epw_header[1]
-    country = epw_header[3]
-    latitude = float(epw_header[6])
-    longitude = -1 * float(epw_header[7])
-    tz = int(float(epw_header[8])) * (-15)
-    elevation = float(epw_header[9].rstrip())
-    meta_data = WeaMetaData(city, country, latitude, longitude, tz, elevation)
+        data.append(
+            WeaData(datetime(year, month, day, hour, minute), dir_norm, dif_hor)
+        )
     return meta_data, data
