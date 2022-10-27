@@ -34,7 +34,7 @@ jobs:
         gh release download $ver -R LBNL-ETA/Radiance -p '*Linux.zip'
 
     - name: Download latest EnergyPlus
-      run: gh release download -R NREL/EnergyPlus -p '*Ubuntu2*.tar.gz'
+      run: gh release download -R NREL/EnergyPlus -p '*Ubuntu20*.tar.gz'
 
     - name: Install Radiance
       run: |
