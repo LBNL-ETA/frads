@@ -1,0 +1,79 @@
+site_name: frads documentation
+repo_url: https://github.com/LBNL-ETA/frads/
+
+theme:
+  name: "material"
+  palette:
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+      primary: white
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+      primary: black
+  font:
+    text: OpenSans
+  features:
+    - navigation.tracking
+      # - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+
+
+markdown_extensions:
+  - attr_list
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - def_list
+
+plugins:
+- search
+- autorefs
+- mkdocstrings:
+    custom_templates: templates
+    default_handler: python
+    handlers:
+      python:
+        options:
+          show_source: false
+          show_root_heading: true
+
+nav:
+  - Home: "../"
+  - Manual:
+    - manual/index.md
+    - mrad:
+      - manual/mrad/index.md
+      - mrad init: manual/mrad/init.md
+      - mrad run: manual/mrad/run.md
+    - gen: 
+      - manual/gen/index.md
+      - glaze: manual/gen/glaze.md
+      - grid: manual/gen/grid.md
+      - matrix: 
+        - manual/gen/matrix/index.md
+        - point-sky: manual/gen/matrix/point_sky.md
+        - view-sky: manual/gen/matrix/view_sky.md
+        - surface-sky: manual/gen/matrix/surface_sky.md
+        - point-surface: manual/gen/matrix/point_surface.md
+        - view-surface: manual/gen/matrix/view_surface.md
+        - surface-surface: manual/gen/matrix/surface_surface.md
+        - point-sun: manual/gen/matrix/point_sun.md
+        - view-sun: manual/gen/matrix/view_sun.md
+        - ncp: manual/gen/matrix/ncp.md
+      - gen room: manual/gen/room.md
+    - gencolorsky: manual/gencolorsky.md
+  - How-To Guides: how-to-guides.md
+  - Reference: reference.md
+
