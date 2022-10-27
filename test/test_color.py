@@ -1,104 +1,65 @@
-import os
-import unittest
+"""Unit tests for frads.color module."""
+
+from pathlib import Path
+import sys
+sys.path.append(".")
+
 from frads import color
+from frads import color_data
+
+def test_rgb2xyz():
+    r = 0.3
+    g = 0.4
+    b = 0.5
+    coeffs = color_data.RGB2XYZ_RAD
+    x, y, z = color.rgb2xyz(r, g, b, coeffs)
+    assert round(x, 6) == 0.364783
+    assert round(y, 6) == 0.379968
+    assert round(z, 6) == 0.482895
+
+def test_xyz2rgb():
+    x = 0.3
+    y = 0.4
+    z = 0.5
+    coeffs = color_data.XYZ2RGB_RAD
+    r, g, b = color.xyz2rgb(x, y, z, coeffs)
+    assert round(r, 6) == 0.103622
+    assert round(g, 6) == 0.506593
+    assert round(b, 6) == 0.510249
+
+def test_spec2xyz():
+    spect = {360:0, 365:0, 370:0, 375:0.00600000005, 380:0.0370000005, 385:0.0860000029,
+        390:0.147, 395:0.210999995, 400:0.268999994, 405:0.317000002, 410:0.354000002,
+        415:0.379999995, 420:0.405000001, 425:0.432000011, 430:0.460999995,
+        435:0.488000005, 440:0.509000003, 445:0.523999989, 450:0.537, 455:0.551999986,
+        460:0.569000006, 465:0.587000012, 470:0.602999985, 475:0.616999984,
+        480:0.628000021, 485:0.635999978, 490:0.640999973, 495:0.643999994,
+        500:0.647000015, 505:0.65200001 , 510:0.657000005, 515:0.662, 520:0.667999983,
+        525:0.675000012, 530:0.683000028, 535:0.68900001, 540:0.694000006,
+        545:0.698000014, 550:0.699999988, 555:0.702000022, 560:0.704999983,
+        565:0.70599997, 570:0.704999983, 575:0.699000001, 580:0.689999998,
+        585:0.677999973, 590:0.666999996, 595:0.660000026, 600:0.657000005,
+        605:0.658999979, 610:0.663999975, 615:0.66900003, 620:0.672999978,
+        625:0.672999978, 630:0.670000017, 635:0.663999975, 640:0.657000005,
+        645:0.649999976, 650:0.644999981, 655:0.640999973, 660:0.638999999,
+        665:0.637000024, 670:0.633000016, 675:0.625999987, 680:0.616999984,
+        685:0.606000006, 690:0.592999995, 695:0.578999996, 700:0.566999972,
+        705:0.558000028, 710:0.551999986, 715:0.549000025, 720:0.549000025,
+        725:0.550999999, 730:0.555000007, 735:0.559000015, 740:0.56099999,
+        745:0.56099999, 750:0.559000015, 755:0.55400002, 760:0.546000004,
+        765:0.536000013, 770:0.523999989, 775:0.513000011, 780:0.500999987,
+        785:0.49000001, 790:0.481000006, 795:0.47299999, 800:0.467000008,
+        805:0.462000012, 810:0.458999991, 815:0.456999987, 820:0.456999987,
+        825:0.456, 830:0.456}
+    wvl_range = max(spect.keys()) - min(spect.keys())
+    cie_xyz_bar = color.get_interpolated_cie_xyz(spect.keys(), "2")
+    x, y, z = color.spec2xyz(cie_xyz_bar, spect.values(), wvl_range, emis=False)
+    assert round(x, 8) == 0.64875707
+    assert round(y, 8) == 0.67689356
+    assert round(z, 8) == 0.53955804
 
 
-class TestUtils(unittest.TestCase):
-
-    test_dir_path = os.path.dirname(__file__)
-    data_path = os.path.join(test_dir_path, "Resources")
-    check_decimal_to = 6
-
-    def test_get_tristi_paths(self):
-        pass
-
-    def test_load_cie_tristi(self):
-        wvl = list(range(300, 1000, 5))
-        observer = "2"
-        trix, triy, triz, mlnp_i, widx = color.load_cie_tristi(wvl, observer)
-        answer_path = os.path.join(self.data_path, "sample_tri.dat")
-        with open(answer_path, "r") as rdr:
-            answer = rdr.readlines()
-            tab = [row.split("\t") for row in answer]
-        answer_trix = [float(row[2]) for row in tab]
-        answer_triy = [float(row[3]) for row in tab]
-        answer_triz = [float(row[4]) for row in tab]
-        answer_mlnp = [float(row[5]) for row in tab]
-        for r, a in zip(trix, answer_trix):
-            self.assertAlmostEqual(r, a, self.check_decimal_to)
-        for r, a in zip(triy, answer_triy):
-            self.assertAlmostEqual(r, a, self.check_decimal_to)
-        for r, a in zip(triz, answer_triz):
-            self.assertAlmostEqual(r, a, self.check_decimal_to)
-
-    def test_get_conversion_matrix(self):
-        prim = "radiance"
-        res = color.get_conversion_matrix(prim)
-        answer = [
-            2.56531284,
-            -1.16684962,
-            -0.398463227,
-            -1.02210817,
-            1.97828662,
-            0.0438215555,
-            0.0747243773,
-            -0.251939567,
-            1.17721519,
-        ]
-        for r, a in zip(res, answer):
-            self.assertAlmostEqual(r, a, self.check_decimal_to)
-
-    def test_rgb2xyz(self):
-        r = 0.3
-        g = 0.4
-        b = 0.5
-        coeffs = color.get_conversion_matrix("radiance", reverse=True)
-        x, y, z = color.rgb2xyz(r, g, b, coeffs)
-        answer_x = 0.364782628
-        answer_y = 0.379968254
-        answer_z = 0.482894621
-        self.assertAlmostEqual(x, answer_x, self.check_decimal_to)
-        self.assertAlmostEqual(y, answer_y, self.check_decimal_to)
-        self.assertAlmostEqual(z, answer_z, self.check_decimal_to)
-
-    def test_xyz2rgb(self):
-        x = 0.3
-        y = 0.4
-        z = 0.5
-        coeffs = color.get_conversion_matrix("radiance")
-        r, g, b = color.xyz2rgb(x, y, z, coeffs)
-        answer_r = 0.103622393
-        answer_g = 0.506592973
-        answer_b = 0.510249081
-        self.assertAlmostEqual(r, answer_r, self.check_decimal_to)
-        self.assertAlmostEqual(g, answer_g, self.check_decimal_to)
-        self.assertAlmostEqual(b, answer_b, self.check_decimal_to)
-
-    def test_spec2xyz(self):
-        tri_path = os.path.join(self.data_path, "sample_tri.dat")
-        with open(tri_path, "r") as rdr:
-            tri = rdr.readlines()
-            tab = [row.split("\t") for row in tri]
-        sval = [float(row[1]) for row in tab]
-        trix = [float(row[2]) for row in tab]
-        triy = [float(row[3]) for row in tab]
-        triz = [float(row[4]) for row in tab]
-        mlnp = [float(row[5]) for row in tab]
-        res_x, res_y, res_z = color.spec2xyz(trix, triy, triz, mlnp, sval)
-        answer_x = 0.648757039
-        answer_y = 0.676893567
-        answer_z = 0.539558065
-        self.assertAlmostEqual(res_x, answer_x, self.check_decimal_to)
-        self.assertAlmostEqual(res_y, answer_y, self.check_decimal_to)
-        self.assertAlmostEqual(res_z, answer_z, self.check_decimal_to)
-
-    def test_xyz2xy(self):
-        x, y = color.xyz2xy(0.648757039, 0.676893567, 0.539558066)
-        answer_x = 0.34782
-        answer_y = 0.362905
-        self.assertAlmostEqual(x, answer_x, self.check_decimal_to)
-        self.assertAlmostEqual(y, answer_y, self.check_decimal_to)
-
-
-if __name__ == "__main__":
-    unittest.main()
+def test_xyz2xy():
+    x, y = color.xyz2xy(0.648757039, 0.676893567, 0.539558066)
+    assert round(x, 6) == 0.34782
+    assert round(y, 6) == 0.362905

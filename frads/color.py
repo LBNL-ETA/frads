@@ -1,216 +1,125 @@
 """
 This module contains all color and spectral-related functionalities.
 """
-from pathlib import Path
-from typing import Dict
 from typing import List
+from typing import Sequence
 from typing import Tuple
+from typing import Union
+
+from frads import color_data
+from frads.types import ColorPrimaries
 
 
-LEMAX = 683
-# Melanopic luminous efficacy for D65
-MLEMAX = 754
-
-
-COLOR_PRIMARIES = {}
-
-COLOR_PRIMARIES["radiance"] = {
-    "cie_x_r": 0.640,
-    "cie_y_r": 0.330,
-    "cie_x_g": 0.290,
-    "cie_y_g": 0.600,
-    "cie_x_b": 0.150,
-    "cie_y_b": 0.060,
-    "cie_x_w": 1 / 3,
-    "cie_y_w": 1 / 3,
-}
-
-COLOR_PRIMARIES["sharp"] = {
-    "cie_x_r": 0.6898,
-    "cie_y_r": 0.3206,
-    "cie_x_w": 1 / 3,
-    "cie_y_w": 1 / 3,
-}
-
-COLOR_PRIMARIES["adobe"] = {
-    "cie_x_r": 0.640,
-    "cie_y_r": 0.330,
-    "cie_x_g": 0.210,
-    "cie_y_g": 0.710,
-    "cie_x_b": 0.150,
-    "cie_y_b": 0.060,
-    "cie_x_w": 0.3127,
-    "cie_y_w": 0.3290,
-}
-
-COLOR_PRIMARIES["rimm"] = {
-    "cie_x_r": 0.7347,
-    "cie_y_r": 0.2653,
-    "cie_x_g": 0.1596,
-    "cie_y_g": 0.8404,
-    "cie_x_b": 0.0366,
-    "cie_y_b": 0.0001,
-    "cie_x_w": 0.3457,
-    "cie_y_w": 0.3585,
-}
-
-COLOR_PRIMARIES["709"] = {
-    "cie_x_r": 0.640,
-    "cie_y_r": 0.330,
-    "cie_x_g": 0.300,
-    "cie_y_g": 0.600,
-    "cie_x_b": 0.150,
-    "cie_y_b": 0.060,
-    "cie_x_w": 0.3127,
-    "cie_y_w": 0.3290,
-}
-
-COLOR_PRIMARIES["p3"] = {
-    "cie_x_r": 0.680,
-    "cie_y_r": 0.320,
-    "cie_x_g": 0.265,
-    "cie_y_g": 0.690,
-    "cie_x_b": 0.150,
-    "cie_y_b": 0.060,
-    "cie_x_w": 0.314,
-    "cie_y_w": 0.351,
-}
-
-COLOR_PRIMARIES["2020"] = {
-    "cie_x_r": 0.708,
-    "cie_y_r": 0.292,
-    "cie_x_g": 0.170,
-    "cie_y_g": 0.797,
-    "cie_x_b": 0.131,
-    "cie_y_b": 0.046,
-    "cie_x_w": 0.3127,
-    "cie_y_w": 0.3290,
-}
-
-
-def get_tristi_paths() -> Dict[str, Path]:
-    """Get CIE tri-stimulus and melanopic action spectra data file paths from frads.
-
-    Returns:
-        A dictionary mapping data name to pathlib.Path object.
-
-    """
-    standards_path = Path(__file__).parent / "data" / "standards"
-    cie_path = {}
-    # 2° observer
-    cie_path["x2"] = standards_path / "CIE 1931 1nm X.dsp"
-    cie_path["y2"] = standards_path / "CIE 1931 1nm Y.dsp"
-    cie_path["z2"] = standards_path / "CIE 1931 1nm Z.dsp"
-    # 10° observer
-    cie_path["x10"] = standards_path / "CIE 1964 1nm X.dsp"
-    cie_path["y10"] = standards_path / "CIE 1964 1nm Y.dsp"
-    cie_path["z10"] = standards_path / "CIE 1964 1nm Z.dsp"
-    # melanopic action spectra
-    cie_path["mlnp"] = standards_path / "CIE S 026 1nm.dsp"
-    return cie_path
-
-
-def load_cie_tristi(inp_wvl: list, observer: str) -> tuple:
+def get_interpolated_cie_xyz(
+    inp_wvl: Sequence[Union[float, int]], observer: str
+) -> List[tuple]:
     """Load CIE tristimulus data according to input wavelength.
     Also load melanopic action spectra data as well.
 
     Args:
-        inp_wvl(list): a list of input wavelength in nm
-        observer(str): 2° or 10° observer for the colar matching function.
+        inp_wvl: a list of input wavelength in nm
+        observer: 2° or 10° observer for the colar matching function.
     Returns:
-        A tuple of cie-x, cie-y, cie-z, melanopic action spectra, and
-        index of input wavelength corresponding to available tristimulus data.
+        CIE-x
+        CIE-y
+        CIE-z
+        Melanopic action spectra
+        Index of input wavelength corresponding to available tristimulus data
     """
-    header_lines = 3
-    cie_path = get_tristi_paths()
-    with open(cie_path[f"x{observer}"]) as rdr:
-        lines = rdr.readlines()[header_lines:]
-        trix = {float(row.split()[0]): float(row.split()[1]) for row in lines}
-    with open(cie_path[f"y{observer}"]) as rdr:
-        lines = rdr.readlines()[header_lines:]
-        triy = {float(row.split()[0]): float(row.split()[1]) for row in lines}
-    with open(cie_path[f"z{observer}"]) as rdr:
-        lines = rdr.readlines()[header_lines:]
-        triz = {float(row.split()[0]): float(row.split()[1]) for row in lines}
-    with open(cie_path["mlnp"]) as rdr:
-        lines = rdr.readlines()[header_lines:]
-        mlnp = {float(row.split()[0]): float(row.split()[1]) for row in lines}
 
-    trix_i = [trix[wvl] for idx, wvl in enumerate(inp_wvl) if wvl in trix]
-    triy_i = [triy[wvl] for wvl in inp_wvl if wvl in triy]
-    triz_i = [triz[wvl] for wvl in inp_wvl if wvl in triz]
-    mlnp_i = [mlnp[wvl] for wvl in inp_wvl if wvl in mlnp]
-    oidx = [idx for idx, wvl in enumerate(inp_wvl) if wvl in triy]
-    return trix_i, triy_i, triz_i, mlnp_i, oidx
+    if observer.startswith("2"):
+        cie_xyz = color_data.CIE_XYZ_2
+    elif observer.startswith("10"):
+        cie_xyz = color_data.CIE_XYZ_10
+    common_wvl = sorted(set(cie_xyz).intersection(inp_wvl))
+    return [cie_xyz[wvl] for wvl in common_wvl]
 
 
-def get_conversion_matrix(prims: str, reverse=False) -> Tuple[float]:
-    """
-    Get CIE conversion matrix based on colorspace.
+def get_interpolated_mlnp(
+    inp_wvl: Sequence[Union[float, int]],
+) -> List[float]:
+    """Load CIE tristimulus data according to input wavelength.
+    Also load melanopic action spectra data as well.
 
     Args:
-        prims(str): The name of the colorspace, available choices are
-            radiance, adobe, sharp, rimm, 709, p3, 2020
-        reverse(bool): get RGB to XYZ conversion matrix instead
+        inp_wvl: a list of input wavelength in nm
+    Returns:
+        Melanopic action spectra
+    """
+    mlnp = color_data.CIE_MLNP
+    common_wvl = sorted(set(mlnp).intersection(inp_wvl))
+    return [mlnp[wvl] for wvl in common_wvl]
+
+
+def get_conversion_matrix(prims: ColorPrimaries, reverse: bool = False) -> tuple:
+    """
+    Get CIE conversion matrix based on color primaries.
+
+    Args:
+        prims: Color space color primaries
+        reverse: get RGB to XYZ conversion matrix instead
     Returns:
         The conversion matrix coefficients in a 1-dimensional tuple.
     """
 
-    cie_x_r = COLOR_PRIMARIES[prims]["cie_x_r"]
-    cie_y_r = COLOR_PRIMARIES[prims]["cie_y_r"]
-    cie_x_g = COLOR_PRIMARIES[prims]["cie_x_g"]
-    cie_y_g = COLOR_PRIMARIES[prims]["cie_y_g"]
-    cie_x_b = COLOR_PRIMARIES[prims]["cie_x_b"]
-    cie_y_b = COLOR_PRIMARIES[prims]["cie_y_b"]
-    cie_x_w = COLOR_PRIMARIES[prims]["cie_x_w"]
-    cie_y_w = COLOR_PRIMARIES[prims]["cie_y_w"]
-
-    cie_y_w_inv = 1 / cie_y_w
+    yw_inv = 1 / prims.yw
 
     cie_d = (
-        cie_x_r * (cie_y_g - cie_y_b)
-        + cie_x_g * (cie_y_b - cie_y_r)
-        + cie_x_b * (cie_y_r - cie_y_g)
+        prims.xr * (prims.yg - prims.yb)
+        + prims.xg * (prims.yb - prims.yr)
+        + prims.xb * (prims.yr - prims.yg)
     )
-    cie_c_rd = cie_y_w_inv * (
-        cie_x_w * (cie_y_g - cie_y_b)
-        - cie_y_w * (cie_x_g - cie_x_b)
-        + cie_x_g * cie_y_b
-        - cie_x_b * cie_y_g
+    cie_c_rd = yw_inv * (
+        prims.xw * (prims.yg - prims.yb)
+        - prims.yw * (prims.xg - prims.xb)
+        + prims.xg * prims.yb
+        - prims.xb * prims.yg
     )
-    cie_c_gd = cie_y_w_inv * (
-        cie_x_w * (cie_y_b - cie_y_r)
-        - cie_y_w * (cie_x_b - cie_x_r)
-        - cie_x_r * cie_y_b
-        + cie_x_b * cie_y_r
+    cie_c_gd = yw_inv * (
+        prims.xw * (prims.yb - prims.yr)
+        - prims.yw * (prims.xb - prims.xr)
+        - prims.xr * prims.yb
+        + prims.xb * prims.yr
     )
-    cie_c_bd = cie_y_w_inv * (
-        cie_x_w * (cie_y_r - cie_y_g)
-        - cie_y_w * (cie_x_r - cie_x_g)
-        + cie_x_r * cie_y_g
-        - cie_x_g * cie_y_r
+    cie_c_bd = yw_inv * (
+        prims.xw * (prims.yr - prims.yg)
+        - prims.yw * (prims.xr - prims.xg)
+        + prims.xr * prims.yg
+        - prims.xg * prims.yr
     )
 
-    coeff_00 = (cie_y_g - cie_y_b - cie_x_b * cie_y_g + cie_y_b * cie_x_g) / cie_c_rd
-    coeff_01 = (cie_x_b - cie_x_g - cie_x_b * cie_y_g + cie_x_g * cie_y_b) / cie_c_rd
-    coeff_02 = (cie_x_g * cie_y_b - cie_x_b * cie_y_g) / cie_c_rd
-    coeff_10 = (cie_y_b - cie_y_r - cie_y_b * cie_x_r + cie_y_r * cie_x_b) / cie_c_gd
-    coeff_11 = (cie_x_r - cie_x_b - cie_x_r * cie_y_b + cie_x_b * cie_y_r) / cie_c_gd
-    coeff_12 = (cie_x_b * cie_y_r - cie_x_r * cie_y_b) / cie_c_gd
-    coeff_20 = (cie_y_r - cie_y_g - cie_y_r * cie_x_g + cie_y_g * cie_x_r) / cie_c_bd
-    coeff_21 = (cie_x_g - cie_x_r - cie_x_g * cie_y_r + cie_x_r * cie_y_g) / cie_c_bd
-    coeff_22 = (cie_x_r * cie_y_g - cie_x_g * cie_y_r) / cie_c_bd
+    coeff_00 = (
+        prims.yg - prims.yb - prims.xb * prims.yg + prims.yb * prims.xg
+    ) / cie_c_rd
+    coeff_01 = (
+        prims.xb - prims.xg - prims.xb * prims.yg + prims.xg * prims.yb
+    ) / cie_c_rd
+    coeff_02 = (prims.xg * prims.yb - prims.xb * prims.yg) / cie_c_rd
+    coeff_10 = (
+        prims.yb - prims.yr - prims.yb * prims.xr + prims.yr * prims.xb
+    ) / cie_c_gd
+    coeff_11 = (
+        prims.xr - prims.xb - prims.xr * prims.yb + prims.xb * prims.yr
+    ) / cie_c_gd
+    coeff_12 = (prims.xb * prims.yr - prims.xr * prims.yb) / cie_c_gd
+    coeff_20 = (
+        prims.yr - prims.yg - prims.yr * prims.xg + prims.yg * prims.xr
+    ) / cie_c_bd
+    coeff_21 = (
+        prims.xg - prims.xr - prims.xg * prims.yr + prims.xr * prims.yg
+    ) / cie_c_bd
+    coeff_22 = (prims.xr * prims.yg - prims.xg * prims.yr) / cie_c_bd
 
     if reverse:
-        coeff_00 = cie_x_r * cie_c_rd / cie_d
-        coeff_01 = cie_x_g * cie_c_gd / cie_d
-        coeff_02 = cie_x_b * cie_c_bd / cie_d
-        coeff_10 = cie_y_r * cie_c_rd / cie_d
-        coeff_11 = cie_y_g * cie_c_gd / cie_d
-        coeff_12 = cie_y_b * cie_c_bd / cie_d
-        coeff_20 = (1 - cie_x_r - cie_y_r) * cie_c_rd / cie_d
-        coeff_21 = (1 - cie_x_g - cie_y_g) * cie_c_gd / cie_d
-        coeff_22 = (1 - cie_x_b - cie_y_b) * cie_c_bd / cie_d
+        coeff_00 = prims.xr * cie_c_rd / cie_d
+        coeff_01 = prims.xg * cie_c_gd / cie_d
+        coeff_02 = prims.xb * cie_c_bd / cie_d
+        coeff_10 = prims.yr * cie_c_rd / cie_d
+        coeff_11 = prims.yg * cie_c_gd / cie_d
+        coeff_12 = prims.yb * cie_c_bd / cie_d
+        coeff_20 = (1 - prims.xr - prims.yr) * cie_c_rd / cie_d
+        coeff_21 = (1 - prims.xg - prims.yg) * cie_c_gd / cie_d
+        coeff_22 = (1 - prims.xb - prims.yb) * cie_c_bd / cie_d
 
     return (
         coeff_00,
@@ -225,13 +134,15 @@ def get_conversion_matrix(prims: str, reverse=False) -> Tuple[float]:
     )
 
 
-def rgb2xyz(r: float, g: float, b: float, coeffs: tuple) -> Tuple[float, float, float]:
+def rgb2xyz(
+    red: float, green: float, blue: float, coeffs: tuple
+) -> Tuple[float, float, float]:
     """Convert RGB to CIE XYZ.
 
     Args:
-        r: red
-        g: green
-        b: blue
+        red: red
+        green: green
+        blue: blue
         coeffs: coversion matrix.
     Returns:
         CIE X, Y, Z.
@@ -240,20 +151,22 @@ def rgb2xyz(r: float, g: float, b: float, coeffs: tuple) -> Tuple[float, float, 
         ValueError with invalid coeffs.
     """
     if len(coeffs) != 9:
-        raise ValueError("%s coefficients found, expected 9", len(coeffs))
-    x = coeffs[0] * r + coeffs[1] * g + coeffs[2] * b
-    y = coeffs[3] * r + coeffs[4] * g + coeffs[5] * b
-    z = coeffs[6] * r + coeffs[7] * g + coeffs[8] * b
-    return x, y, z
+        raise ValueError(f"{len(coeffs)} coefficients found, expected 9")
+    ciex = coeffs[0] * red + coeffs[1] * green + coeffs[2] * blue
+    ciey = coeffs[3] * red + coeffs[4] * green + coeffs[5] * blue
+    ciez = coeffs[6] * red + coeffs[7] * green + coeffs[8] * blue
+    return ciex, ciey, ciez
 
 
-def xyz2rgb(x: float, y: float, z: float, coeffs: tuple) -> Tuple[float, float, float]:
+def xyz2rgb(
+    cie_x: float, cie_y: float, cie_z: float, coeffs: tuple
+) -> Tuple[float, float, float]:
     """Convert CIE XYZ to RGB.
 
     Args:
-        x: cie_x
-        y: cie_y
-        z: cie_z
+        cie_x: cie_x
+        cie_y: cie_y
+        cie_z: cie_z
         coeffs: conversion matrix
     Returns:
         Red, Green, Blue
@@ -262,61 +175,56 @@ def xyz2rgb(x: float, y: float, z: float, coeffs: tuple) -> Tuple[float, float, 
         ValueError for invalid coeffs.
     """
     if len(coeffs) != 9:
-        raise ValueError("%s coefficients found, expected 9", len(coeffs))
-    red = max(0, coeffs[0] * x + coeffs[1] * y + coeffs[2] * z)
-    green = max(0, coeffs[3] * x + coeffs[4] * y + coeffs[5] * z)
-    blue = max(0, coeffs[6] * x + coeffs[7] * y + coeffs[8] * z)
+        raise ValueError(f"{len(coeffs)} coefficients found, expected 9")
+    red = max(0, coeffs[0] * cie_x + coeffs[1] * cie_y + coeffs[2] * cie_z)
+    green = max(0, coeffs[3] * cie_x + coeffs[4] * cie_y + coeffs[5] * cie_z)
+    blue = max(0, coeffs[6] * cie_x + coeffs[7] * cie_y + coeffs[8] * cie_z)
     return red, green, blue
 
 
 def spec2xyz(
-    trix: List[float],
-    triy: List[float],
-    triz: List[float],
-    mlnp: List[float],
-    sval: List[float],
-    emis=False,
+    cie_xyz_bar,
+    spec: list,
+    wvl_range: float,
+    emis: bool = False,
 ) -> tuple:
     """Convert spectral data to CIE XYZ.
 
     Args:
-        trix: tristimulus x function
-        triy: tristimulus y function
-        triz: tristimulus z function
-        mlnp: melanopic activation function
-        sval: input spectral data, either emissive or refl/trans.
-        emis: flag whether the input data is emissive
+        cie_xyz_bar: CIE color matching function.
+        spec: input spectral data as a dictionary sorted by wavelenth as key.
+        emis: flag whether the input data is emissive in nature.
     Returns:
         CIE X, Y, Z
 
-    Raise:
-        ValueError if input data are not of equal length.
+    Note:
+        Assuming input wavelength is a subset of the CIE ones
     """
-    if (
-        (len(trix) != len(triy))
-        or (len(trix) != len(triz))
-        or (len(trix) != len(sval))
-        or (len(mlnp) != len(sval))
-    ):
-        raise ValueError("Input data not of equal length")
-
-    xs = [x * v for x, v in zip(trix, sval)]
-    ys = [y * v for y, v in zip(triy, sval)]
-    zs = [z * v for z, v in zip(triz, sval)]
-    ms = [m * v for m, v in zip(mlnp, sval)]
-    cie_X = sum(xs) / len(xs)
-    cie_Y = sum(ys) / len(ys)
-    cie_Z = sum(zs) / len(zs)
+    sval_cie = [
+        (sv * cxyz[0], sv * cxyz[1], sv * cxyz[2])
+        for sv, cxyz in zip(spec, cie_xyz_bar)
+    ]
+    spec_len = len(spec)
+    cie_x, cie_y, cie_z = [sum(s_c) / spec_len * wvl_range for s_c in zip(*sval_cie)]
     if not emis:
-        avg_y = sum(triy) / len(triy)
-        cie_X /= avg_y
-        cie_Y /= avg_y
-        cie_Z /= avg_y
-    return cie_X, cie_Y, cie_Z
+        avg_y = sum(i[1] for i in cie_xyz_bar) / spec_len * wvl_range
+        cie_x /= avg_y
+        cie_y /= avg_y
+        cie_z /= avg_y
+    return cie_x, cie_y, cie_z
 
 
-def xyz2xy(cie_x: float, cie_y: float, cie_z: float) -> Tuple[float]:
-    """Convert CIE XYZ to xy chromaticity."""
+def xyz2xy(cie_x: float, cie_y: float, cie_z: float) -> Tuple[float, float]:
+    """Convert CIE XYZ to xy chromaticity.
+
+    Args:
+        cie_x: CIE X
+        cie_y: CIE Y
+        cie_z: CIE Z
+    Returns:
+        x chromoticity
+        y chromoticity
+    """
     _sum = cie_x + cie_y + cie_z
     if _sum == 0:
         return 0, 0
