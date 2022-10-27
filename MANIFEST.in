@@ -1,5 +1,5 @@
 include frads/data/WC.DAT
-include frads/data/standards/*.dsp
+include frads/data/mrad_default.cfg
 include test/data/*.dat
 include test/Resources/*.epw 
 include test/Resources/*.xml
