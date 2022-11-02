@@ -10,8 +10,8 @@ Version: 0.2.8
 The documentation consists of three parts:
 
 1. [Manual](manual/index.md): containing manual pages for all the command-line-interfaces.
-2. [How-To Guides](how-to-guides.md): scenario-based how-to guides
-3. [Reference](reference.md): Code API
+2. [How-To Guides](how-to/index.md): scenario-based how-to guides
+3. [Reference](ref/index.md): Code API
 
 ## Installation
 You can find installation instructions on our [README](https://github.com/LBNL-ETA/frads#installation).
