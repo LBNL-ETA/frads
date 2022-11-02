@@ -2,13 +2,12 @@
 Routines for generating sky models
 """
 
-import datetime
 import logging
 import math
 import os
 from pathlib import Path
 import subprocess as sp
-from typing import SupportsFloat, Any
+from typing import Any
 from typing import List
 from typing import Optional
 from typing import Sequence
@@ -87,7 +86,7 @@ def gen_sun_source_full(mf: int) -> Tuple[str, str]:
     """
     runlen = 144 * mf**2 + 3
     mod_str = os.linesep.join([f"sol{i}" for i in range(1, runlen)])
-    dirs, omgs = utils.calc_reinsrc_dir(mf)
+    dirs, _ = utils.calc_reinsrc_dir(mf)
     lines = []
     for i, d in enumerate(dirs):
         lines.append(
@@ -116,7 +115,7 @@ def gen_sun_source_culled(
         corresponding modifier strings, and the full set of modifier string.
     """
     runlen = 144 * mf**2 + 3
-    dirs, omgs = utils.calc_reinsrc_dir(mf)
+    dirs, _ = utils.calc_reinsrc_dir(mf)
     full_mod_str = os.linesep.join([f"sol{i}" for i in range(1, runlen)])
     win_norm = []
     if smx_path is not None:
@@ -222,6 +221,7 @@ def gendaymtx(
 
 
 def gen_perez_sky(row, meta, grefl: float = 0.2, spect: str = "0", rotate=None) -> str:
+    solar = False if spect == "0" else True
     gendaylit = gendaylit_cmd(
         str(row.month),
         str(row.day),
@@ -231,6 +231,7 @@ def gen_perez_sky(row, meta, grefl: float = 0.2, spect: str = "0", rotate=None) 
         str(meta.timezone),
         dir_norm_ir=str(row.dni),
         dif_hor_ir=str(row.dhi),
+        solar=solar,
     )
     out = []
     rot = f"| xform -rz {rotate}" if rotate is not None else ""
@@ -248,12 +249,12 @@ def gendaylit_cmd(
     lat: str,
     lon: str,
     tzone: str,
-    year: str = None,
-    dir_norm_ir: str = None,
+    year: Optional[str] = None,
+    dir_norm_ir: Optional[str] = None,
     dif_hor_ir: Optional[str] = None,
     dir_hor_ir: Optional[str] = None,
     dir_norm_il: Optional[str] = None,
-    dif_hor_il: str = None,
+    dif_hor_il: Optional[str] = None,
     solar: bool = False,
 ) -> list:
     """Get a gendaylit command as a list."""
@@ -346,7 +347,7 @@ def filter_data_with_zero_dni(data):
 
 def solar_minute(data: WeaData) -> int:
     # assuming never leap year
-    mo_da = [0,31,59,90,120,151,181,212,243,273,304,334]
+    mo_da = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
     jd = mo_da[data.time.month - 1] + data.time.day
     return 24 * 60 * (jd - 1) + int(data.time.hour * 60.0 + data.time.minute + 0.5)
 
@@ -408,14 +409,14 @@ def filter_data_by_direct_sun(
 
 
 def filter_wea(
-    wea_data: List[WeaData],
+    wea_data: Sequence[WeaData],
     meta_data: WeaMetaData,
     start_hour: Optional[float] = None,
     end_hour: Optional[float] = None,
     daylight_hours_only: bool = False,
     remove_zero: bool = False,
     window_normals: Optional[List[geom.Vector]] = None,
-) -> Tuple[List[WeaData], List[Any]]:
+) -> Tuple[Sequence[WeaData], List[Any]]:
     """
     Obtain and prepare weather file data.
 
@@ -454,7 +455,7 @@ def filter_wea(
             "Filtering zero DNI hours and suns not seen by window: %d rows remaining",
             len(wea_data),
         )
-    datetime_stamps = [str(row) for row in wea_data]
+    datetime_stamps = [row.dt_str() for row in wea_data]
     if len(wea_data) == 0:
         logger.warning("Empty wea file")
     return wea_data, datetime_stamps

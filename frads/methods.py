@@ -4,6 +4,7 @@
 from configparser import ConfigParser
 from contextlib import contextmanager
 import logging
+import math
 import os
 from pathlib import Path
 import shutil
@@ -29,6 +30,7 @@ from frads.types import Receiver
 from frads.types import Sender
 from frads.types import MradModel
 from frads.types import MradPath
+from frads.types import View
 from frads.types import WeaMetaData
 from frads.types import WeaData
 
@@ -36,7 +38,7 @@ from frads.types import WeaData
 logger: logging.Logger = logging.getLogger("frads.methods")
 
 
-def get_window_group(wpaths: List[Path], orientation=None) -> Tuple[dict, list]:
+def get_window_group(wpaths: List[Path]) -> Tuple[dict, list]:
     """Parse window groups from config.
 
     Args:
@@ -54,12 +56,7 @@ def get_window_group(wpaths: List[Path], orientation=None) -> Tuple[dict, list]:
         _normal = parsers.parse_polygon(prims[0].real_arg).normal
         if _normal not in window_normals:
             window_normals.append(_normal)
-    final_window_normals = window_normals
-    if (orientation is not None) and (float(orientation) != 0):
-        rorient = float(orientation) * 180 / 3.14159265358579
-        final_window_normals = [n.rotate_3d(geom.Vector(0, 0, 1), rorient)
-                                for n in window_normals]
-    return window_groups, final_window_normals
+    return window_groups, window_normals
 
 
 def get_ncp_shades(npaths: List[Path]) -> dict:
@@ -160,11 +157,9 @@ def assemble_model(config: ConfigParser) -> Generator:
     with open(material_path, "w", encoding="ascii") as wtr:
         for primitive in material_primitives:
             wtr.write(str(primitive) + "\n")
-    # Orientation
-    orientation = config["Site"].get("orientation")
     # Get window groups
     window_groups, window_normals = get_window_group(
-        config["Model"].getpaths("windows", []), orientation=orientation
+        config["Model"].getpaths("windows", []), 
     )
     # Get BSDFs
     bsdf_mat = {
@@ -487,9 +482,6 @@ def direct_sun_matrix_vu(
     for view, sndr in model.sender_view.items():
         mpath.vmap[view] = Path("Matrices", f"vmap_{model.name}_{view}.hdr")
         mpath.cdmap[view] = Path("Matrices", f"cdmap_{model.name}_{view}.hdr")
-        # view = model.views[view]
-        # vdict.pop("c", None)
-        # vdict.pop("pj", None)
         rpict_opt = Options()
         rpict_opt.ps = 1
         rpict_opt.ab = 0
@@ -715,16 +707,18 @@ def calc_5phase_vu(
             vrescdf = Path(tf.mkdtemp(dir=td))
             vrescd = Path(tf.mkdtemp(dir=td))
             cmds = []
-            cmds.append(
-                mtxmult.get_imgmult_cmd(
-                    mpath.vcdrmx[view] / "%04d.hdr", mpath.smx_sun_img, odir=vrescdr
+            if mpath.vcdrmx != {}:
+                cmds.append(
+                    mtxmult.get_imgmult_cmd(
+                        mpath.vcdrmx[view] / "%04d.hdr", mpath.smx_sun_img, odir=vrescdr
+                    )
                 )
-            )
-            cmds.append(
-                mtxmult.get_imgmult_cmd(
-                    mpath.vcdfmx[view] / "%04d.hdr", mpath.smx_sun_img, odir=vrescdf
+            if mpath.vcdfmx != {}:
+                cmds.append(
+                    mtxmult.get_imgmult_cmd(
+                        mpath.vcdfmx[view] / "%04d.hdr", mpath.smx_sun_img, odir=vrescdf
+                    )
                 )
-            )
             for wname in model.window_groups:
                 _vrespath = tf.mkdtemp(dir=td)
                 _vdrespath = tf.mkdtemp(dir=td)
@@ -846,7 +840,7 @@ def two_phase(model: MradModel, config: ConfigParser) -> MradPath:
             int(config["SimControl"]["smx_basis"][-1]),
             data=wea_data,
             meta=wea_meta,
-            rotate=config["Site"]["orientation"],
+            rotate=config["Site"].getfloat("orientation"),
         )
     prep_2phase_pt(mpath, model, config)
     prep_2phase_vu(mpath, model, config)
@@ -880,12 +874,17 @@ def three_phase(
             int(config["SimControl"]["smx_basis"][-1]),
             data=wea_data,
             meta=wea_meta,
-            rotate=config["Site"]["orientation"],
+            rotate=config["Site"].getfloat("orientation"),
         )
     view_matrix_pt(mpath, model, config)
     view_matrix_vu(mpath, model, config)
     daylight_matrix(mpath, model, config)
     if direct:
+        if not (orientation := config["Site"].getfloat("orientation")) in (None, 0):
+            rotate_radians = math.radians(orientation)
+            rotated_window_normals = [
+                n.rotate_3d(geom.Vector(0, 0, 1), rotate_radians) for n in model.window_normals
+            ]
         wea_data_d6, datetime_stamps_d6 = sky.filter_wea(
             wea_data,
             wea_meta,
@@ -893,7 +892,7 @@ def three_phase(
             start_hour=0,
             end_hour=0,
             remove_zero=True,
-            window_normals=model.window_normals,
+            window_normals=rotated_window_normals if orientation else model.window_normals,
         )
         mpath.smxd = Path("Matrices") / (wea_name + "_d.smx")
         sky.gendaymtx(
@@ -909,7 +908,7 @@ def three_phase(
             int(config["SimControl"]["cdsmx_basis"][-1]),
             data=wea_data_d6,
             meta=wea_meta,
-            rotate=config["Site"]["orientation"],
+            rotate=config["Site"].getfloat("orientation"),
             onesun=True,
             direct=True,
         )
@@ -919,13 +918,14 @@ def three_phase(
             int(config["SimControl"]["cdsmx_basis"][-1]),
             data=wea_data,
             meta=wea_meta,
-            rotate=config["Site"]["orientation"],
+            rotate=config["Site"].getfloat("orientation"),
             onesun=True,
             direct=True,
         )
         vmap_oct, cdmap_oct = blacken_env(model, config)
         direct_sun_matrix_pt(mpath, model, config)
-        direct_sun_matrix_vu(mpath, model, vmap_oct, cdmap_oct, config)
+        if len(datetime_stamps_d6) > 0:
+            direct_sun_matrix_vu(mpath, model, vmap_oct, cdmap_oct, config)
         daylight_matrix(mpath, model, config, direct=True)
         view_matrix_pt(mpath, model, config, direct=True)
         view_matrix_vu(mpath, model, config, direct=True)
