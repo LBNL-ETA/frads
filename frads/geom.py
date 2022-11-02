@@ -11,6 +11,7 @@ from typing import Union
 from typing import List
 from typing import Tuple
 from typing import Sequence
+from typing import Iterable
 
 
 @dataclass(frozen=True)
@@ -183,7 +184,7 @@ class Polygon:
         vertices(List[Vector]): list of vertices of the polygon.
     """
 
-    vertices: Tuple[Vector]
+    vertices: Iterable[Vector]
 
     def __post_init__(self) -> None:
         """."""

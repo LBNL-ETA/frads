@@ -216,9 +216,9 @@ class PaneRGB(NamedTuple):
     """
 
     measured_data: PaneProperty
-    coated_rgb: List[float]
-    glass_rgb: List[float]
-    trans_rgb: List[float]
+    coated_rgb: Iterable[float]
+    glass_rgb: Iterable[float]
+    trans_rgb: Iterable[float]
 
 
 class WeaMetaData(NamedTuple):
@@ -277,6 +277,9 @@ class WeaData(NamedTuple):
 
     def __str__(self) -> str:
         return f"{self.time.month} {self.time.day} {self.time.hour+self.time.minute/60} {self.dni} {self.dhi}"
+
+    def dt_str(self) -> str:
+        return f"{self.time.month:02d}{self.time.day:02d}_{self.time.hour:02d}{self.time.minute:02d}"
 
 
 class MradModel(NamedTuple):
@@ -461,6 +464,7 @@ class ViewType:
 @dataclass
 class View:
     """View data object."""
+
     position: Vector
     direction: Vector
     up: Vector = Vector(0, 0, 1)
@@ -572,7 +576,7 @@ class Options:
     ad: int = IntArg()
     ar: int = IntArg()
     as_: int = IntArg()
-    av: Tuple[float] = TupleArg()
+    av: Tuple[float, float, float] = TupleArg()
     aw: int = IntArg()
     dc: float = FloatArg()
     dj: float = FloatArg()

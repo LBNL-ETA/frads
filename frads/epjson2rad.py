@@ -3,11 +3,12 @@
 from configparser import ConfigParser
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import subprocess as sp
-from typing import Any, Mapping, Dict
-from typing import List
+import sys
+from typing import Dict, List
 
 from frads import geom
 from frads import utils
@@ -53,10 +54,9 @@ def get_construction_thickness(
 
 def check_outward(polygon: geom.Polygon, zone_center: geom.Vector) -> bool:
     """Check whether a surface is facing outside."""
-    pi = 3.14159265358579
     outward = True
     angle2center = polygon.normal.angle_from(zone_center - polygon.centroid)
-    if angle2center < pi / 4:
+    if angle2center < math.pi / 4:
         outward = False
     return outward
 
@@ -378,7 +378,12 @@ def parse_epjson(epjs: dict) -> tuple:
     site = list(epjs["Site:Location"].values())[0]
 
     # parse each fenestration
-    fenestrations = parse_epjson_fenestration(epjs["FenestrationSurface:Detailed"])
+    fenes = epjs.get("FenestrationSurface:Detailed")
+    if fenes is not None:
+        fenestrations = parse_epjson_fenestration(fenes)
+    else:
+        logger.warning("No fenestration found in the model.")
+        sys.exit(1)
 
     # Get all the fenestration hosting surfaces
     fene_hosts = {val.host for val in fenestrations.values()}
@@ -425,28 +430,27 @@ def parse_epjson(epjs: dict) -> tuple:
         for name, surface in opaque_surfaces.items():
             if surface.zone == zname:
                 surface_map[surface.type][name] = surface
-        zones[zname] = EPlusZone(zone_name, *surface_map.values(), windows)
+        zones[zname] = EPlusZone(
+            zone_name,
+            surface_map["Wall"],
+            surface_map["Ceiling"],
+            surface_map["Roof"],
+            surface_map["Floor"],
+            windows,
+        )
     return site, zones, constructions, materials, matrices
-
-
-def write_config(config: Mapping[str, Mapping[str, Any]]) -> None:
-    """Write config."""
-    cfg = ConfigParser(allow_no_value=True)
-    # templ_config = config.to_dict()
-    cfg.read_dict(config)
-    with open(f"{config.name}.cfg", "w", encoding="utf-8") as rdr:
-        cfg.write(rdr)
 
 
 def epjson2rad(epjs: dict) -> None:
     """Command-line program to convert a energyplus model into a Radiance model."""
     # Setup file structure
     Path("Objects").mkdir(exist_ok=True)
-    Path("Resources").mkdir(exist_ok=True)
     Path("Matrices").mkdir(exist_ok=True)
 
     site, zones, constructions, materials, matrices = parse_epjson(epjs)
     building_name = epjs["Building"].popitem()[0].replace(" ", "_")
+    if len(matrices) > 0:
+        Path("Resources").mkdir(exist_ok=True)
 
     # Write material file
     material_path = os.path.join("Objects", f"materials{building_name}.mat")
@@ -525,7 +529,7 @@ def epjson2rad(epjs: dict) -> None:
         mrad_config["Model"] = {
             "material": material_path,
             "scene": "\n".join(scene),
-            "window_paths": " ".join(windows),
+            "windows": " ".join(windows),
             "window_xml": " ".join(window_xmls),
             "ncp_shade": "",
         }
@@ -556,6 +560,8 @@ def read_ep_input(fpath: Path) -> dict:
             raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
     elif fpath.suffix == ".epJSON":
         epjson_path = fpath
+    else:
+        raise Exception(f"Unknown file type {fpath}")
     with open(epjson_path) as rdr:
         epjs = json.load(rdr)
     return epjs

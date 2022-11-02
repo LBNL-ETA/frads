@@ -387,7 +387,9 @@ def parse_vu(vu_str: str) -> View:
     vparser.add_argument("-vf", type=argparse.FileType("r"))
     args, _ = vparser.parse_known_args(args_list)
     if args.vf is not None:
-        args, _ = vparser.parse_known_args(args.vf.readline().strip().split(), namespace=args)
+        args, _ = vparser.parse_known_args(
+            args.vf.readline().strip().split(), namespace=args
+        )
         args.vf.close()
     if None in (args.vp, args.vd):
         raise ValueError("Invalid view")
