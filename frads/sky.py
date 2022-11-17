@@ -220,18 +220,19 @@ def gendaymtx(
     return cmd
 
 
-def gen_perez_sky(row, meta, grefl: float = 0.2, spect: str = "0", rotate=None) -> str:
+def gen_perez_sky(row: WeaData, meta, grefl: float = 0.2, spect: str = "0", rotate=None) -> str:
     solar = False if spect == "0" else True
     gendaylit = gendaylit_cmd(
-        str(row.month),
-        str(row.day),
-        str(row.hours),
+        str(row.time.month),
+        str(row.time.day),
+        str(row.time.hour + row.time.minute / 60 + row.time.second / 3600),
         str(meta.latitude),
         str(meta.longitude),
         str(meta.timezone),
         dir_norm_ir=str(row.dni),
         dif_hor_ir=str(row.dhi),
         solar=solar,
+        grefl=grefl,
     )
     out = []
     rot = f"| xform -rz {rotate}" if rotate is not None else ""
@@ -250,6 +251,7 @@ def gendaylit_cmd(
     lon: str,
     tzone: str,
     year: Optional[str] = None,
+    grefl: Optional[float] = None,
     dir_norm_ir: Optional[str] = None,
     dif_hor_ir: Optional[str] = None,
     dir_hor_ir: Optional[str] = None,
@@ -260,6 +262,8 @@ def gendaylit_cmd(
     """Get a gendaylit command as a list."""
     cmd = ["gendaylit", month, day, hours]
     cmd += ["-a", lat, "-o", lon, "-m", tzone]
+    if grefl is not None:
+        cmd += ["-g", str(grefl)]
     if year is not None:
         cmd += ["-y", year]
     if None not in (dir_norm_ir, dif_hor_ir):
