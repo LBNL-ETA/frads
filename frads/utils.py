@@ -17,8 +17,6 @@ from frads import geom
 from frads import parsers
 from frads.types import Primitive
 from frads.types import PaneRGB
-from frads.types import ScatteringData
-from frads.types import BSDFData
 
 
 logger: logging.Logger = logging.getLogger("frads.utils")
@@ -28,11 +26,6 @@ GEOM_TYPE = ["polygon", "ring", "tube", "cone"]
 
 MATERIAL_TYPE = ["plastic", "glass", "trans", "dielectric", "BSDF"]
 
-BASIS_DICT = {
-    "145": "Klems Full",
-    "73": "Klems Half",
-    "41": "Klems Quarter",
-}
 
 TREG_BASE = [
     (90.0, 0),
@@ -46,31 +39,6 @@ TREG_BASE = [
     (0.0, 1),
 ]
 
-ABASE_LIST = {
-    "Klems Full": [
-        (0.0, 1),
-        (5.0, 8),
-        (15.0, 16),
-        (25.0, 20),
-        (35.0, 24),
-        (45.0, 24),
-        (55.0, 24),
-        (65.0, 16),
-        (75.0, 12),
-        (90.0, 0),
-    ],
-    "Klems Half": [
-        (0.0, 1),
-        (6.5, 8),
-        (19.5, 12),
-        (32.5, 16),
-        (46.5, 20),
-        (61.5, 12),
-        (76.5, 4),
-        (90.0, 0),
-    ],
-    "Klems Quarter": [(0.0, 1), (9.0, 8), (27.0, 12), (46.0, 12), (66.0, 8), (90.0, 0)],
-}
 
 
 def tmit2tmis(tmit: float) -> float:
@@ -95,26 +63,6 @@ def unpack_idf(path: str) -> dict:
         return parsers.parse_idf(rdr.read())
 
 
-def sdata2bsdf(sdata: ScatteringData) -> BSDFData:
-    """Convert sdata object to bsdf object."""
-    basis = BASIS_DICT[str(sdata.ncolumn)]
-    lambdas = angle_basis_coeff(basis)
-    bsdf = []
-    for irow in range(sdata.nrow):
-        for icol, lam in zip(range(sdata.ncolumn), lambdas):
-            bsdf.append(sdata.sdata[icol + irow * sdata.ncolumn] / lam)
-    return BSDFData(bsdf, sdata.ncolumn, sdata.nrow)
-
-
-def bsdf2sdata(bsdf: BSDFData) -> ScatteringData:
-    """Covert a bsdf object into a sdata object."""
-    basis = BASIS_DICT[str(bsdf.ncolumn)]
-    lambdas = angle_basis_coeff(basis)
-    sdata = []
-    for irow in range(bsdf.nrow):
-        for icol, lam in zip(range(bsdf.ncolumn), lambdas):
-            sdata.append(bsdf.bsdf[icol + irow * bsdf.ncolumn] * lam)
-    return ScatteringData(sdata, bsdf.ncolumn, bsdf.nrow)
 
 
 def frange_inc(start, stop, step):
@@ -334,30 +282,6 @@ def bsdf_prim(
         str_args.append(".")
     str_args = [str(str_args_count), *str_args]
     return Primitive(mod, _type, ident, str_args, real_args)
-
-
-def lambda_calc(theta_lr: float, theta_up: float, nphi: float) -> float:
-    """."""
-    return (
-        (
-            math.cos(math.pi / 180 * theta_lr) ** 2
-            - math.cos(math.pi / 180 * theta_up) ** 2
-        )
-        * math.pi
-        / nphi
-    )
-
-
-def angle_basis_coeff(basis: str) -> List[float]:
-    """Calculate klems basis coefficient"""
-    ablist = ABASE_LIST[basis]
-    lambdas = []
-    for i in range(len(ablist) - 1):
-        tu = ablist[i + 1][0]
-        tl = ablist[i][0]
-        np = ablist[i][1]
-        lambdas.extend([lambda_calc(tl, tu, np) for _ in range(np)])
-    return lambdas
 
 
 def opt2list(opt: dict) -> List[str]:

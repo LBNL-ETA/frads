@@ -11,13 +11,13 @@ import sys
 from typing import Dict, List
 
 from frads import geom
-from frads import utils
+from frads import utils, bsdf
 from frads.types import Primitive
-from frads.types import BSDFData
-from frads.types import RadMatrix
+from frads.bsdf import BSDFData
+from frads.bsdf import RadMatrix
 from frads.types import EPlusWindowGas
 from frads.types import EPlusOpaqueMaterial
-from frads.types import EPlusWindowMaterial
+from frads.types import EPlusWindowMaterial, EPlusWindowMaterialComplexShade
 from frads.types import EPlusConstruction
 from frads.types import EPlusOpaqueSurface
 from frads.types import EPlusFenestration
@@ -64,7 +64,7 @@ def check_outward(polygon: geom.Polygon, zone_center: geom.Vector) -> bool:
 def eplus_surface2primitive(
     surfaces: dict, constructions, zone_center, materials
 ) -> dict:
-    """Conert EPlusOpaqueSurface (and its windows) to Radiance primitives."""
+    """Convert EPlusOpaqueSurface (and its windows) to Radiance primitives."""
     surface_primitives: dict = {}
     for _, surface in surfaces.items():
         name = surface.name
@@ -105,16 +105,17 @@ def eplus_surface2primitive(
             thickness = get_construction_thickness(
                 constructions[surface.construction], materials
             )
-            facade = thicken(surface_polygon, window_polygons, thickness)
-            surface_primitives[name]["surface"].append(
-                utils.polygon2prim(facade[1], outer_material, f"ext_{surface.name}")
-            )
-            for idx in range(2, len(facade)):
+            if thickness > 0:
+                facade = thicken(surface_polygon, window_polygons, thickness)
                 surface_primitives[name]["surface"].append(
-                    utils.polygon2prim(
-                        facade[idx], inner_material, f"sill_{surface.name}.{idx}"
-                    )
+                    utils.polygon2prim(facade[1], outer_material, f"ext_{surface.name}")
                 )
+                for idx in range(2, len(facade)):
+                    surface_primitives[name]["surface"].append(
+                        utils.polygon2prim(
+                            facade[idx], inner_material, f"sill_{surface.name}.{idx}"
+                        )
+                    )
     return surface_primitives
 
 
@@ -191,6 +192,24 @@ def parse_material_nomass(name: str, material: dict) -> EPlusOpaqueMaterial:
         visible_absorptance,
         visible_reflectance,
         primitive,
+    )
+
+
+def parse_windowmaterial_complexshade(name: str, material: dict) -> EPlusWindowMaterialComplexShade:
+    """Parse EP WindowMaterial:ComplexShade."""
+    return EPlusWindowMaterialComplexShade(
+        name.replace(" ", "_"),
+        material.get("layer_type", ""),
+        material.get("thickness", 0.002),
+        material.get("conductivity", 1.0),
+        material.get("ir_transmittance", 0.0),
+        material.get("front_emissivity", 0.84),
+        material.get("back_emissivity", 0.84),
+        material.get("top_opening_multiplier", 0.0),
+        material.get("bottom_opening_multiplier", 0.0),
+        material.get("left_side_opening_multiplier", 0.0),
+        material.get("right_side_opening_multiplier", 0.0),
+        material.get("front_opening_multiplier", 0.0),
     )
 
 
@@ -307,8 +326,8 @@ def parse_construction_complexfenestrationstate(epjs):
         # raise ValueError("BSDF resolution too low to take advantage of Radiance")
         tf_bsdf = [v["value"] for v in tf_list]
         tb_bsdf = [v["value"] for v in tb_list]
-        tf = utils.bsdf2sdata(BSDFData(tf_bsdf, ncolumn, ncolumn))
-        tb = utils.bsdf2sdata(BSDFData(tb_bsdf, ncolumn, ncolumn))
+        tf = bsdf.bsdf2sdata(BSDFData(tf_bsdf, ncolumn, ncolumn))
+        tb = bsdf.bsdf2sdata(BSDFData(tb_bsdf, ncolumn, ncolumn))
         matrices[key] = RadMatrix(tf, tb)
         cfs[key] = EPlusConstruction(key, "cfs", [])
     return cfs, matrices
@@ -456,7 +475,8 @@ def epjson2rad(epjs: dict) -> None:
     material_path = os.path.join("Objects", f"materials{building_name}.mat")
     with open(material_path, "w", encoding="ascii") as wtr:
         for material in materials.values():
-            wtr.write(str(material.primitive))
+            if hasattr(material, "primitive"):
+                wtr.write(str(material.primitive))
 
     # Write matrix files to xml, if any
     xml_paths = {}
@@ -470,7 +490,7 @@ def epjson2rad(epjs: dict) -> None:
             wtr.write(repr(val.tb))
         # basis = ''.join([word[0] for word in val.tf.basis.split()])
         basis = "".join(
-            [word[0].lower() for word in utils.BASIS_DICT[str(val.tf.ncolumn)].split()]
+            [word[0].lower() for word in bsdf.BASIS_DICT[str(val.tf.ncolumn)].split()]
         )
         cmd = ["wrapBSDF", "-f", "n=" + key, "-a", basis]
         cmd += ["-tf", tf_path, "-tb", tb_path, "-U"]
@@ -542,7 +562,7 @@ def epjson2rad(epjs: dict) -> None:
             mrad_config.write(wtr)
 
 
-def read_ep_input(fpath: Path) -> dict:
+def read_ep_input(fpath: Path, api) -> dict:
     """Load and parse input file into a JSON object.
     If the input file is in .idf fomart, use command-line
     energyplus program to convert it to epJSON format
@@ -553,8 +573,10 @@ def read_ep_input(fpath: Path) -> dict:
     """
     epjson_path: Path
     if fpath.suffix == ".idf":
-        cmd = ["energyplus", "--convert-only", str(fpath)]
-        sp.run(cmd, check=True)
+        state = api.state_manager.new_state()
+        api.runtime.set_console_output_status(state, False)
+        api.runtime.run_energyplus(state, ["--convert-only", str(fpath)])
+        api.state_manager.delete_state(state)
         epjson_path = Path(fpath.with_suffix(".epJSON").name)
         if not epjson_path.is_file():
             raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
@@ -564,4 +586,3 @@ def read_ep_input(fpath: Path) -> dict:
         raise Exception(f"Unknown file type {fpath}")
     with open(epjson_path) as rdr:
         epjs = json.load(rdr)
-    return epjs

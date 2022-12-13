@@ -1,0 +1,25 @@
+Description: SAE J1796 1995-05 Table 1 - Normalized relative spectral distribution of air mass 1.5 global solar radiation multiplied by the trapezoidal wavelength interval between 300 and 400 nm at 5 nm intervals
+Type: Source
+Wavelength Units: nm
+
+300    0.00000
+305    0.00103
+310    0.00459
+315    0.01167
+320    0.01961
+325    0.02675
+330    0.04283
+335    0.04227
+340    0.04716
+345    0.04756
+350    0.05241
+355    0.05438
+360    0.05637
+365    0.06427
+370    0.07219
+375    0.07516
+380    0.07720
+385    0.07765
+390    0.07809
+395    0.09393
+400    0.05489

@@ -1,0 +1,23 @@
+Description: ISO 9050:1990(E) Table 4 - Relative Spectral Distribution of the UV part of the global radiation Ulam multiplied by the spectral bandwidth del.lam Normalized so that the sum = 1.0
+Type: Source
+Wavelength Units: nanometers   
+   282.5       0
+   287.5       0
+   292.5       0
+   297.5 0.00082
+   302.5 0.00461
+   307.5 0.01373
+   312.5 0.02746
+   317.5  0.0412
+   322.5 0.05591
+   327.5 0.06572
+   332.5 0.07062
+   337.5 0.07258
+   342.5 0.07454
+   347.5 0.07601
+   352.5   0.077
+   357.5 0.07896
+   362.5 0.08043
+   367.5 0.08337
+   372.5 0.08631
+   377.5 0.09073

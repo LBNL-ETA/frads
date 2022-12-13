@@ -1,0 +1,57 @@
+Standard Description : Consistent with prEN 410:1998
+Standard Provides Methods: SOLAR, PHOTOPIC, TUV, CRI_X, CRI_Y, CRI_Z
+
+Name : SOLAR
+Description : prEN 410 Solar
+Source Spectrum : prEN 410 Table 2 AM1_0.ssp
+Detector Spectrum : None
+Wavelength Set : Source
+Integration Rule : Pre-weighted Table (Normalized, k=1.0)
+Minimum Wavelength : Wavelength set
+Maximum Wavelength : Wavelength set
+
+Name : PHOTOPIC
+Description : prEN 410 Photopic - Table 1 in prEN 410 is identical to ISO 9050 Table 1
+Source Spectrum : ISO 9050 Table 1.ssp
+Detector Spectrum : None
+Wavelength Set : Source
+Integration Rule : Pre-weighted Table (Normalized, k=100.0)
+Minimum Wavelength : Wavelength set
+Maximum Wavelength : Wavelength set
+
+Name : TUV
+Description : prEN 410 UV Transmittance - Table 3 in prEN 410 is identical to ISO 9050 Table 4
+Source Spectrum : ISO 9050 Table 4.ssp
+Detector Spectrum : None
+Wavelength Set : Source
+Integration Rule : Pre-weighted Table (Normalized, k=1.0)
+Minimum Wavelength : Wavelength set
+Maximum Wavelength : Wavelength set
+
+Name : CRI_X
+Description : prEN 410 Color Rendering Index x component
+Source Spectrum : prEN 410 Table 5 D65.ssp
+Detector Spectrum : prEN 410 Table 6 1931 X.dsp
+Wavelength Set : Source
+Integration Rule : Rectangular (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : CRI_Y
+Description : prEN 410 Color Rendering Index y component
+Source Spectrum : prEN 410 Table 5 D65.ssp
+Detector Spectrum : prEN 410 Table 6 1931 Y.dsp
+Wavelength Set : Source
+Integration Rule : Rectangular (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : CRI_Z
+Description : prEN 410 Color Rendering Index z component
+Source Spectrum : prEN 410 Table 5 D65.ssp
+Detector Spectrum : prEN 410 Table 6 1931 Z.dsp
+Wavelength Set : Source
+Integration Rule : Rectangular (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
