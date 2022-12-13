@@ -259,33 +259,6 @@ class MradModel(NamedTuple):
     black_env_path: Path
 
 
-class Scene:
-    __slots__ = ("_material_paths", "_window_paths", "_sender", "_receiver", "_wea", "_wea_data")
-    def __init__(self):
-        self.name = ""
-        self.windows = []
-        self.surfaces = []
-        self.sender_grid = {}
-        self.sender_view = {}
-
-
-    def get_window_normals(self) -> List[Vector]:
-        """Return a list of window normals."""
-        return [window.normal for window in self.windows]
-
-
-def genmtx(scene: Scene, sender, receiver=None, receiver_basis=None):
-    """Generate a matrix from a scene."""
-    receiver_basis = "r4" if receiver_basis is None else receiver_basis
-    receiver = sky.basis_sky(receiver_basis) is receiver is None else receiver
-
-    if sender.type == 'surface':
-        rfluxmtx(sender, receiver, scene)
-    else:
-        rcontrib(sender, scene)
-
-
-
 
 @dataclass
 class MradPath:
