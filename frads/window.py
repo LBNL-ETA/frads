@@ -140,23 +140,20 @@ def add_cfs_to_epjs(solar_results, photopic_results, glazing_system, epjs) -> No
         construction_complex_fenestration_state[name]["solar_optical_complex_back_reflectance_matrix_name"]: {
             "number_of_columns": 145,
             "number_of_rows": 145,
-            "values": [
-                {"value": val}
-                for val in solar_results.system_results.back.reflectance.matrix
-            ],
+            "values": [{"value": val} for row in solar_results.system_results.back.reflectance.matrix for val in row],
         },
         construction_complex_fenestration_state[name]["solar_optical_complex_front_transmittance_matrix_name" ]: {
             "number_of_columns": 145,
             "number_of_rows": 145,
             "values": [
                 {"value": val}
-                for val in solar_results.system_results.front.transmittance.matrix
+                for row in solar_results.system_results.front.transmittance.matrix for val in row
             ],
         },
         construction_complex_fenestration_state[name]["visible_optical_complex_back_transmittance_matrix_name"]: {
             "number_of_columns": 145,
             "number_of_rows": 145,
-            "values": [{"value": val} for val in photopic_results.system_results.back.transmittance.matrix],
+            "values": [{"value": val} for row in photopic_results.system_results.back.transmittance.matrix for val in row],
         },
         construction_complex_fenestration_state[name][
             "visible_optical_complex_front_transmittance_matrix_name"
@@ -165,7 +162,7 @@ def add_cfs_to_epjs(solar_results, photopic_results, glazing_system, epjs) -> No
             "number_of_rows": 145,
             "values": [
                 {"value": val}
-                for val in photopic_results.system_results.front.transmittance.matrix
+                for row in photopic_results.system_results.front.transmittance.matrix for val in row
             ],
         },
         construction_complex_fenestration_state[name][

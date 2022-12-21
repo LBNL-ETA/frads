@@ -66,25 +66,3 @@ class EnergyPlusSetup:
         except AttributeError:
             raise AttributeError(f"Method {method_name} not found in EnergyPlus runtime API")
         method(self.state, partial(func, self))
-
-
-
-# def shade_controller(ep: EnergyPlusSetup, state) -> None:
-#     """
-#     This is a user implemented controller, which gets called at EnergyPlus runtime.
-#     Args:
-#         ep: EnergyPlusSetup object
-#         state: EnergyPlus state
-#     Returns:
-#         None
-#     """
-#     drybulb = ep.get_variable_value(ep.handles.outdoor_drybulb_temperature)
-#     dni = ep.get_variable_value(ep.handles.direct_normal_irradiance)
-#     dhi = ep.get_variable_value(ep.handles.diffuse_horizontal_irradiance)
-#     if dni > 800:
-#         ep.actuate(ep.handles.window_actuators['Window1'], ep.handles.complex_fenestration_state['Window1'])
-# 
-# 
-# with EnergyPlusSetup(api, epjs) as ep:
-#     ep.set_callback("callback_begin_new_environment", shade_controller)
-#     ep.run()

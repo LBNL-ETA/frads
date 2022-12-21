@@ -113,8 +113,6 @@ class Receiver:
         )
 
 
-
-
 class PaneProperty(NamedTuple):
     """Window pane property object.
 

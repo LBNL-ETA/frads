@@ -2,5 +2,23 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "frads"
+dynamic = ["version"]
+description = "Wrapper for Radiance related simulation workflows"
+dependencies = [
+    "pyradiance",
+    "numpy",
+    "matplotlib",
+]
+license-files = ["LICENSE"]
+
+[tool.setuptools.dynamic]
+version = {attr = "frads.__version__"}
+
+[project.scripts]
+gen = "frads.cli:gen"
+mrad = "frads.cli:mrad"
+
 [tool.pylint.format]
 max-line-length = "88"

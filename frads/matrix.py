@@ -9,16 +9,15 @@ import os
 from pathlib import Path
 import subprocess as sp
 import tempfile as tf
-from typing import Iterable
-from typing import List
-from typing import Optional
-from typing import Sequence
-from typing import Union
+from typing import Iterable, List, Optional, Union, Sequence, Tuple
+
+import numpy as np
+
+import pyradiance as pr
 
 from frads import sky
 from frads import geom
 from frads import parsers
-from frads import raycall
 from frads import utils
 from frads.types import Primitive
 from frads.types import Receiver
@@ -34,10 +33,10 @@ def surface_as_sender(prim_list: list, basis: str, offset=None, left=None) -> Se
     Construct a sender from a surface.
 
     Args:
-        prim_list(list): a list of primitives
-        basis(str): sender sampling basis
-        offset(float): move the sender surface in its normal direction
-        left(bool): Use left-hand rule instead for matrix generation
+        prim_list: a list of primitives
+        basis: sender sampling basis
+        offset: move the sender surface in its normal direction
+        left: Use left-hand rule instead for matrix generation
 
     Returns:
         A sender object (Sender)
@@ -50,7 +49,7 @@ def surface_as_sender(prim_list: list, basis: str, offset=None, left=None) -> Se
     return Sender("s", prim_str.encode(), None, None)
 
 
-def view_as_sender(view: View, ray_cnt: int, xres: int, yres: int) -> Sender:
+def view_as_sender(view, ray_cnt: int, xres: int, yres: int) -> Sender:
     """
     Construct a sender from a view.
 
@@ -99,6 +98,68 @@ def view_as_sender(view: View, ray_cnt: int, xres: int, yres: int) -> Sender:
         vrays = vwrays_proc.stdout
     logger.debug("View sender:\n%s", vrays)
     return Sender("v", vrays, xres, yres)
+
+
+def mtxstr2nparray(data_str: bytes):
+    """Convert Radiance 3-channel matrix file to numpy array.
+
+    Args:
+        data_str: file data string
+
+    Returns:
+        RGB numpy arrays
+    """
+    if not data_str.startswith(b"#?RADIANCE"):
+        raise ValueError("No header found")
+    if b"\r\n\r\n" in data_str:
+        linesep2 = b"\r\n\r\n"
+    else:
+        linesep2 = b"\n\n"
+    chunks = data_str.split(linesep2, 1)
+    nrow, ncol, ncomp, dtype = parsers.parse_rad_header(chunks[0].decode())
+    if dtype == "ascii":
+        data = np.array([line.split() for line in chunks[1].splitlines()], dtype=float)
+    else:
+        if dtype == "float":
+            data = np.frombuffer(chunks[1], np.single).reshape(nrow, ncol * ncomp)
+        elif dtype == "double":
+            data = np.frombuffer(chunks[1], np.double).reshape(nrow, ncol * ncomp)
+        else:
+            raise ValueError(f"Unsupported data type {dtype}")
+    rdata = data[:, ::ncomp]
+    gdata = data[:, 1::ncomp]
+    bdata = data[:, 2::ncomp]
+    if (len(bdata) != nrow) or (len(bdata[0]) != ncol):
+        raise ValueError("Parsing matrix file failed")
+    return np.array((rdata, gdata, bdata))
+
+
+def load(file):
+    """
+    Load a Radiance matrix file into numpy array.
+
+    Args:
+        file: a file path
+
+    Returns:
+        A numpy array
+    """
+    file = Path(file)
+    if file.suffix == ".xml":
+        raw = pr.rmtxop(file)
+    else:
+        with open(file, "rb") as rdr:
+            raw = rdr.read()
+    return mtxstr2nparray(raw)
+
+
+def multiply_rgb(mtxs, weight: Optional[Tuple[float, ...]] = None):
+    """Matrix multiplication with Numpy."""
+    weight = (47.4, 119.9, 11.6) if weight is None else weight
+    resr = np.linalg.multi_dot([mat[0] for mat in mtxs]) * weight[0]
+    resg = np.linalg.multi_dot([mat[1] for mat in mtxs]) * weight[1]
+    resb = np.linalg.multi_dot([mat[2] for mat in mtxs]) * weight[2]
+    return resr + resg + resb
 
 
 def points_as_sender(pts_list: list, ray_cnt: Optional[int] = None) -> Sender:
@@ -258,6 +319,33 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
     return header + content
 
 
+def get_rfluxmtx_command(
+    receiver: Path,
+    option: Optional[List[str]] = None,
+    sys_paths: Optional[Iterable[Path]] = None,
+    octree: Optional[Path] = None,
+    sender: Optional[Path] = None,
+) -> List[str]:
+    """
+    Sender: stdin, polygon
+    Receiver: surface with -o
+    """
+    command = ["rfluxmtx"]
+    if option:
+        command.extend(option)
+    if isinstance(sender, Path):
+        command.append(str(sender))
+    else:
+        command.append("-")
+    command.append(str(receiver))
+    if octree:
+        command.extend(["-i", str(octree)])
+    if sys_paths:
+        for path in sys_paths:
+            command.append(str(path))
+    return command
+
+
 def rfluxmtx(
     sender: Sender,
     receiver: Receiver,
@@ -296,7 +384,7 @@ def rfluxmtx(
             opt.extend(["-I+", "-faa", "-y", str(sender.yres)])
         elif sender.form == "v":
             opt.extend(["-ffc", "-x", str(sender.xres), "-y", str(sender.yres), "-ld-"])
-        cmd = raycall.get_rfluxmtx_command(
+        cmd = get_rfluxmtx_command(
             receiver_path, option=opt, sender=_sender, sys_paths=env
         )
         logger.info("Running rfluxmtx with:\n%s", " ".join(cmd))

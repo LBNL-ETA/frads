@@ -321,13 +321,12 @@ def parse_construction_complexfenestrationstate(epjs):
         tb_name = val["visible_optical_complex_back_transmittance_matrix_name"]
         tf_list = epjs["Matrix:TwoDimension"][tf_name]["values"]
         tb_list = epjs["Matrix:TwoDimension"][tb_name]["values"]
-        ncolumn = epjs["Matrix:TwoDimension"][tf_name]["number_of_columns"]
-        # if ncolumn < 145:
-        # raise ValueError("BSDF resolution too low to take advantage of Radiance")
+        ncolumns = epjs["Matrix:TwoDimension"][tf_name]["number_of_columns"]
+        nrows = epjs["Matrix:TwoDimension"][tf_name]["number_of_rows"]
         tf_bsdf = [v["value"] for v in tf_list]
         tb_bsdf = [v["value"] for v in tb_list]
-        tf = bsdf.bsdf2sdata(BSDFData(tf_bsdf, ncolumn, ncolumn))
-        tb = bsdf.bsdf2sdata(BSDFData(tb_bsdf, ncolumn, ncolumn))
+        tf = BSDFData(tf_bsdf, ncolumns, nrows)
+        tb = BSDFData(tb_bsdf, ncolumns, nrows)
         matrices[key] = RadMatrix(tf, tb)
         cfs[key] = EPlusConstruction(key, "cfs", [])
     return cfs, matrices
@@ -460,7 +459,7 @@ def parse_epjson(epjs: dict) -> tuple:
     return site, zones, constructions, materials, matrices
 
 
-def epjson2rad(epjs: dict) -> None:
+def epjson2rad(epjs: dict, epw=None) -> None:
     """Command-line program to convert a energyplus model into a Radiance model."""
     # Setup file structure
     Path("Objects").mkdir(exist_ok=True)
@@ -485,18 +484,20 @@ def epjson2rad(epjs: dict) -> None:
         tf_path = os.path.join("Resources", key + "_tf.mtx")
         tb_path = os.path.join("Resources", key + "_tb.mtx")
         with open(tf_path, "w", encoding="ascii") as wtr:
-            wtr.write(repr(val.tf))
+            wtr.write(" ".join([str(v) for v in val.tf.bsdf]))
         with open(tb_path, "w", encoding="ascii") as wtr:
-            wtr.write(repr(val.tb))
-        # basis = ''.join([word[0] for word in val.tf.basis.split()])
+            wtr.write(" ".join([str(v) for v in val.tb.bsdf]))
         basis = "".join(
             [word[0].lower() for word in bsdf.BASIS_DICT[str(val.tf.ncolumn)].split()]
         )
         cmd = ["wrapBSDF", "-f", "n=" + key, "-a", basis]
         cmd += ["-tf", tf_path, "-tb", tb_path, "-U"]
-        wb_process = sp.run(cmd, check=True, stdout=sp.PIPE, stderr=sp.PIPE)
+        print(cmd)
+        proc = sp.run(cmd, check=True, stdout=sp.PIPE)
         with open(opath, "wb") as wtr:
-            wtr.write(wb_process.stdout)
+            wtr.write(proc.stdout)
+        # with open(opath, "wb") as wtr:
+            # sp.run(cmd, check=True, stdout=wtr)
         xml_paths[key] = opath
 
     # For each zone write primitves to files and create a config file
@@ -518,14 +519,11 @@ def epjson2rad(epjs: dict) -> None:
             "method": "",
         }
         mrad_config["Site"] = {
-            "wea_path": "",
-            "zipcode": "",
-            "latitude": site["latitude"],
-            "longitude": site["longitude"],
-            "start_hour": "",
-            "end_hour": "",
+            "epw_path": "",
             "daylight_hours_only": "True",
         }
+        if epw is not None:
+            mrad_config["Site"]["epw_path"] = epw
         primitives = epluszone2rad(zone, constructions, materials)
         scene = []
         windows = []
@@ -586,3 +584,4 @@ def read_ep_input(fpath: Path, api) -> dict:
         raise Exception(f"Unknown file type {fpath}")
     with open(epjson_path) as rdr:
         epjs = json.load(rdr)
+    return epjs
