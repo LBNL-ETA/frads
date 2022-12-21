@@ -11,7 +11,6 @@ from typing import Tuple, Any
 from typing import Dict
 from typing import Generator
 from typing import List
-from typing import Optional
 from typing import Sequence
 from typing import Union
 
@@ -44,20 +43,18 @@ def parse_mrad_config(cfg_path: Path) -> configparser.ConfigParser:
 
 
 def parse_epw(epw_str: str) -> tuple:
-    """Parse epw string and return wea header and data.
-    Assumption:
-        - epw file is in hourly format
-    """
+    """Parse epw file and return wea header and data."""
     raw = epw_str.splitlines()
     epw_header = raw[0].split(",")
     content = raw[8:]
-    data: List[WeaData] = []
+    data = []
     for li in content:
         line = li.split(",")
         year = int(line[0])
         month = int(line[1])
         day = int(line[2])
         hour = int(line[3]) - 1
+        hours = hour + 0.5
         dir_norm = float(line[14])
         dif_hor = float(line[15])
         cc = float(line[19])
@@ -361,7 +358,7 @@ def parse_rad_header(header_str: str) -> tuple:
     return nrow, ncol, ncomp, dtype
 
 
-def parse_vu(vu_str: str) -> Optional[View]:
+def parse_vu(vu_str: str) -> View:
     """Parse view string into a View object.
 
     Args:

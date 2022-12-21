@@ -2,7 +2,7 @@
 from typing import List
 from typing import Optional
 
-from frads.geom import Polygon, Vector
+from frads import geom
 from frads import utils
 from frads.types import Primitive
 
@@ -10,13 +10,13 @@ from frads.types import Primitive
 class Surface:
     """Surface object."""
 
-    def __init__(self, base: Polygon) -> None:
+    def __init__(self, base: geom.Polygon) -> None:
         """."""
         self.base = base
         self._vertices = base.vertices
         self._vect1 = (base.vertices[1] - base.vertices[0]).normalize()
         self._vect2 = (base.vertices[2] - base.vertices[1]).normalize()
-        self.polygons: List[Polygon] = [self.base]
+        self.polygons: List[geom.Polygon] = [self.base]
         self.windows: List[Surface] = []
         self._modifier: str = "void"
         self._identifier: str = "void"
@@ -60,7 +60,7 @@ class Surface:
 
     def make_window_wwr(self, wwr: float) -> None:
         """Make a window based on window-to-wall ratio."""
-        window_polygon = self.base.scale(Vector(*[wwr] * 3), self.base.centroid)
+        window_polygon = self.base.scale(geom.Vector(*[wwr] * 3), self.base.centroid)
         self.base = self.base - window_polygon
         self.windows.append(Surface(window_polygon))
 
@@ -75,7 +75,7 @@ class Surface:
         )
         win_pt2 = win_pt1 + self._vect1.scale(height)
         win_pt3 = win_pt1 + self._vect2.scale(width)
-        window_polygon = Polygon.rectangle3pts(win_pt3, win_pt1, win_pt2)
+        window_polygon = geom.Polygon.rectangle3pts(win_pt3, win_pt1, win_pt2)
         self.base = self.base - window_polygon
         self.windows.append(Surface(window_polygon))
 
@@ -95,12 +95,12 @@ class Surface:
         """Rotate the surface counter clock-wise."""
         polygons = []
         for plg in self.polygons:
-            polygons.append(plg.rotate3d(deg, Vector(0, 0, 1)))
+            polygons.append(plg.rotate3d(deg, geom.Vector(0, 0, 1)))
         self.polygons = polygons
         for window in self.windows:
             wpolygons = []
             for plg in window.polygons:
-                wpolygons.append(plg.rotate3d(deg, Vector(0, 0, 1)))
+                wpolygons.append(plg.rotate3d(deg, geom.Vector(0, 0, 1)))
 
 
 class Room:
@@ -123,17 +123,17 @@ class Room:
         depth: float,
         floor_floor: float,
         floor_ceiling: float,
-        origin: Optional[Vector] = None,
+        origin: Optional[geom.Vector] = None,
     ) -> "Room":
         """Generate a room from width, depth, and height."""
-        pt1 = Vector(0, 0, 0) if origin is None else origin
-        pt2 = pt1 + Vector(width, 0, 0)
-        pt3 = pt2 + Vector(0, depth, 0)
-        floor = Polygon.rectangle3pts(pt1, pt2, pt3)
+        pt1 = geom.Vector(0, 0, 0) if origin is None else origin
+        pt2 = pt1 + geom.Vector(width, 0, 0)
+        pt3 = pt2 + geom.Vector(0, depth, 0)
+        floor = geom.Polygon.rectangle3pts(pt1, pt2, pt3)
         _, ceiling, swall, ewall, nwall, wwall = floor.extrude(
-            Vector(0, 0, floor_floor)
+            geom.Vector(0, 0, floor_floor)
         )
-        ceiling = ceiling.move(Vector(0, 0, floor_ceiling - floor_floor))
+        ceiling = ceiling.move(geom.Vector(0, 0, floor_ceiling - floor_floor))
         return cls(
             Surface(floor),
             Surface(ceiling),
