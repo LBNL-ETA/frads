@@ -1,0 +1,93 @@
+Standard Description : SMARTS Spectrum ASTM G 197, Air Mass 1.5, 90 degree Tilt (Vertical), Global
+Standard Provides Methods: SOLAR, PHOTOPIC, COLOR_TRISTIMX, COLOR_TRISTIMY, COLOR_TRISTIMZ, THERMAL IR, TUV, SPF, TDW, TKR
+
+Name : SOLAR
+Description : Spectrum ASTM G 197, Air Mass 1.5, 90 degree Tilt (Vertical), Global
+Source Spectrum : ASTM G197 AM1_5 90 Tilt Global Full Spectrum.ssp
+Detector Spectrum : None
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.3
+Maximum Wavelength : 2.5
+
+Name : PHOTOPIC
+Description : Spectrum ASTM G 197, Air Mass 1.5, 90 degree Tilt (Vertical), Global
+Source Spectrum : ASTM G197 AM1_5 90 Tilt Global Full Spectrum.ssp
+Detector Spectrum : ASTM E308 1931 Y.dsp
+Wavelength Set : Color 5nm.wvl
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : COLOR_TRISTIMX
+Description : ASTM E308 Color - not in NFRC 300-2003
+Source Spectrum : CIE Illuminant D65 1nm.ssp
+Detector Spectrum : ASTM E308 1964 X.dsp
+Wavelength Set : Color 5nm.wvl
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : COLOR_TRISTIMY
+Description : ASTM E308 Color - not in NFRC 300-2003
+Source Spectrum : CIE Illuminant D65 1nm.ssp
+Detector Spectrum : ASTM E308 1964 Y.dsp
+Wavelength Set : Color 5nm.wvl
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : COLOR_TRISTIMZ
+Description : ASTM E308 Color - not in NFRC 300-2003
+Source Spectrum : CIE Illuminant D65 1nm.ssp
+Detector Spectrum : ASTM E308 1964 Z.dsp
+Wavelength Set : Color 5nm.wvl
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : THERMAL IR
+Description : Thermal Infrared average - not in NFRC 300-2003
+Source Spectrum : Blackbody (T=300.0K)
+Detector Spectrum : None
+Wavelength Set : Data
+Integration Rule : Trapezoidal
+Minimum Wavelength : 5.0
+Maximum Wavelength : Wavelength set
+
+Name : TUV
+Description : Unweighted UV average - not in NFRC 300-2003
+Source Spectrum : ASTM G197 AM1_5 90 Tilt Global Full Spectrum.ssp
+Detector Spectrum : None
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.31
+Maximum Wavelength : 0.38
+
+Name : SPF
+Description : Skin Protection Factor - not in NFRC 300-2003
+Source Spectrum : Sayre UV Source.ssp
+Detector Spectrum : CIE SPF McKinlay UV.dsp
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.28
+Maximum Wavelength : 0.4
+
+Name : TDW
+Description : NFRC 300-2003 UV Damage Weighted Transmittance based on CIE 89/3
+Source Spectrum : ASTM G197 AM1_5 90 Tilt Global Full Spectrum.ssp
+Detector Spectrum : UV Action (a=3.6, b=12.0)
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.3
+Maximum Wavelength : 0.7
+
+Name : TKR
+Description : Old-style Krochmann damage weighted average - not in NFRC 300-2003
+Source Spectrum : ASTM G197 AM1_5 90 Tilt Global Full Spectrum.ssp
+Detector Spectrum : Krochmann
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.3
+Maximum Wavelength : 0.5
+

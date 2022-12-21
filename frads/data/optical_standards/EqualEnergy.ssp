@@ -1,0 +1,7 @@
+Description: Equal energy spectrum over solar spectrum 300-2500nm
+Type: Source
+Wavelength Units: Nanometers
+
+     300     1.0
+    2500     1.0
+

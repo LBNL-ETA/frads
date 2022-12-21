@@ -1,0 +1,39 @@
+Standard Description : Color Averages for Radiance Export
+Standard Provides Methods: COLOR_TRISTIMX, COLOR_TRISTIMY, COLOR_TRISTIMZ, PHOTOPIC
+
+Name : COLOR_TRISTIMX
+Description : CIE X tristimulus value for Radiance file export
+Source Spectrum : EqualEnergy.ssp
+Detector Spectrum : ASTM E308 1964 X.dsp
+Wavelength Set : Data
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : COLOR_TRISTIMY
+Description : CIE Y tristimulus value for Radiance file export
+Source Spectrum : EqualEnergy.ssp
+Detector Spectrum : ASTM E308 1964 Y.dsp
+Wavelength Set : Data
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : COLOR_TRISTIMZ
+Description : CIE Z tristimulus value for Radiance file export
+Source Spectrum : EqualEnergy.ssp
+Detector Spectrum : ASTM E308 1964 Z.dsp
+Wavelength Set : Data
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : PHOTOPIC
+Description : photopic averages for Radiance file export
+Source Spectrum : EqualEnergy.ssp
+Detector Spectrum : ASTM E308 1964 Y.dsp
+Wavelength Set : Data
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+

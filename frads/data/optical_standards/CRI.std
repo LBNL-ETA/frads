@@ -1,0 +1,29 @@
+Standard Name: CRI
+Standard Description: Standard for calculating Color Rendering Index and Correlated Color Temperature 
+
+Name : Color_CRIX
+Description : WINDOW 4.1 Color
+Source Spectrum : ASTM E308 Illuminant D65.ssp
+Detector Spectrum : ASTM E308 1931 X.dsp
+Wavelength Set : Source
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : Color_CRIY
+Description : WINDOW 4.1 Color
+Source Spectrum : ASTM E308 Illuminant D65.ssp
+Detector Spectrum : ASTM E308 1931 Y.dsp
+Wavelength Set : Source
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : Color_CRIZ
+Description : WINDOW 4.1 Color
+Source Spectrum : ASTM E308 Illuminant D65.ssp
+Detector Spectrum : ASTM E308 1931 Z.dsp
+Wavelength Set : Source
+Integration Rule : Trapezoidal (Normalized, k=1.0)
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78

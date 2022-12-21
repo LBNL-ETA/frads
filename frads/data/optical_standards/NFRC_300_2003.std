@@ -1,0 +1,39 @@
+Standard Description : Consistent with NFRC 300-2003 + emittance calcs
+Standard Provides Methods: SOLAR, PHOTOPIC, THERMAL IR, TDW
+
+Name : SOLAR
+Description : NFRC 300-2003 Solar
+Source Spectrum : ASTM E891 Table 1 Direct AM1_5.ssp
+Detector Spectrum : None
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.3
+Maximum Wavelength : 2.5
+
+Name : PHOTOPIC
+Description : NFRC 300-2003 Photopic
+Source Spectrum : CIE Illuminant D65 1nm.ssp
+Detector Spectrum : ASTM E308 1931 Y.dsp
+Wavelength Set : Color 5nm.wvl
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.38
+Maximum Wavelength : 0.78
+
+Name : THERMAL IR
+Description : Thermal Infrared average - not in NFRC 300-2003
+Source Spectrum : Blackbody (T=300.0K)
+Detector Spectrum : None
+Wavelength Set : Data
+Integration Rule : Trapezoidal
+Minimum Wavelength : 5.0
+Maximum Wavelength : Wavelength set
+
+Name : TDW
+Description : NFRC 300-2003 UV Damage Weighted Transmittance based on CIE 89/3
+Source Spectrum : ASTM E891 Table 1 Direct AM1_5.ssp
+Detector Spectrum : UV Action (a=3.6, b=12.0)
+Wavelength Set : Source
+Integration Rule : Trapezoidal
+Minimum Wavelength : 0.3
+Maximum Wavelength : 0.7
+
