@@ -558,30 +558,3 @@ def epjson2rad(epjs: dict, epw=None) -> None:
         }
         with open(f"{name.replace(' ', '_')}.cfg", "w", encoding="utf-8") as wtr:
             mrad_config.write(wtr)
-
-
-def read_ep_input(fpath: Path, api) -> dict:
-    """Load and parse input file into a JSON object.
-    If the input file is in .idf fomart, use command-line
-    energyplus program to convert it to epJSON format
-    Args:
-        fpath: input file path
-    Returns:
-        epjs: JSON object as a Python dictionary
-    """
-    epjson_path: Path
-    if fpath.suffix == ".idf":
-        state = api.state_manager.new_state()
-        api.runtime.set_console_output_status(state, False)
-        api.runtime.run_energyplus(state, ["--convert-only", str(fpath)])
-        api.state_manager.delete_state(state)
-        epjson_path = Path(fpath.with_suffix(".epJSON").name)
-        if not epjson_path.is_file():
-            raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
-    elif fpath.suffix == ".epJSON":
-        epjson_path = fpath
-    else:
-        raise Exception(f"Unknown file type {fpath}")
-    with open(epjson_path) as rdr:
-        epjs = json.load(rdr)
-    return epjs
