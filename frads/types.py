@@ -18,7 +18,8 @@ from typing import Sequence
 from typing import Tuple
 from typing import Union
 
-from frads.geom import Polygon, Vector
+from frads.geom import Polygon
+from frads.geom import Vector
 
 
 class Primitive(NamedTuple):
@@ -113,6 +114,59 @@ class Receiver:
         )
 
 
+@dataclass
+class ScatteringData:
+    """Scattering data object.
+
+    Attributes:
+        sdata: scattering data in nested lists.
+        ncolumn: number of columns
+        nrow: number of rows
+    """
+
+    sdata: List[float]
+    ncolumn: int
+    nrow: int
+
+    def __str__(self) -> str:
+        out = "#?RADIANCE\nNCOMP=3\n"
+        out += f"NROWS={self.nrow}\nNCOLS={self.ncolumn}\n"
+        out += "FORMAT=ascii\n\n"
+        for col in range(self.ncolumn):
+            for row in range(self.nrow):
+                val = self.sdata[row + col * self.ncolumn]
+                string = "\t".join([f"{val:7.5f}"] * 3)
+                out += string + "\t"
+            out += "\n"
+        return out
+
+
+@dataclass
+class BSDFData:
+    """BSDF data object.
+
+    Attributes:
+        bsdf: BSDF data.
+        ncolumn: number of columns
+        nrow: number of rows
+    """
+
+    bsdf: List[float]
+    ncolumn: int
+    nrow: int
+
+
+@dataclass(frozen=True)
+class RadMatrix:
+    """Radiance matrix object.
+
+    Attributes:
+        tf: front-side transmission
+        tb: back-side transmission
+    """
+
+    tf: ScatteringData
+    tb: ScatteringData
 
 
 class PaneProperty(NamedTuple):
@@ -259,7 +313,6 @@ class MradModel(NamedTuple):
     black_env_path: Path
 
 
-
 @dataclass
 class MradPath:
     """
@@ -351,24 +404,6 @@ class EPlusWindowMaterial:
     name: str
     visible_transmittance: float
     primitive: Primitive
-
-
-@dataclass
-class EPlusWindowMaterialComplexShade:
-    """EnergyPlus complex window material data container."""
-
-    name: str
-    layer_type: str
-    thickness: float
-    conductivity: float
-    ir_transmittance: float
-    front_emissivity: float
-    back_emissivity: float
-    top_opening_multiplier: float
-    bottom_opening_multiplier: float
-    left_side_opening_multiplier: float
-    right_side_opening_multiplier: float
-    front_opening_multiplier: float
 
 
 @dataclass
