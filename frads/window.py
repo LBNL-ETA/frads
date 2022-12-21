@@ -92,7 +92,7 @@ def compute_solar_photopic_results(glazing_system):
     return solar_results, photopic_results
 
 
-def add_cfs_to_epjs(solar_results, photopic_results, glazing_system, epjs) -> None:
+def add_cfs_to_epjs(glazing_system, epjs) -> None:
     """
     Add CFS to an EnergyPlus JSON file.
 
@@ -105,8 +105,11 @@ def add_cfs_to_epjs(solar_results, photopic_results, glazing_system, epjs) -> No
         None
     """
     name = glazing_system.name
+    # Compute solar and photopic results from pywincalc
 
-    # Initiate Contruction:ComplexFenestrationState dictionary with system and outer layer names
+    solar_results, photopic_results = compute_solar_photopic_results(glazing_system)
+
+    # Initialize Contruction:ComplexFenestrationState dictionary with system and outer layer names
 
     construction_complex_fenestration_state = {}
 
@@ -124,7 +127,7 @@ def add_cfs_to_epjs(solar_results, photopic_results, glazing_system, epjs) -> No
         "outside_layer_name": glazing_system.layers[0].product_name,
     }
 
-    # Initiate Matrix:TwoDimension dictionary with system and outer layer matrices
+    # Initialize Matrix:TwoDimension dictionary with system and outer layer matrices
     matrix_two_dimension = {
         construction_complex_fenestration_state[name]["basis_matrix_name"]: {
             "number_of_columns": 2,
@@ -322,11 +325,19 @@ def add_cfs_to_epjs(solar_results, photopic_results, glazing_system, epjs) -> No
         else:
             epjs[key] = val
 
+    # Set the all fenestration surface constructions to complex fenestration state
+    # pick the first cfs
+        cfs = list(epjs['Construction:ComplexFenestrationState'].keys())[0]
+        for window_name in epjs["FenestrationSurface:Detailed"]:
+            epjs["FenestrationSurface:Detailed"][window_name][
+                "construction_name"
+            ] = cfs
+
 
 def add_lighting_epjs(epjs):
     """Add lighting objects to the epjs dictionary."""
 
-    # Define a lighting schedule type limit
+    # Initialize lighting schedule type limit dictionary
     schedule_type_limit = {} 
     schedule_type_limit["on_off"] = {
         "lower_limit_value" : 0,
@@ -335,15 +346,14 @@ def add_lighting_epjs(epjs):
         "unit_type" : "Availability"
     }
 
-    # Define a lighting schedule
+    # Initialize lighting schedule dictionary
     lighting_schedule = {}
     lighting_schedule["constant_off"] = {
         "schedule_type_limits_name" : "on_off",
         "hourly_value" : 0
     }
 
-    # Initiate lights dictionary with a constant-off schedule for each zone
-
+    # Initialize lights dictionary with a constant-off schedule for each zone
 
     lights = {}
     for zone in epjs["Zone"]:
@@ -384,25 +394,4 @@ def add_lighting_epjs(epjs):
             epjs[key] = {**epjs[key], **val}
         else:
             epjs[key] = val
-
-
-
-
-def set_cfs(epjs, window_name=None, implement_all=False):
-    """Set the complex fenestration state to a window.
-    """
-    # pick the first cfs
-    cfs = list(epjs['Construction:ComplexFenestrationState'].keys())[0]
-    if window_name is not None:
-        epjs["FenestrationSurface:Detailed"][window_name][
-            "construction_name"
-        ] = cfs
-
-    elif implement_all:
-        for window_name in epjs["FenestrationSurface:Detailed"]:
-            epjs["FenestrationSurface:Detailed"][window_name][
-                "construction_name"
-            ] = cfs
-    else:
-        raise ValueError("Either window_name or implement_all must be set to True.")
-        
+       

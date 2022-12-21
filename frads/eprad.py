@@ -1,6 +1,16 @@
-from functools import partial
+import datetime
 import json
+from pathlib import Path
 
+
+def ep_datetime_parser(inp):
+    date, time = inp.strip().split()
+    month, day = [int(i) for i in date.split("/")]
+    hr, mi, sc = [int(i) for i in time.split(":")]
+    if hr == 24 and mi == 0 and sc == 0:
+        return datetime.datetime(1900, month, day, 0, mi, sc) + datetime.timedelta(days=1)
+    else:
+        return datetime.datetime(1900, month, day, hr, mi, sc)
 
 class Handles:
     def __init__(self):
@@ -9,7 +19,7 @@ class Handles:
         self.diffuse_horizontal_irradiance = None
         self.complex_fenestration_state = {}
         self.window_actuators = {}
-        self.light_total_heating_rate = {}
+        self.lights_electricity_energy = {}
         self.light_actuators = {}
 
 
@@ -42,8 +52,8 @@ class EnergyPlusSetup:
     def get_variable_value(self, handle):
         return self.api.exchange.get_variable_value(self.state, handle)
 
-    def get_variable_handle(self, name):
-        return self.api.exchange.get_variable_handle(self.state, name)
+    def get_variable_handle(self, variable_name, variable_key):
+        return self.api.exchange.get_variable_handle(self.state, variable_name, variable_key)
 
     def get_handles(self):
         def callback_function(state):
@@ -52,22 +62,15 @@ class EnergyPlusSetup:
             self.handles.diffuse_horizontal_irradiance = self.api.exchange.get_variable_handle(state, "Site Diffuse Solar Radiation Rate per Area", "Environment")
             construction_complex_fenestration_state = self.epjs['Construction:ComplexFenestrationState']
             
-            cfs_handles = {}
-            window_actuators = {}
             for cfs in construction_complex_fenestration_state:
-                cfs_handles[cfs] = self.api.api.getConstructionHandle(state, cfs.encode())
+                self.handles.complex_fenestration_state[cfs] = self.api.api.getConstructionHandle(state, cfs.encode())
             for window in self.window_surfaces:
-                window_actuators[window] = self.api.exchange.get_actuator_handle(state, "Surface", "Construction State", window.encode())
-            self.handles.complex_fenestration_state = cfs_handles
-            self.handles.window_actuators = window_actuators
+                self.handles.window_actuators[window] = self.api.exchange.get_actuator_handle(state, "Surface", "Construction State", window.encode())
 
-            light_total_heating_rate = {}
-            light_actuators = {}
             for light in self.lights:
-                light_total_heating_rate[light] = self.api.exchange.get_variable_handle(state, "Lights Total Heating Rate", light.encode())
-                light_actuators[light] = self.api.exchange.get_actuator_handle(state, "Lights", "Electricity Rate", light.encode())
-            self.handles.light_total_heating_rate = light_total_heating_rate
-            self.handles.light_actuators = light_actuators
+                self.handles.lights_electricity_energy[light] = self.api.exchange.get_variable_handle(state, "Lights Electricity Energy", light.encode())
+                self.handles.light_actuators[light] = self.api.exchange.get_actuator_handle(state, "Lights", "Electricity Rate", light.encode())
+
         return callback_function
         
     def run(self):
