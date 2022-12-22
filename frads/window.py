@@ -29,6 +29,8 @@ class GlazingSystem:
         self.layers = []
         self.gaps = []
         self._name = ""
+        self.solar_results = None
+        self.photopic_results = None
 
     @property
     def name(self):
@@ -72,27 +74,26 @@ class GlazingSystem:
             self.gaps.append(self.default_air_gap)
 
 
-def compute_solar_photopic_results(glazing_system):
-    """Compute the solar photopic results."""
-    if (len(glazing_system.layers) - 1) != len(glazing_system.gaps):
-        raise ValueError("Number of gaps must be one less than number of layers.")
-    gs = pwc.GlazingSystem(
-        optical_standard=pwc.load_standard(
-            str(Path(__file__).parent / "data" / "optical_standards" / "W5_NFRC_2003.std")
-        ),
-        solid_layers=glazing_system.layers,
-        gap_layers=[create_gap(g[0], thickness=g[1]) for g in glazing_system.gaps],
-        width_meters=1,
-        height_meters=1,
-        environment=pwc.nfrc_shgc_environments(),
-        bsdf_hemisphere=pwc.BSDFHemisphere.create(pwc.BSDFBasisType.FULL),
-    )
-    solar_results = gs.optical_method_results("SOLAR")
-    photopic_results = gs.optical_method_results("PHOTOPIC")
-    return solar_results, photopic_results
+    def compute_solar_photopic_results(self):
+        """Compute the solar photopic results."""
+        if (len(self.layers) - 1) != len(self.gaps):
+            raise ValueError("Number of gaps must be one less than number of layers.")
+        gs = pwc.GlazingSystem(
+            optical_standard=pwc.load_standard(
+                str(Path(__file__).parent / "data" / "optical_standards" / "W5_NFRC_2003.std")
+            ),
+            solid_layers=self.layers,
+            gap_layers=[create_gap(g[0], thickness=g[1]) for g in self.gaps],
+            width_meters=1,
+            height_meters=1,
+            environment=pwc.nfrc_shgc_environments(),
+            bsdf_hemisphere=pwc.BSDFHemisphere.create(pwc.BSDFBasisType.FULL),
+        )
+        self.solar_results = gs.optical_method_results("SOLAR")
+        self.photopic_results = gs.optical_method_results("PHOTOPIC")
 
 
-def add_cfs_to_epjs(solar_results, photopic_results, glazing_system, epjs) -> None:
+def add_cfs_to_epjs(glazing_system, epjs) -> None:
     """
     Add CFS to an EnergyPlus JSON file.
 
@@ -105,8 +106,14 @@ def add_cfs_to_epjs(solar_results, photopic_results, glazing_system, epjs) -> No
         None
     """
     name = glazing_system.name
+    if glazing_system.solar_results is not None and glazing_system.photopic_results is not None:
+        solar_results = glazing_system.solar_results
+        photopic_results = glazing_system.photopic_results
+    else:
+        raise ValueError("Solar and photopic results must be computed first.")
+    
 
-    # Initiate Contruction:ComplexFenestrationState dictionary with system and outer layer names
+    # Initialize Contruction:ComplexFenestrationState dictionary with system and outer layer names
 
     construction_complex_fenestration_state = {}
 
@@ -124,7 +131,7 @@ def add_cfs_to_epjs(solar_results, photopic_results, glazing_system, epjs) -> No
         "outside_layer_name": glazing_system.layers[0].product_name,
     }
 
-    # Initiate Matrix:TwoDimension dictionary with system and outer layer matrices
+    # Initialize Matrix:TwoDimension dictionary with system and outer layer matrices
     matrix_two_dimension = {
         construction_complex_fenestration_state[name]["basis_matrix_name"]: {
             "number_of_columns": 2,
@@ -322,11 +329,19 @@ def add_cfs_to_epjs(solar_results, photopic_results, glazing_system, epjs) -> No
         else:
             epjs[key] = val
 
+    # Set the all fenestration surface constructions to complex fenestration state
+    # pick the first cfs
+        cfs = list(epjs['Construction:ComplexFenestrationState'].keys())[0]
+        for window_name in epjs["FenestrationSurface:Detailed"]:
+            epjs["FenestrationSurface:Detailed"][window_name][
+                "construction_name"
+            ] = cfs
+
 
 def add_lighting_epjs(epjs):
     """Add lighting objects to the epjs dictionary."""
 
-    # Define a lighting schedule type limit
+    # Initialize lighting schedule type limit dictionary
     schedule_type_limit = {} 
     schedule_type_limit["on_off"] = {
         "lower_limit_value" : 0,
@@ -335,15 +350,14 @@ def add_lighting_epjs(epjs):
         "unit_type" : "Availability"
     }
 
-    # Define a lighting schedule
+    # Initialize lighting schedule dictionary
     lighting_schedule = {}
     lighting_schedule["constant_off"] = {
         "schedule_type_limits_name" : "on_off",
         "hourly_value" : 0
     }
 
-    # Initiate lights dictionary with a constant-off schedule for each zone
-
+    # Initialize lights dictionary with a constant-off schedule for each zone
 
     lights = {}
     for zone in epjs["Zone"]:
@@ -384,25 +398,3 @@ def add_lighting_epjs(epjs):
             epjs[key] = {**epjs[key], **val}
         else:
             epjs[key] = val
-
-
-
-
-def set_cfs(epjs, window_name=None, implement_all=False):
-    """Set the complex fenestration state to a window.
-    """
-    # pick the first cfs
-    cfs = list(epjs['Construction:ComplexFenestrationState'].keys())[0]
-    if window_name is not None:
-        epjs["FenestrationSurface:Detailed"][window_name][
-            "construction_name"
-        ] = cfs
-
-    elif implement_all:
-        for window_name in epjs["FenestrationSurface:Detailed"]:
-            epjs["FenestrationSurface:Detailed"][window_name][
-                "construction_name"
-            ] = cfs
-    else:
-        raise ValueError("Either window_name or implement_all must be set to True.")
-        
