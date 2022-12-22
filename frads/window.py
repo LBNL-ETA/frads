@@ -398,4 +398,3 @@ def add_lighting_epjs(epjs):
             epjs[key] = {**epjs[key], **val}
         else:
             epjs[key] = val
-       

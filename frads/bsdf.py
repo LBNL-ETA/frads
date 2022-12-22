@@ -46,7 +46,7 @@ class ScatteringData:
         nrow: number of rows
     """
 
-    sdata: List[float]
+    sdata: List[List[float]]
     ncolumn: int
     nrow: int
 
@@ -73,7 +73,7 @@ class BSDFData:
         nrow: number of rows
     """
 
-    bsdf: List[List[float]]
+    bsdf: List[float]
     ncolumn: int
     nrow: int
 
@@ -87,8 +87,8 @@ class RadMatrix:
         tb: back-side transmission
     """
 
-    tf: ScatteringData
-    tb: ScatteringData
+    tf: BSDFData
+    tb: BSDFData
 
 
 def lambda_calc(theta_lr: float, theta_up: float, nphi: float) -> float:
@@ -121,8 +121,10 @@ def sdata2bsdf(sdata: ScatteringData) -> BSDFData:
     lambdas = angle_basis_coeff(basis)
     bsdf = []
     for irow in range(sdata.nrow):
+        _row = []
         for icol, lam in zip(range(sdata.ncolumn), lambdas):
-            bsdf.append(sdata.sdata[icol + irow * sdata.ncolumn] / lam)
+            _row.append(sdata.sdata[irow][icol] / lam)
+        bsdf.append(_row)
     return BSDFData(bsdf, sdata.ncolumn, sdata.nrow)
 
 
@@ -132,6 +134,8 @@ def bsdf2sdata(bsdf: BSDFData) -> ScatteringData:
     lambdas = angle_basis_coeff(basis)
     sdata = []
     for irow in range(bsdf.nrow):
+        _row = []
         for icol, lam in zip(range(bsdf.ncolumn), lambdas):
-            sdata.append(bsdf.bsdf[irow][icol] * lam)
+            _row.append(bsdf.bsdf[irow][icol] * lam) 
+        sdata.append(_row)
     return ScatteringData(sdata, bsdf.ncolumn, bsdf.nrow)

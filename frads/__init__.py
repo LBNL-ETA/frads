@@ -50,7 +50,6 @@ or on a time-step basis.
 
 import logging
 import shutil
-import subprocess as sp
 
 from .matrix import (
     rfluxmtx,
@@ -69,7 +68,6 @@ from .parsers import (
     parse_polygon,
 )
 
-from .raycall import oconv, rtrace, render
 
 from .sky import basis_glow, gen_perez_sky
 
@@ -103,22 +101,6 @@ for prog in rad_progs:
     if ppath is None:
         logger.info("%s not found; check Radiance installation", prog)
 
-try:
-    # Check Radiance version, need to be at least 5.X
-    version_check: str = sp.run(
-        ["rtrace", "-version"],
-        check=True,
-        stdout=sp.PIPE,
-        encoding="ascii",
-    ).stdout
-    try:
-        rad_version = float(version_check.split()[1][:3])
-        if rad_version < 5.3:
-            logger.critical("Please upgrade to Radiance version 5.3 or later")
-    except ValueError:
-        logger.critical(version_check)
-except FileNotFoundError as err:
-    logger.critical(err)
 
 __all__ = [
     "basis_glow",
@@ -129,15 +111,12 @@ __all__ = [
     "parse_wea",
     "parse_polygon",
     "Primitive",
-    "oconv",
     "points_as_sender",
     "rfluxmtx",
-    "rtrace",
     "sky_as_receiver",
     "surface_as_receiver",
     "sun_as_receiver",
     "surface_as_sender",
-    "render",
     "unpack_primitives",
     "View",
     "view_as_sender",

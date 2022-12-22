@@ -14,6 +14,8 @@ from typing import Sequence
 from typing import Tuple
 from typing import Union
 
+import pyradiance as pr
+
 from frads import geom
 from frads import parsers
 from frads.types import WeaMetaData
@@ -161,18 +163,30 @@ def gen_sun_source_culled(
     return os.linesep.join(out_lines), os.linesep.join(mod_str), full_mod_str
 
 
-def gendaymtx(
-    out: Union[str, Path],
-    mf: int,
+def genskymtx(
     data: Optional[Sequence[WeaData]] = None,
     meta: Optional[WeaMetaData] = None,
     wpath: Optional[Path] = None,
-    direct: bool = False,
-    solar: bool = False,
+    # direct: bool = False,
+    # solar: bool = False,
     onesun: bool = False,
+    # rotate: Optional[float] = None,
+    # binary: bool = False,
+    # mfactor: int = 1,
+    header: bool = False,
+    average: bool = False,
+    sun_only: bool = False,
+    sky_only: bool = False,
+    sun_file: Optional[str] = None,
+    sun_mods: Optional[str] = None,
+    daylight_hours_only: bool = False,
+    sky_color: Optional[List[float]] = None,
+    ground_color: Optional[List[float]] = None,
     rotate: Optional[float] = None,
-    binary: bool = False,
-) -> List[str]:
+    outform: Optional[str] = None,
+    solar_radiance: bool = False,
+    mfactor: int = 1,
+) -> bytes:
     """
     Call gendaymtx to generate a sky/sun matrix
     and write results to out.  It takes either a .wea file path
@@ -195,29 +209,52 @@ def gendaymtx(
     Raises:
         ValueError: An error occurs if neither a .wea path nor wea data is provided.
     """
-    stdin = None
-    cmd = ["gendaymtx", "-m", str(mf)]
-    if binary:
-        cmd.append("-of")
-    if direct:
-        cmd.append("-d")
-    if onesun:
-        cmd.extend(["-5", ".533"])
-    if rotate is not None:
-        cmd.extend(["-r", str(rotate)])
-    if solar:
-        cmd.append("-O1")
-    if wpath is not None:
-        cmd.append(str(wpath))
-    elif (data is not None) and (meta is not None):
-        wea_input = meta.wea_header() + "\n".join(map(str, data))
-        stdin = wea_input.encode("utf-8")
+    if wpath is None:
+        if None in (data, meta):
+            raise ValueError("Either a .wea path or wea data is required.")
+        inp = pr.genwea(
+            [d.time for d in data], 
+            [d.dni for d in data],
+            [d.dhi for d in data], 
+            meta.latitude,
+            meta.longitude,
+            meta.timezone,
+            elevation=meta.elevation,
+            location=meta.city+meta.country
+        )
     else:
-        raise ValueError("Need to specify either .wea path or wea data.")
-    with open(out, "wb") as wtr:
-        logger.info("Calling gendaymtx with:\n%s", " ".join(cmd))
-        sp.run(cmd, check=True, input=stdin, stdout=wtr)
-    return cmd
+        inp = wpath
+    return pr.gendaymtx(inp, header=header, average=average, sun_only=sun_only, sky_only=sky_only, 
+                        solar_radiance=solar_radiance, sun_file=sun_file, sun_mods=sun_mods, 
+                        daylight_hours_only=daylight_hours_only, sky_color=sky_color, 
+                        ground_color=ground_color, rotate=rotate, outform=outform,
+                        onesun=onesun, mfactor=mfactor)
+
+
+    # stdin = None
+    # cmd = ["gendaymtx", "-m", str(mf)]
+    # if binary:
+    #     cmd.append("-of")
+    # if direct:
+    #     cmd.append("-d")
+    # if onesun:
+    #     cmd.extend(["-5", ".533"])
+    # if rotate is not None:
+    #     cmd.extend(["-r", str(rotate)])
+    # if solar:
+    #     cmd.append("-O1")
+    # if wpath is not None:
+    #     cmd.append(str(wpath))
+    # elif (data is not None) and (meta is not None):
+    #     wea_input = meta.wea_header() + "\n".join(map(str, data))
+    #     stdin = wea_input.encode("utf-8")
+    # else:
+    #     raise ValueError("Need to specify either .wea path or wea data.")
+    # if out is not None:
+    #     with open(out, "wb") as wtr:
+    #         logger.info("Calling gendaymtx with:\n%s", " ".join(cmd))
+    #         sp.run(cmd, check=True, input=stdin, stdout=wtr)
+    # return cmd
 
 
 def gen_perez_sky(row: WeaData, meta, grefl: float = 0.2, spect: str = "0", rotate=None) -> str:

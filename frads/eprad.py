@@ -2,7 +2,6 @@ import datetime
 import json
 from pathlib import Path
 
-
 def ep_datetime_parser(inp):
     date, time = inp.strip().split()
     month, day = [int(i) for i in date.split("/")]

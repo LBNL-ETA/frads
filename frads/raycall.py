@@ -62,31 +62,6 @@ def get_rtrace_command(
     return command
 
 
-def get_rfluxmtx_command(
-    receiver: Path,
-    option: Optional[List[str]] = None,
-    sys_paths: Optional[Iterable[Path]] = None,
-    octree: Optional[Path] = None,
-    sender: Optional[Path] = None,
-) -> List[str]:
-    """
-    Sender: stdin, polygon
-    Receiver: surface with -o
-    """
-    command = ["rfluxmtx"]
-    if option:
-        command.extend(option)
-    if isinstance(sender, Path):
-        command.append(str(sender))
-    else:
-        command.append("-")
-    command.append(str(receiver))
-    if octree:
-        command.extend(["-i", str(octree)])
-    if sys_paths:
-        for path in sys_paths:
-            command.append(str(path))
-    return command
 
 
 def get_rcontrib_command(
