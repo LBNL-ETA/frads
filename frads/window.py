@@ -29,6 +29,8 @@ class GlazingSystem:
         self.layers = []
         self.gaps = []
         self._name = ""
+        self.solar_results = None
+        self.photopic_results = None
 
     @property
     def name(self):
@@ -72,24 +74,23 @@ class GlazingSystem:
             self.gaps.append(self.default_air_gap)
 
 
-def compute_solar_photopic_results(glazing_system):
-    """Compute the solar photopic results."""
-    if (len(glazing_system.layers) - 1) != len(glazing_system.gaps):
-        raise ValueError("Number of gaps must be one less than number of layers.")
-    gs = pwc.GlazingSystem(
-        optical_standard=pwc.load_standard(
-            str(Path(__file__).parent / "data" / "optical_standards" / "W5_NFRC_2003.std")
-        ),
-        solid_layers=glazing_system.layers,
-        gap_layers=[create_gap(g[0], thickness=g[1]) for g in glazing_system.gaps],
-        width_meters=1,
-        height_meters=1,
-        environment=pwc.nfrc_shgc_environments(),
-        bsdf_hemisphere=pwc.BSDFHemisphere.create(pwc.BSDFBasisType.FULL),
-    )
-    solar_results = gs.optical_method_results("SOLAR")
-    photopic_results = gs.optical_method_results("PHOTOPIC")
-    return solar_results, photopic_results
+    def compute_solar_photopic_results(self):
+        """Compute the solar photopic results."""
+        if (len(self.layers) - 1) != len(self.gaps):
+            raise ValueError("Number of gaps must be one less than number of layers.")
+        gs = pwc.GlazingSystem(
+            optical_standard=pwc.load_standard(
+                str(Path(__file__).parent / "data" / "optical_standards" / "W5_NFRC_2003.std")
+            ),
+            solid_layers=self.layers,
+            gap_layers=[create_gap(g[0], thickness=g[1]) for g in self.gaps],
+            width_meters=1,
+            height_meters=1,
+            environment=pwc.nfrc_shgc_environments(),
+            bsdf_hemisphere=pwc.BSDFHemisphere.create(pwc.BSDFBasisType.FULL),
+        )
+        self.solar_results = gs.optical_method_results("SOLAR")
+        self.photopic_results = gs.optical_method_results("PHOTOPIC")
 
 
 def add_cfs_to_epjs(glazing_system, epjs) -> None:
@@ -105,9 +106,12 @@ def add_cfs_to_epjs(glazing_system, epjs) -> None:
         None
     """
     name = glazing_system.name
-    # Compute solar and photopic results from pywincalc
-
-    solar_results, photopic_results = compute_solar_photopic_results(glazing_system)
+    if glazing_system.solar_results is not None and glazing_system.photopic_results is not None:
+        solar_results = glazing_system.solar_results
+        photopic_results = glazing_system.photopic_results
+    else:
+        raise ValueError("Solar and photopic results must be computed first.")
+    
 
     # Initialize Contruction:ComplexFenestrationState dictionary with system and outer layer names
 
