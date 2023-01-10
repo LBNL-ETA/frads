@@ -12,15 +12,9 @@ import subprocess as sp
 import tempfile as tf
 from typing import Dict, List, Generator, Optional, Sequence, Tuple 
 
-
-from frads import geom
-from frads import sky
-from frads import matrix
-
-from frads import mtxmult
-from frads import parsers
-from frads import raycall
-from frads import utils
+from frads import geom, sky, matrix
+from frads import mtxmult, parsers, utils
+# from frads import raycall
 from frads.types import Options
 from frads.types import Primitive
 from frads.types import Receiver
@@ -30,6 +24,8 @@ from frads.types import MradPath
 from frads.types import View
 from frads.types import WeaMetaData
 from frads.types import WeaData
+
+import pyradiance as pr
 
 
 logger: logging.Logger = logging.getLogger("frads.methods")
@@ -407,21 +403,25 @@ def blacken_env(model: MradModel, config: ConfigParser) -> Tuple[str, str]:
         wtr.write("\n".join(list(map(str, glowing_window))))
     vmap_oct = f"vmap_{utils.id_generator()}.oct"
     cdmap_oct = f"cdmap_{utils.id_generator()}.oct"
-    raycall.oconv(
-        str(model.material_path),
-        *map(str, config["Model"].getpaths("scene")),
-        gwindow_path,
-        outpath=vmap_oct,
-        frozen=True,
-    )
+    # raycall.oconv(
+    #     str(model.material_path),
+    #     *map(str, config["Model"].getpaths("scene")),
+    #     gwindow_path,
+    #     outpath=vmap_oct,
+    #     frozen=True,
+    # )
+    with open(vmap_oct, "wb") as wtr:
+        wtr.write(pr.oconv(str(model.material_path), *[str(s) for s in config["Model"].getpaths("scene")], gwindow_path, frozen=True))
     logger.info("Generating view matrix material map octree")
-    raycall.oconv(
-        str(model.material_path),
-        *map(str, config["Model"]["scene"].split()),
-        bwindow_path,
-        outpath=cdmap_oct,
-        frozen=True,
-    )
+    # raycall.oconv(
+    #     str(model.material_path),
+    #     *map(str, config["Model"]["scene"].split()),
+    #     bwindow_path,
+    #     outpath=cdmap_oct,
+    #     frozen=True,
+    # )
+    with open(cdmap_oct, "wb") as wtr:
+        wtr.write(pr.oconv(str(model.material_path), *[str(s) for s in config["Model"].getpaths("scene")], bwindow_path, frozen=True))
     logger.info("Generating direct-sun matrix material map octree")
     os.remove(bwindow_path)
     os.remove(gwindow_path)
@@ -493,18 +493,23 @@ def direct_sun_matrix_vu(
     for view, sndr in model.sender_view.items():
         mpath.vmap[view] = Path("Matrices", f"vmap_{model.name}_{view}.hdr")
         mpath.cdmap[view] = Path("Matrices", f"cdmap_{model.name}_{view}.hdr")
-        rpict_opt = Options()
+        rpict_opt = pr.SamplingParameters()
         rpict_opt.ps = 1
         rpict_opt.ab = 0
         rpict_opt.av = (0.31831, 0.31831, 0.31831)
-        cmd = raycall.get_rpict_command(model.views[view], rpict_opt, octree=vmap_oct)
-        logger.info("Generating view matrix material map with: \n %s", " ".join(cmd))
-        utils.run_write(cmd, mpath.vmap[view])
-        cmd[-1] = cdmap_oct
-        logger.info(
-            "Generating direct-sun matrix material map with: \n %s", " ".join(cmd)
-        )
-        utils.run_write(cmd, mpath.cdmap[view])
+        # cmd = raycall.get_rpict_command(model.views[view], rpict_opt, octree=vmap_oct)
+        # _pic = pr.rpict(modle.views[view], rpict_opt, octree=vmap_oct)
+        with open(mpath.vmap[view], "wb") as wtr:
+            wtr.write(pr.rpict(model.views[view], vmap_oct, params=rpict_opt.args()))
+        # logger.info("Generating view matrix material map with: \n %s", " ".join(cmd))
+        # utils.run_write(cmd, mpath.vmap[view])
+        # cmd[-1] = cdmap_oct
+        # logger.info(
+            # "Generating direct-sun matrix material map with: \n %s", " ".join(cmd)
+        # )
+        # utils.run_write(cmd, mpath.cdmap[view])
+        with open(mpath.cdmap[view], "wb") as wtr:
+            wtr.write(pr.rpict(model.views[view], cdmap_oct, params=rpict_opt.args()))
         mpath.vcdfmx[view] = Path("Matrices", f"vcdfmx_{model.name}_{view}")
         mpath.vcdrmx[view] = Path("Matrices", f"vcdrmx_{model.name}_{view}")
         tempf = Path("Matrices", "vcdfmx")
