@@ -2,6 +2,7 @@ import datetime
 import json
 from pathlib import Path
 
+
 def ep_datetime_parser(inp):
     date, time = inp.strip().split()
     month, day = [int(i) for i in date.split("/")]
@@ -86,6 +87,7 @@ class EnergyPlusSetup:
         # method(self.state, partial(func, self))
         method(self.state, func)
 
+
 def load_epjs(fpath: Path, api) -> dict:
     """Load and parse input file into a JSON object.
     If the input file is in .idf fomart, use command-line
@@ -110,25 +112,4 @@ def load_epjs(fpath: Path, api) -> dict:
         raise Exception(f"Unknown file type {fpath}")
     with open(epjson_path) as rdr:
         epjs = json.load(rdr)
-
     return epjs
-
-# def shade_controller(ep: EnergyPlusSetup, state) -> None:
-#     """
-#     This is a user implemented controller, which gets called at EnergyPlus runtime.
-#     Args:
-#         ep: EnergyPlusSetup object
-#         state: EnergyPlus state
-#     Returns:
-#         None
-#     """
-#     drybulb = ep.get_variable_value(ep.handles.outdoor_drybulb_temperature)
-#     dni = ep.get_variable_value(ep.handles.direct_normal_irradiance)
-#     dhi = ep.get_variable_value(ep.handles.diffuse_horizontal_irradiance)
-#     if dni > 800:
-#         ep.actuate(ep.handles.window_actuators['Window1'], ep.handles.complex_fenestration_state['Window1'])
-# 
-# 
-# with EnergyPlusSetup(api, epjs) as ep:
-#     ep.set_callback("callback_begin_new_environment", shade_controller)
-#     ep.run()
