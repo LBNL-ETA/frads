@@ -39,7 +39,7 @@ def batch_dctimestep(
         cmd = ["dctimestep"] + [str(f) for f in mtx]
         cmd.append(str(sky))
         cmds.append(cmd)
-        outs.append(out_path)
+        outs.append(str(out_path))
     utils.batch_process(cmds, opaths=outs, nproc=nproc)
 
 
@@ -241,7 +241,6 @@ def rad_mtxmult3(*mtxs, weights: tuple = (), no_header: bool = True):
 def mtxmult(*mtxs):
     """Generic matrix multiplications."""
     if NUMPY_FOUND:
-
         def mtx_parser(fpath):
             if fpath.suffix == ".xml":
                 proc = sp.run(

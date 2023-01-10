@@ -2,6 +2,7 @@
 Routines for generating sky models
 """
 
+import datetime
 import logging
 import math
 import os
@@ -280,6 +281,43 @@ def gen_perez_sky(row: WeaData, meta, grefl: float = 0.2, spect: str = "0", rota
     return " ".join(out)
 
 
+def gen_perez_sky(
+    dt,
+    latitude: float,
+    longitude: float,
+    timezone: int,
+    year: Optional[int] = None,
+    dirnorm: Optional[float] = None,
+    diffhor: Optional[float] = None,
+    dirhor: Optional[float] = None,
+    dirnorm_illum: Optional[float] = None,
+    diffhor_illum: Optional[float] = None,
+    solar: bool = False,
+    grefl: Optional[float] = None,
+    rotate: Optional[float] = None,
+) -> bytes:
+    sun = pr.gendaylit(
+        dt,
+        latitude,
+        longitude,
+        timezone,
+        year,
+        dirnorm=dirnorm,
+        diffhor=diffhor,
+        dirhor=dirhor,
+        dirnorm_illum=dirnorm_illum,
+        diffhor_illum=diffhor_illum,
+        solar=solar,
+        grefl=grefl,
+    )
+    if rotate:
+        sun = pr.xform(sun, rotatez=rotate)
+    out = [b"skyfunc glow sglow 0 0 4 1 1 1 0"]
+    out.append(b"sglow source sky 0 0 4 0 0 1 180")
+    out.append(b"sglow source ground 0 0 4 0 0 -1 180")
+    return sun + b"\n".join(out)
+
+
 def gendaylit_cmd(
     month: str,
     day: str,
@@ -312,6 +350,39 @@ def gendaylit_cmd(
     if solar:
         cmd += ["-O", "1"]
     return cmd
+
+
+def gen_wea(
+    datetimes: Sequence[datetime.datetime],
+    dirnorm: Sequence[float],
+    diffhor: Sequence[float],
+    latitude: float,
+    longitude: float,
+    timezone: int,
+    elevation: Optional[float] = None,
+    location: Optional[str] = None,
+) -> bytes:
+    """Generate wea file from datetime, location, and sky."""
+    if len(datetimes) != len(dirnorm) != len(diffhor):
+        raise ValueError("datetimes, dirnorm, and diffhor must be the same length")
+    rows = []
+    if location is None:
+        location = "_".join(
+            [str(i) for i in [latitude, longitude, timezone, elevation]]
+        )
+    if elevation is None:
+        elevation = 0
+    rows.append(f"place {location}".encode())
+    rows.append(f"latitude {latitude}".encode())
+    rows.append(f"longitude {longitude}".format())
+    rows.append(f"timezone {timezone}".encode())
+    rows.append(f"elevation {elevation}".encode())
+    rows.append(b"weather_data_file_units 1")
+    for dt, dni, dhi in zip(datetimes, dirnorm, diffhor):
+        _hrs = dt.hour + dt.minute / 60 + 0.5  # middle of hour
+        _row = f"{dt.month} {dt.day} {_hrs} {dni} {dhi}"
+        rows.append(_row.encode())
+    return b"\n".join(rows)
 
 
 def solar_angle(
@@ -412,6 +483,7 @@ def filter_data_by_direct_sun(
         data(List[WeaData]):
     """
     wea_input = meta.wea_header() + "\n".join(map(str, data))
+    # pr.gendaymtx(wea_input, daylight_only=True, )
     proc = sp.run(
         ["gendaymtx", "-u", "-D", "-"],
         check=True,

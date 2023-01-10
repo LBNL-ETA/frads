@@ -31,6 +31,7 @@ class GlazingSystem:
         self._name = ""
         self.solar_results = None
         self.photopic_results = None
+        self.glzsys = None
 
     @property
     def name(self):
@@ -73,12 +74,11 @@ class GlazingSystem:
         if len(self.layers) > 1:
             self.gaps.append(self.default_air_gap)
 
-
-    def compute_solar_photopic_results(self):
-        """Compute the solar photopic results."""
+    def build(self):
+        """Build the glazing system."""
         if (len(self.layers) - 1) != len(self.gaps):
             raise ValueError("Number of gaps must be one less than number of layers.")
-        gs = pwc.GlazingSystem(
+        self.glzsys = pwc.GlazingSystem(
             optical_standard=pwc.load_standard(
                 str(Path(__file__).parent / "data" / "optical_standards" / "W5_NFRC_2003.std")
             ),
@@ -89,9 +89,20 @@ class GlazingSystem:
             environment=pwc.nfrc_shgc_environments(),
             bsdf_hemisphere=pwc.BSDFHemisphere.create(pwc.BSDFBasisType.FULL),
         )
-        self.solar_results = gs.optical_method_results("SOLAR")
-        self.photopic_results = gs.optical_method_results("PHOTOPIC")
 
+
+    def compute_solar_photopic_results(self, force=False):
+        """Compute the solar photopic results."""
+        compute = False
+        if None not in (self.solar_results , self.photopic_results):
+            if self.layers != self.glzsys.solid_layers or self.gaps != self.glzsys.gap_layers:
+                compute = True
+        compute = True if force else compute
+        if compute:
+            self.build()
+            self.solar_results = self.glzsys.optical_method_results("SOLAR")
+            self.photopic_results = self.glzsys.optical_method_results("PHOTOPIC")
+            
 
 def add_cfs_to_epjs(glazing_system, epjs) -> None:
     """
