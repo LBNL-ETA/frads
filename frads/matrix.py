@@ -9,20 +9,12 @@ import os
 from pathlib import Path
 import subprocess as sp
 import tempfile as tf
-from typing import Iterable, List, Optional, Union, Sequence, Tuple
+from typing import List, Optional, Union, Sequence
 
+from frads import geom, parsers, sky, utils
+from frads.types import Primitive, Receiver, Sender
 import numpy as np
-
 import pyradiance as pr
-
-from frads import sky
-from frads import geom
-from frads import parsers
-from frads import utils
-from frads.types import Primitive
-from frads.types import Receiver
-from frads.types import Sender
-from frads.geom import Vector
 
 
 logger: logging.Logger = logging.getLogger("frads.matrix")
@@ -65,18 +57,9 @@ def view_as_sender(view, ray_cnt: int, xres: int, yres: int) -> Sender:
     """
     if (xres is None) or (yres is None):
         raise ValueError("Need to specify resolution")
-    res_cmd = [
-        "vwrays",
-        *view.args(),
-        "-x",
-        str(xres),
-        "-y",
-        str(yres),
-        "-d",
-    ]
-    logger.info("Check real image resolution: \n%s", " ".join(res_cmd))
-    res_proc = sp.run(res_cmd, check=True, stdout=sp.PIPE, encoding="ascii")
-    res_eval = res_proc.stdout.split()
+    res_eval = pr.vwrays(
+        view=view.args(), xres=xres, yres=yres, dimensions=True
+    ).split()
     new_xres, new_yres = int(res_eval[1]), int(res_eval[3])
     if (new_xres != xres) and (new_yres != yres):
         logger.info("Changed resolution to %s %s", new_xres, new_yres)
@@ -87,6 +70,14 @@ def view_as_sender(view, ray_cnt: int, xres: int, yres: int) -> Sender:
     vwrays_cmd += view.args()
     logger.info("Generate view rays with: \n%s", " ".join(vwrays_cmd))
     vwrays_proc = sp.run(vwrays_cmd, check=True, stdout=sp.PIPE)
+    vwrays_proc = pr.vwrays(
+        view=view.args(),
+        outform="f",
+        xres=new_xres,
+        yres=new_yres,
+        ray_count=ray_cnt,
+        pixeljitter=0.7,
+    )
     if view.vtype == "a":
         flush_cmd = utils.get_flush_corner_rays_command(ray_cnt, xres)
         logger.info("Flushing -vta corner rays: \n%s", " ".join(flush_cmd))
@@ -100,41 +91,7 @@ def view_as_sender(view, ray_cnt: int, xres: int, yres: int) -> Sender:
     return Sender("v", vrays, xres, yres)
 
 
-def mtxstr2nparray(data_str: bytes):
-    """Convert Radiance 3-channel matrix file to numpy array.
-
-    Args:
-        data_str: file data string
-
-    Returns:
-        RGB numpy arrays
-    """
-    if not data_str.startswith(b"#?RADIANCE"):
-        raise ValueError("No header found")
-    if b"\r\n\r\n" in data_str:
-        linesep2 = b"\r\n\r\n"
-    else:
-        linesep2 = b"\n\n"
-    chunks = data_str.split(linesep2, 1)
-    nrow, ncol, ncomp, dtype = parsers.parse_rad_header(chunks[0].decode())
-    if dtype == "ascii":
-        data = np.array([line.split() for line in chunks[1].splitlines()], dtype=float)
-    else:
-        if dtype == "float":
-            data = np.frombuffer(chunks[1], np.single).reshape(nrow, ncol * ncomp)
-        elif dtype == "double":
-            data = np.frombuffer(chunks[1], np.double).reshape(nrow, ncol * ncomp)
-        else:
-            raise ValueError(f"Unsupported data type {dtype}")
-    rdata = data[:, ::ncomp]
-    gdata = data[:, 1::ncomp]
-    bdata = data[:, 2::ncomp]
-    if (len(bdata) != nrow) or (len(bdata[0]) != ncol):
-        raise ValueError("Parsing matrix file failed")
-    return np.array((rdata, gdata, bdata))
-
-
-def load(file):
+def load_matrix(file: Union[str, Path], dtype: str = "float"):
     """
     Load a Radiance matrix file into numpy array.
 
@@ -144,22 +101,38 @@ def load(file):
     Returns:
         A numpy array
     """
+    npdtype = np.double if dtype.startswith("d") else np.single
     file = Path(file)
-    if file.suffix == ".xml":
-        raw = pr.rmtxop(file)
-    else:
-        with open(file, "rb") as rdr:
-            raw = rdr.read()
-    return mtxstr2nparray(raw)
+    nrows, ncols, ncomp, _ = parsers.parse_rad_header(pr.getinfo(file).decode())
+    return np.frombuffer(
+        pr.getinfo(pr.rmtxop(file, outform=dtype[0].lower()), strip_header=True),
+        dtype=npdtype,
+    ).reshape(nrows, ncols, ncomp)
 
 
-def multiply_rgb(mtxs, weight: Optional[Tuple[float, ...]] = None):
-    """Matrix multiplication with Numpy."""
-    weight = (47.4, 119.9, 11.6) if weight is None else weight
-    resr = np.linalg.multi_dot([mat[0] for mat in mtxs]) * weight[0]
-    resg = np.linalg.multi_dot([mat[1] for mat in mtxs]) * weight[1]
-    resb = np.linalg.multi_dot([mat[2] for mat in mtxs]) * weight[2]
-    return resr + resg + resb
+def load_image_matrix(file, outform="d") -> np.ndarray:
+    """
+    Load a Radiance HDR image into numpy array.
+    Args:
+        file: a file path
+    Returns:
+        A numpy array
+    """
+    xres, yres = pr.get_image_dimensions(file)
+    pix = pr.pvalue(file, outform=outform)
+    return np.frombuffer(pix, np.double).reshape(xres, yres, 3)
+
+
+def multiply_rgb(*mtx: np.ndarray, weights=None):
+    """Multiply matrices as numpy ndarray."""
+    resr = np.linalg.multi_dot([m[:,:,0] for m in mtx])
+    resg = np.linalg.multi_dot([m[:,:,1] for m in mtx])
+    resb = np.linalg.multi_dot([m[:,:,2] for m in mtx])
+    if weights:
+        if len(weights) != 3:
+            raise ValueError("Weights should have 3 values")
+        return resr * weights[0] + resg * weights[1] + resb * weights[2]
+    return np.array((resr, resg, resb))
 
 
 def points_as_sender(pts_list: list, ray_cnt: Optional[int] = None) -> Sender:
@@ -187,7 +160,7 @@ def points_as_sender(pts_list: list, ray_cnt: Optional[int] = None) -> Sender:
 def sun_as_receiver(
     basis,
     smx_path: Path,
-    window_normals: Optional[List[Vector]],
+    window_normals: Optional[List[geom.Vector]],
     full_mod: bool = False,
 ) -> Receiver:
     """
@@ -319,37 +292,10 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
     return header + content
 
 
-def get_rfluxmtx_command(
-    receiver: Path,
-    option: Optional[List[str]] = None,
-    sys_paths: Optional[Iterable[Path]] = None,
-    octree: Optional[Path] = None,
-    sender: Optional[Path] = None,
-) -> List[str]:
-    """
-    Sender: stdin, polygon
-    Receiver: surface with -o
-    """
-    command = ["rfluxmtx"]
-    if option:
-        command.extend(option)
-    if isinstance(sender, Path):
-        command.append(str(sender))
-    else:
-        command.append("-")
-    command.append(str(receiver))
-    if octree:
-        command.extend(["-i", str(octree)])
-    if sys_paths:
-        for path in sys_paths:
-            command.append(str(path))
-    return command
-
-
 def rfluxmtx(
     sender: Sender,
     receiver: Receiver,
-    env: Iterable[Path],
+    env: Sequence[Path],
     opt: Optional[List[str]] = None,
 ) -> None:
     """
@@ -368,8 +314,8 @@ def rfluxmtx(
     if None in (sender, receiver):
         raise ValueError("Sender/Receiver object is None")
     opt = [] if opt is None else opt
-    _sender = None
-    stdin: Optional[bytes] = sender.sender
+    rays = None
+    surface = None
     with tf.TemporaryDirectory() as tempd:
         receiver_path = Path(tempd, "receiver")
         with open(receiver_path, "w", encoding="ascii") as wtr:
@@ -378,19 +324,14 @@ def rfluxmtx(
             sender_path = Path(tempd, "sender")
             with open(sender_path, "wb") as wtr:
                 wtr.write(sender.sender)
-            _sender = sender_path
-            stdin = None
+            surface = sender_path
         elif sender.form == "p":
             opt.extend(["-I+", "-faa", "-y", str(sender.yres)])
+            rays = sender.sender
         elif sender.form == "v":
             opt.extend(["-ffc", "-x", str(sender.xres), "-y", str(sender.yres), "-ld-"])
-        cmd = get_rfluxmtx_command(
-            receiver_path, option=opt, sender=_sender, sys_paths=env
-        )
-        logger.info("Running rfluxmtx with:\n%s", " ".join(cmd))
-        proc = sp.run(cmd, check=True, input=stdin, stderr=sp.PIPE)
-        if proc.stderr != b"":
-            logger.warning(proc.stderr.decode())
+            rays = sender.sender
+        pr.rfluxmtx(receiver_path, surface=surface, rays=rays, params=opt, scene=env)
 
 
 def rcvr_oct(receiver, env, oct_path: Union[str, Path]) -> None:
@@ -437,19 +378,38 @@ def rcontrib(
 
     """
     opt.append("-fo+")
+    xres = None
+    yres = None
+    inform = None
+    outform = None
     with tf.TemporaryDirectory() as tempd:
         modifier_path = os.path.join(tempd, "modifier")
         with open(modifier_path, "w", encoding="utf-8") as wtr:
             wtr.write(modifier)
-        cmd = ["rcontrib", *opt]
-        stdin = sender.sender
         if sender.form == "p":
-            cmd += ["-I+", "-faf", "-y", str(sender.yres)]
+            opt += ["-I+"]
+            inform = "a"
+            outform = "f"
+            yres = sender.yres
         elif sender.form == "v":
             out = Path(out)
             out.mkdir(exist_ok=True)
             out = out / "%04d.hdr"
-            cmd += ["-ffc", "-x", str(sender.xres), "-y", str(sender.yres)]
-        cmd += ["-o", str(out), "-M", modifier_path, str(octree)]
-        logger.info("Running rcontrib with:\n%s", " ".join(cmd))
-        sp.run(cmd, check=True, input=stdin)
+            inform = "f"
+            outform = "c"
+            xres = sender.xres
+            yres = sender.yres
+            # cmd += ["-ffc", "-x", str(sender.xres), "-y", str(sender.yres)]
+        mod = pr.RcModifier()
+        mod.modifier_path = modifier_path
+        mod.xres = xres
+        mod.yres = yres
+        mod.output = str(out)
+        pr.rcontrib(
+            sender.sender,
+            str(octree),
+            [mod],
+            inform=inform,
+            outform=outform,
+            params=opt,
+        )
