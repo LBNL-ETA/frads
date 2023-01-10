@@ -1,14 +1,14 @@
 """Convert an EnergyPlus epJSON file into Radiance model[s]."""
 
 from configparser import ConfigParser
-import json
 import logging
 import math
 import os
 from pathlib import Path
-import subprocess as sp
 import sys
 from typing import Dict, List
+
+import pyradiance as pr
 
 from frads import geom
 from frads import utils, bsdf
@@ -490,14 +490,8 @@ def epjson2rad(epjs: dict, epw=None) -> None:
         basis = "".join(
             [word[0].lower() for word in bsdf.BASIS_DICT[str(val.tf.ncolumn)].split()]
         )
-        cmd = ["wrapBSDF", "-f", "n=" + key, "-a", basis]
-        cmd += ["-tf", tf_path, "-tb", tb_path, "-U"]
-        print(cmd)
-        proc = sp.run(cmd, check=True, stdout=sp.PIPE)
         with open(opath, "wb") as wtr:
-            wtr.write(proc.stdout)
-        # with open(opath, "wb") as wtr:
-            # sp.run(cmd, check=True, stdout=wtr)
+            wtr.write(pr.wrapbsdf(basis=basis, tf=tf_path, tb=tb_path, unlink=True, n=key))
         xml_paths[key] = opath
 
     # For each zone write primitves to files and create a config file
