@@ -459,11 +459,7 @@ def parse_epjson(epjs: dict) -> tuple:
     return site, zones, constructions, materials, matrices
 
 
-<<<<<<< Updated upstream
 def epjson2rad(epjs: dict, epw=None) -> None:
-=======
-def epjson2rad(epjs: dict, epw: str) -> None:
->>>>>>> Stashed changes
     """Command-line program to convert a energyplus model into a Radiance model."""
     # Setup file structure
     Path("Objects").mkdir(exist_ok=True)
@@ -519,14 +515,10 @@ def epjson2rad(epjs: dict, epw: str) -> None:
             "method": "",
         }
         mrad_config["Site"] = {
-<<<<<<< Updated upstream
-            "epw_path": "",
-=======
             "epw_path": epw,
             "zipcode": "",
             "latitude": site["latitude"],
             "longitude": site["longitude"],
->>>>>>> Stashed changes
             "daylight_hours_only": "True",
         }
         if epw is not None:
