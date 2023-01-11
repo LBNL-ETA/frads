@@ -32,6 +32,7 @@ class GlazingSystem:
         self.glzsys = None
         self.photopic_results = None
         self.solar_results = None
+        self.updated = True
 
     @property
     def name(self):
@@ -92,12 +93,12 @@ class GlazingSystem:
 
     def compute_solar_photopic_results(self, force=False):
         """Compute the solar photopic results."""
-        compute = False
+        # compute = False
         if None not in (self.solar_results , self.photopic_results):
             if self.layers != self.glzsys.solid_layers or self.gaps != self.glzsys.gap_layers:
-                compute = True
-        compute = True if force else compute
-        if compute:
+                self.updated = True
+        self.updated = True if force else self.updated
+        if self.updated:
             self.build()
             self.solar_results = self.glzsys.optical_method_results("SOLAR")
             self.photopic_results = self.glzsys.optical_method_results("PHOTOPIC")
