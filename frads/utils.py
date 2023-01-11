@@ -40,18 +40,6 @@ TREG_BASE = [
 ]
 
 
-
-def tmit2tmis(tmit: float) -> float:
-    """Convert from transmittance to transmissivity."""
-    tmis = round(
-        (math.sqrt(0.8402528435 + 0.0072522239 * tmit**2) - 0.9166530661)
-        / 0.0036261119
-        / tmit,
-        3,
-    )
-    return max(0, min(tmis, 1))
-
-
 def polygon2prim(polygon: geom.Polygon, modifier: str, identifier: str) -> Primitive:
     """Generate a primitive from a polygon."""
     return Primitive(modifier, "polygon", identifier, ["0"], polygon.to_real())
@@ -61,8 +49,6 @@ def unpack_idf(path: str) -> dict:
     """Read and parse and idf files."""
     with open(path, "r") as rdr:
         return parsers.parse_idf(rdr.read())
-
-
 
 
 def frange_inc(start, stop, step):
@@ -543,37 +529,6 @@ def get_glazing_primitive(panes: List[PaneRGB]) -> Primitive:
         ]
         real_arg = [9, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     return Primitive("void", "BRTDfunc", name, str_arg, real_arg)
-
-
-def get_flush_corner_rays_command(ray_cnt: int, xres: int) -> list:
-    """Flush the corner rays from a fisheye view.
-
-    Args:
-        ray_cnt: ray count;
-        xres: resolution of the square image;
-
-    Returns:
-        Command to generate cropped rays
-
-    """
-    cmd = [
-        "rcalc",
-        "-if6",
-        "-of",
-        "-e",
-        f"DIM:{xres};CNT:{ray_cnt}",
-        "-e",
-        "pn=(recno-1)/CNT+.5",
-        "-e",
-        "frac(x):x-floor(x)",
-        "-e",
-        "xpos=frac(pn/DIM);ypos=pn/(DIM*DIM)",
-        "-e",
-        "incir=if(.25-(xpos-.5)*(xpos-.5)-(ypos-.5)*(ypos-.5),1,0)",
-        "-e",
-        "$1=$1;$2=$2;$3=$3;$4=$4*incir;$5=$5*incir;$6=$6*incir",
-    ]
-    return cmd
 
 
 def batch_process(

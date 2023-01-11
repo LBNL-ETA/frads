@@ -76,22 +76,38 @@ def view_as_sender(view, ray_cnt: int, xres: int, yres: int) -> Sender:
         xres=new_xres,
         yres=new_yres,
         ray_count=ray_cnt,
-        pixeljitter=0.7,
+        pixel_jitter=0.7,
     )
     if view.vtype == "a":
-        flush_cmd = utils.get_flush_corner_rays_command(ray_cnt, xres)
+        flush_cmd = [
+            "rcalc",
+            "-if6",
+            "-of",
+            "-e",
+            f"DIM:{xres};CNT:{ray_cnt}",
+            "-e",
+            "pn=(recno-1)/CNT+.5",
+            "-e",
+            "frac(x):x-floor(x)",
+            "-e",
+            "xpos=frac(pn/DIM);ypos=pn/(DIM*DIM)",
+            "-e",
+            "incir=if(.25-(xpos-.5)*(xpos-.5)-(ypos-.5)*(ypos-.5),1,0)",
+            "-e",
+            "$1=$1;$2=$2;$3=$3;$4=$4*incir;$5=$5*incir;$6=$6*incir",
+        ]
         logger.info("Flushing -vta corner rays: \n%s", " ".join(flush_cmd))
         flush_proc = sp.run(
-            flush_cmd, check=True, input=vwrays_proc.stdout, stdout=sp.PIPE
+            flush_cmd, check=True, input=vwrays_proc, stdout=sp.PIPE
         )
         vrays = flush_proc.stdout
     else:
-        vrays = vwrays_proc.stdout
+        vrays = vwrays_proc
     logger.debug("View sender:\n%s", vrays)
     return Sender("v", vrays, xres, yres)
 
 
-def load_matrix(file: Union[str, Path], dtype: str = "float"):
+def load_matrix(file: Union[bytes, str, Path], dtype: str = "float"):
     """
     Load a Radiance matrix file into numpy array.
 
@@ -102,7 +118,6 @@ def load_matrix(file: Union[str, Path], dtype: str = "float"):
         A numpy array
     """
     npdtype = np.double if dtype.startswith("d") else np.single
-    file = Path(file)
     nrows, ncols, ncomp, _ = parsers.parse_rad_header(pr.getinfo(file).decode())
     return np.frombuffer(
         pr.getinfo(pr.rmtxop(file, outform=dtype[0].lower()), strip_header=True),

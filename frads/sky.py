@@ -211,18 +211,19 @@ def genskymtx(
         ValueError: An error occurs if neither a .wea path nor wea data is provided.
     """
     if wpath is None:
-        if None in (data, meta):
+        if data is not None and meta is not None:
+            inp = gen_wea(
+                [d.time for d in data], 
+                [d.dni for d in data],
+                [d.dhi for d in data], 
+                meta.latitude,
+                meta.longitude,
+                meta.timezone,
+                elevation=meta.elevation,
+                location=meta.city+meta.country
+            )
+        else:
             raise ValueError("Either a .wea path or wea data is required.")
-        inp = pr.genwea(
-            [d.time for d in data], 
-            [d.dni for d in data],
-            [d.dhi for d in data], 
-            meta.latitude,
-            meta.longitude,
-            meta.timezone,
-            elevation=meta.elevation,
-            location=meta.city+meta.country
-        )
     else:
         inp = wpath
     return pr.gendaymtx(inp, header=header, average=average, sun_only=sun_only, sky_only=sky_only, 
