@@ -378,7 +378,7 @@ def gen_wea(
     rows.append(f"longitude {longitude}")
     rows.append(f"timezone {timezone}")
     rows.append(f"elevation {elevation}")
-    rows.append(b"weather_data_file_units 1")
+    rows.append("weather_data_file_units 1")
     for dt, dni, dhi in zip(datetimes, dirnorm, diffhor):
         _hrs = dt.hour + dt.minute / 60 + 0.5  # middle of hour
         _row = f"{dt.month} {dt.day} {_hrs} {dni} {dhi}"
