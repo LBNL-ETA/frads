@@ -373,16 +373,16 @@ def gen_wea(
         )
     if elevation is None:
         elevation = 0
-    rows.append(f"place {location}".encode())
-    rows.append(f"latitude {latitude}".encode())
-    rows.append(f"longitude {longitude}".format())
-    rows.append(f"timezone {timezone}".encode())
-    rows.append(f"elevation {elevation}".encode())
+    rows.append(f"place {location}")
+    rows.append(f"latitude {latitude}")
+    rows.append(f"longitude {longitude}")
+    rows.append(f"timezone {timezone}")
+    rows.append(f"elevation {elevation}")
     rows.append(b"weather_data_file_units 1")
     for dt, dni, dhi in zip(datetimes, dirnorm, diffhor):
         _hrs = dt.hour + dt.minute / 60 + 0.5  # middle of hour
         _row = f"{dt.month} {dt.day} {_hrs} {dni} {dhi}"
-        rows.append(_row.encode())
+        rows.append(_row)
     return "\n".join(rows)
 
 
