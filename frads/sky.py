@@ -221,7 +221,7 @@ def genskymtx(
                 meta.timezone,
                 elevation=meta.elevation,
                 location=meta.city+meta.country
-            )
+            ).encode()
         else:
             raise ValueError("Either a .wea path or wea data is required.")
     else:
@@ -362,7 +362,7 @@ def gen_wea(
     timezone: int,
     elevation: Optional[float] = None,
     location: Optional[str] = None,
-) -> bytes:
+) -> str:
     """Generate wea file from datetime, location, and sky."""
     if len(datetimes) != len(dirnorm) != len(diffhor):
         raise ValueError("datetimes, dirnorm, and diffhor must be the same length")
@@ -383,7 +383,7 @@ def gen_wea(
         _hrs = dt.hour + dt.minute / 60 + 0.5  # middle of hour
         _row = f"{dt.month} {dt.day} {_hrs} {dni} {dhi}"
         rows.append(_row.encode())
-    return b"\n".join(rows)
+    return "\n".join(rows)
 
 
 def solar_angle(

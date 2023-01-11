@@ -31,18 +31,18 @@ import pyradiance as pr
 logger: logging.Logger = logging.getLogger("frads.methods")
 
 
-def get_rpict_command(
-    view: View,
-    options: Optional[Options] = None,
-    octree: Optional[Path] = None,
-) -> List[str]:
-    command = ["rpict"]
-    command.extend(view.args())
-    if options is not None:
-        command.extend(options.args())
-    if octree:
-        command.append(str(octree))
-    return command
+# def get_rpict_command(
+#     view: View,
+#     options: Optional[Options] = None,
+#     octree: Optional[Path] = None,
+# ) -> List[str]:
+#     command = ["rpict"]
+#     command.extend(view.args())
+#     if options is not None:
+#         command.extend(options.args())
+#     if octree:
+#         command.append(str(octree))
+#     return command
 
 
 def get_window_group(wpaths: List[Path]) -> Tuple[dict, list]:
