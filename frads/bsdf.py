@@ -46,7 +46,7 @@ class ScatteringData:
         nrow: number of rows
     """
 
-    sdata: List[List[float]]
+    sdata: List[float]
     ncolumn: int
     nrow: int
 
@@ -76,6 +76,16 @@ class BSDFData:
     bsdf: List[float]
     ncolumn: int
     nrow: int
+
+    def to_sdata(self) -> ScatteringData:
+        """Covert a bsdf object into a sdata object."""
+        basis = BASIS_DICT[str(self.ncolumn)]
+        lambdas = angle_basis_coeff(basis)
+        sdata = []
+        for irow in range(self.nrow):
+            for icol, lam in zip(range(self.ncolumn), lambdas):
+                sdata.append(self.bsdf[icol + irow * self.ncolumn] * lam)
+        return ScatteringData(sdata, self.ncolumn, self.nrow)
 
 
 @dataclass(frozen=True)
@@ -128,14 +138,14 @@ def sdata2bsdf(sdata: ScatteringData) -> BSDFData:
     return BSDFData(bsdf, sdata.ncolumn, sdata.nrow)
 
 
-def bsdf2sdata(bsdf: BSDFData) -> ScatteringData:
-    """Covert a bsdf object into a sdata object."""
-    basis = BASIS_DICT[str(bsdf.ncolumn)]
-    lambdas = angle_basis_coeff(basis)
-    sdata = []
-    for irow in range(bsdf.nrow):
-        _row = []
-        for icol, lam in zip(range(bsdf.ncolumn), lambdas):
-            _row.append(bsdf.bsdf[irow][icol] * lam) 
-        sdata.append(_row)
-    return ScatteringData(sdata, bsdf.ncolumn, bsdf.nrow)
+# def bsdf2sdata(bsdf: BSDFData) -> ScatteringData:
+#     """Covert a bsdf object into a sdata object."""
+#     basis = BASIS_DICT[str(bsdf.ncolumn)]
+#     lambdas = angle_basis_coeff(basis)
+#     sdata = []
+#     for irow in range(bsdf.nrow):
+#         _row = []
+#         for icol, lam in zip(range(bsdf.ncolumn), lambdas):
+#             _row.append(bsdf.bsdf[irow][icol] * lam) 
+#         sdata.append(_row)
+#     return ScatteringData(sdata, bsdf.ncolumn, bsdf.nrow)

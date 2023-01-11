@@ -77,11 +77,13 @@ def get_ncp_shades(npaths: List[Path]) -> dict:
 
 def get_wea_data(config: ConfigParser) -> Tuple[WeaMetaData, List[WeaData], str]:
     """Get wea data and parse into appropriate data types."""
+
     if wea_path := config["Site"].getpath("wea_path"):
         logger.info("Using user specified %s file.", wea_path)
         name = wea_path.stem
         with open(wea_path, "r", encoding="utf-8") as rdr:
             wea_metadata, wea_data = parsers.parse_wea(rdr.read())
+
     elif epw_path := config["Site"].getpath("epw_path"):
         logger.info("Converting %s to a .wea file", epw_path)
         name = epw_path.stem
