@@ -167,7 +167,7 @@ def gen_sun_source_culled(
 def genskymtx(
     data: Optional[Sequence[WeaData]] = None,
     meta: Optional[WeaMetaData] = None,
-    wpath: Optional[Path] = None,
+    wpath: Optional[Union[str, Path]] = None,
     # direct: bool = False,
     # solar: bool = False,
     onesun: bool = False,
@@ -259,27 +259,27 @@ def genskymtx(
     # return cmd
 
 
-def gen_perez_sky(row: WeaData, meta, grefl: float = 0.2, spect: str = "0", rotate=None) -> str:
-    solar = False if spect == "0" else True
-    gendaylit = gendaylit_cmd(
-        str(row.time.month),
-        str(row.time.day),
-        str(row.time.hour + row.time.minute / 60 + row.time.second / 3600),
-        str(meta.latitude),
-        str(meta.longitude),
-        str(meta.timezone),
-        dir_norm_ir=str(row.dni),
-        dif_hor_ir=str(row.dhi),
-        solar=solar,
-        grefl=grefl,
-    )
-    out = []
-    rot = f"| xform -rz {rotate}" if rotate is not None else ""
-    out.append(f"!{' '.join(gendaylit)}{rot} \n")
-    out.append("skyfunc glow sglow 0 0 4 1 1 1 0\n")
-    out.append("sglow source sky 0 0 4 0 0 1 180\n")
-    out.append("sglow source ground 0 0 4 0 0 -1 180\n")
-    return " ".join(out)
+# def gen_perez_sky(row: WeaData, meta, grefl: float = 0.2, spect: str = "0", rotate=None) -> str:
+#     solar = False if spect == "0" else True
+#     gendaylit = gendaylit_cmd(
+#         str(row.time.month),
+#         str(row.time.day),
+#         str(row.time.hour + row.time.minute / 60 + row.time.second / 3600),
+#         str(meta.latitude),
+#         str(meta.longitude),
+#         str(meta.timezone),
+#         dir_norm_ir=str(row.dni),
+#         dif_hor_ir=str(row.dhi),
+#         solar=solar,
+#         grefl=grefl,
+#     )
+#     out = []
+#     rot = f"| xform -rz {rotate}" if rotate is not None else ""
+#     out.append(f"!{' '.join(gendaylit)}{rot} \n")
+#     out.append("skyfunc glow sglow 0 0 4 1 1 1 0\n")
+#     out.append("sglow source sky 0 0 4 0 0 1 180\n")
+#     out.append("sglow source ground 0 0 4 0 0 -1 180\n")
+#     return " ".join(out)
 
 
 def gen_perez_sky(
@@ -376,8 +376,8 @@ def gen_wea(
     rows.append(f"place {location}")
     rows.append(f"latitude {latitude}")
     rows.append(f"longitude {longitude}")
-    rows.append(f"timezone {timezone}")
-    rows.append(f"elevation {elevation}")
+    rows.append(f"time_zone {timezone}")
+    rows.append(f"site_elevation {elevation}")
     rows.append("weather_data_file_units 1")
     for dt, dni, dhi in zip(datetimes, dirnorm, diffhor):
         _hrs = dt.hour + dt.minute / 60 + 0.5  # middle of hour
