@@ -169,7 +169,7 @@ def genskymtx(
     meta: Optional[WeaMetaData] = None,
     wpath: Optional[Union[str, Path]] = None,
     onesun: bool = False,
-    header: bool = False,
+    header: bool = True,
     average: bool = False,
     sun_only: bool = False,
     sky_only: bool = False,
