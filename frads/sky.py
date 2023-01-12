@@ -168,12 +168,7 @@ def genskymtx(
     data: Optional[Sequence[WeaData]] = None,
     meta: Optional[WeaMetaData] = None,
     wpath: Optional[Union[str, Path]] = None,
-    # direct: bool = False,
-    # solar: bool = False,
     onesun: bool = False,
-    # rotate: Optional[float] = None,
-    # binary: bool = False,
-    # mfactor: int = 1,
     header: bool = False,
     average: bool = False,
     sun_only: bool = False,
@@ -367,7 +362,7 @@ def gen_wea(
     if len(datetimes) != len(dirnorm) != len(diffhor):
         raise ValueError("datetimes, dirnorm, and diffhor must be the same length")
     rows = []
-    if location is None:
+    if location is None or location == "":
         location = "_".join(
             [str(i) for i in [latitude, longitude, timezone, elevation]]
         )
