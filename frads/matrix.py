@@ -118,11 +118,14 @@ def load_matrix(file: Union[bytes, str, Path], dtype: str = "float"):
         A numpy array
     """
     npdtype = np.double if dtype.startswith("d") else np.single
-    nrows, ncols, ncomp, _ = parsers.parse_rad_header(pr.getinfo(file).decode())
-    return np.frombuffer(
-        pr.getinfo(pr.rmtxop(file, outform=dtype[0].lower()), strip_header=True),
-        dtype=npdtype,
-    ).reshape(nrows, ncols, ncomp)
+    mtx: bytes = b""
+    if not isinstance(file, bytes):
+        if Path(file).suffix == ".xml":
+            mtx = pr.rmtxop(file, outform=dtype[0].lower())
+    else:
+        mtx = pr.rmtxop(file, outform=dtype[0].lower())
+    nrows, ncols, ncomp, _ = parsers.parse_rad_header(pr.getinfo(mtx).decode())
+    return np.frombuffer(pr.getinfo(mtx, strip_header=True), dtype=npdtype).reshape(nrows, ncols, ncomp)
 
 
 def load_image_matrix(file, outform="d") -> np.ndarray:
