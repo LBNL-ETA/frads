@@ -98,7 +98,38 @@ class EnergyPlusSetup:
                 self.handles.light_actuators[light] = self.api.exchange.get_actuator_handle(state, "Lights", "Electricity Rate", light.encode())
 
         return callback_function
-        
+    
+    def get_datetime(self):
+        year = self.api.exchange.year(self.state)
+        month = self.api.exchange.month(self.state)
+        day = self.api.exchange.day_of_month(self.state)
+        hour = self.api.exchange.hour(self.state)
+        minute = self.api.exchange.minutes(self.state)
+
+        if minute == 60:
+            minute = 0
+            hour += 1
+        if hour == 24:
+            hour = 0
+            day += 1
+        if day == 31 and month in [4, 6, 9, 11]:
+            day = 1
+            month += 1
+        if day == 32 and month in [1, 3, 5, 7, 8, 10, 12]:
+            day = 1
+            month += 1
+        if year % 4 == 0 and day == 30 and month == 2:
+            day = 1
+            month += 1
+        else:
+            if day == 29 and month == 2:
+                day = 1
+                month += 1
+
+        dt = datetime.datetime(year, month, day, hour, minute)
+
+        return dt
+
     def run(self):
         with open("ep.json", "w") as wtr:
             json.dump(self.epjs, wtr)
@@ -140,7 +171,7 @@ class EPModel:
     @property
     def zones(self):
         return list(self.epjs["Zone"].keys())
-    
+
     def _add(self, key, obj):
         if key in self.epjs:
             # merge
