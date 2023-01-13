@@ -46,37 +46,6 @@ def load_epmodel(fpath: Path, api) -> dict:
     return EPModel(epjs)
 
 
-def get_smx(epjs, ep):
-    """Get sky matrix for a given location and time"""
-
-    # create WeaMetaData object
-    loc = list(epjs["Site:Location"].values())[0]
-    meta = types.WeaMetaData(
-        city="",
-        country="",
-        elevation=loc["elevation"],
-        latitude=loc["latitude"],
-        longitude=0 - loc["longitude"],
-        timezone=(0 - loc["time_zone"]) * 15,
-    )
-
-    # create WeaData object
-    dt = ep.get_datetime()
-    direct_normal_irradiance = ep.get_variable_value(
-        ep.handles.direct_normal_irradiance
-    )
-    diffuse_horizontal_irradiance = ep.get_variable_value(
-        ep.handles.diffuse_horizontal_irradiance
-    )
-    weadata = types.WeaData(
-        time=dt, dni=direct_normal_irradiance, dhi=diffuse_horizontal_irradiance
-    )
-
-    smx = matrix.load_matrix(sky.genskymtx([weadata], meta, mfactor=4))
-
-    return smx
-
-
 class Handles:
     def __init__(self):
         self.outdoor_drybulb_temperature = None
