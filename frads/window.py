@@ -61,6 +61,7 @@ class GlazingSystem:
         self.layers.append(data)
         if len(self.layers) > 1:
             self.gaps.append(self.default_air_gap)
+        self.updated = True
 
     def add_shading_layer(self, inp):
         """Add a shading layer."""
@@ -74,6 +75,7 @@ class GlazingSystem:
         self.layers.append(data)
         if len(self.layers) > 1:
             self.gaps.append(self.default_air_gap)
+        self.updated = True
 
     def build(self):
         """Build the glazing system."""
@@ -81,7 +83,12 @@ class GlazingSystem:
             raise ValueError("Number of gaps must be one less than number of layers.")
         self.glzsys = pwc.GlazingSystem(
             optical_standard=pwc.load_standard(
-                str(Path(__file__).parent / "data" / "optical_standards" / "W5_NFRC_2003.std")
+                str(
+                    Path(__file__).parent
+                    / "data"
+                    / "optical_standards"
+                    / "W5_NFRC_2003.std"
+                )
             ),
             solid_layers=self.layers,
             gap_layers=[create_gap(g[0], thickness=g[1]) for g in self.gaps],
@@ -93,12 +100,9 @@ class GlazingSystem:
 
     def compute_solar_photopic_results(self, force=False):
         """Compute the solar photopic results."""
-        # compute = False
-        if None not in (self.solar_results , self.photopic_results):
-            if self.layers != self.glzsys.solid_layers or self.gaps != self.glzsys.gap_layers:
-                self.updated = True
         self.updated = True if force else self.updated
         if self.updated:
             self.build()
             self.solar_results = self.glzsys.optical_method_results("SOLAR")
             self.photopic_results = self.glzsys.optical_method_results("PHOTOPIC")
+            self.updated = False
