@@ -1,15 +1,20 @@
 import datetime
 import json
 from pathlib import Path
+from typing import Optional
+
 
 def ep_datetime_parser(inp):
     date, time = inp.strip().split()
     month, day = [int(i) for i in date.split("/")]
     hr, mi, sc = [int(i) for i in time.split(":")]
     if hr == 24 and mi == 0 and sc == 0:
-        return datetime.datetime(1900, month, day, 0, mi, sc) + datetime.timedelta(days=1)
+        return datetime.datetime(1900, month, day, 0, mi, sc) + datetime.timedelta(
+            days=1
+        )
     else:
         return datetime.datetime(1900, month, day, hr, mi, sc)
+
 
 def load_epmodel(fpath: Path, api) -> dict:
     """Load and parse input file into a JSON object.
@@ -38,6 +43,7 @@ def load_epmodel(fpath: Path, api) -> dict:
 
     return EPModel(epjs)
 
+
 class Handles:
     def __init__(self):
         self.outdoor_drybulb_temperature = None
@@ -50,19 +56,32 @@ class Handles:
 
 
 class EnergyPlusSetup:
-
     def __init__(self, api, epjs):
         self.api = api
         self.epjs = epjs
         self.state = self.api.state_manager.new_state()
         self.handles = Handles()
-        self.window_surfaces = self.epjs['FenestrationSurface:Detailed']
-        self.lights = self.epjs['Lights']
-        self.api.exchange.request_variable(self.state, "Site Outdoor Air Drybulb Temperature".encode(), "Environment".encode()) 
-        self.api.exchange.request_variable(self.state, "Site Direct Solar Radiation Rate per Area".encode(), "Environment".encode())
-        self.api.exchange.request_variable(self.state, "Site Diffuse Solar Radiation Rate per Area".encode(), "Environment".encode()) 
+        self.window_surfaces = self.epjs["FenestrationSurface:Detailed"]
+        self.lights = self.epjs["Lights"]
+        self.api.exchange.request_variable(
+            self.state,
+            "Site Outdoor Air Drybulb Temperature".encode(),
+            "Environment".encode(),
+        )
+        self.api.exchange.request_variable(
+            self.state,
+            "Site Direct Solar Radiation Rate per Area".encode(),
+            "Environment".encode(),
+        )
+        self.api.exchange.request_variable(
+            self.state,
+            "Site Diffuse Solar Radiation Rate per Area".encode(),
+            "Environment".encode(),
+        )
         for light in self.lights:
-            self.api.exchange.request_variable(self.state, "Lights Total Heating Rate".encode(), light.encode())
+            self.api.exchange.request_variable(
+                self.state, "Lights Total Heating Rate".encode(), light.encode()
+            )
 
         self.api.runtime.callback_begin_new_environment(self.state, self.get_handles())
 
@@ -79,26 +98,56 @@ class EnergyPlusSetup:
         return self.api.exchange.get_variable_value(self.state, handle)
 
     def get_variable_handle(self, variable_name, variable_key):
-        return self.api.exchange.get_variable_handle(self.state, variable_name, variable_key)
+        return self.api.exchange.get_variable_handle(
+            self.state, variable_name, variable_key
+        )
 
     def get_handles(self):
         def callback_function(state):
-            self.handles.outdoor_drybulb_temperature = self.api.exchange.get_variable_handle(state, "Site Outdoor Air Drybulb Temperature", "Environment")
-            self.handles.direct_normal_irradiance = self.api.exchange.get_variable_handle(state, "Site Direct Solar Radiation Rate per Area", "Environment")
-            self.handles.diffuse_horizontal_irradiance = self.api.exchange.get_variable_handle(state, "Site Diffuse Solar Radiation Rate per Area", "Environment")
-            construction_complex_fenestration_state = self.epjs['Construction:ComplexFenestrationState']
-            
+            self.handles.outdoor_drybulb_temperature = (
+                self.api.exchange.get_variable_handle(
+                    state, "Site Outdoor Air Drybulb Temperature", "Environment"
+                )
+            )
+            self.handles.direct_normal_irradiance = (
+                self.api.exchange.get_variable_handle(
+                    state, "Site Direct Solar Radiation Rate per Area", "Environment"
+                )
+            )
+            self.handles.diffuse_horizontal_irradiance = (
+                self.api.exchange.get_variable_handle(
+                    state, "Site Diffuse Solar Radiation Rate per Area", "Environment"
+                )
+            )
+            construction_complex_fenestration_state = self.epjs[
+                "Construction:ComplexFenestrationState"
+            ]
+
             for cfs in construction_complex_fenestration_state:
-                self.handles.complex_fenestration_state[cfs] = self.api.api.getConstructionHandle(state, cfs.encode())
+                self.handles.complex_fenestration_state[
+                    cfs
+                ] = self.api.api.getConstructionHandle(state, cfs.encode())
             for window in self.window_surfaces:
-                self.handles.window_actuators[window] = self.api.exchange.get_actuator_handle(state, "Surface", "Construction State", window.encode())
+                self.handles.window_actuators[
+                    window
+                ] = self.api.exchange.get_actuator_handle(
+                    state, "Surface", "Construction State", window.encode()
+                )
 
             for light in self.lights:
-                self.handles.lights_electricity_energy[light] = self.api.exchange.get_variable_handle(state, "Lights Electricity Energy", light.encode())
-                self.handles.light_actuators[light] = self.api.exchange.get_actuator_handle(state, "Lights", "Electricity Rate", light.encode())
+                self.handles.lights_electricity_energy[
+                    light
+                ] = self.api.exchange.get_variable_handle(
+                    state, "Lights Electricity Energy", light.encode()
+                )
+                self.handles.light_actuators[
+                    light
+                ] = self.api.exchange.get_actuator_handle(
+                    state, "Lights", "Electricity Rate", light.encode()
+                )
 
         return callback_function
-    
+
     def get_datetime(self):
         year = self.api.exchange.year(self.state)
         month = self.api.exchange.month(self.state)
@@ -130,20 +179,25 @@ class EnergyPlusSetup:
 
         return dt
 
-    def run(self):
+    def run(self, weather_file: Optional[str] = None):
         with open("ep.json", "w") as wtr:
             json.dump(self.epjs, wtr)
         # self.api.runtime.run_energyplus(self.state, ["-d", "output", "-r", "ep.json"])
-        self.api.runtime.run_energyplus(self.state, ["-r", "ep.json"])
+        self.api.runtime.run_energyplus(
+            self.state, ["-w", weather_file, "-r", "ep.json"]
+        )
 
     def set_callback(self, method_name: str, func):
         try:
             method = getattr(self.api.runtime, method_name)
         except AttributeError:
-            raise AttributeError(f"Method {method_name} not found in EnergyPlus runtime API")
+            raise AttributeError(
+                f"Method {method_name} not found in EnergyPlus runtime API"
+            )
         # method(self.state, partial(func, self))
         method(self.state, func)
-    
+
+
 class EPModel:
     def __init__(self, epjs):
         self.epjs = epjs
@@ -162,12 +216,12 @@ class EPModel:
         Example:
             >>> model.windows
         """
-        return list(self.epjs['FenestrationSurface:Detailed'].keys())
-    
+        return list(self.epjs["FenestrationSurface:Detailed"].keys())
+
     @property
     def lighting_zone(self):
         return list(self.epjs["Lights"].keys())
-    
+
     @property
     def zones(self):
         return list(self.epjs["Zone"].keys())
@@ -179,7 +233,7 @@ class EPModel:
         else:
             # add
             self.epjs[key] = obj
-        
+
     def add_cfs(self, glazing_system) -> None:
         """
         Add CFS to an EnergyPlus JSON file.
@@ -193,12 +247,14 @@ class EPModel:
             None
         """
         name = glazing_system.name
-        if glazing_system.solar_results is not None and glazing_system.photopic_results is not None:
+        if (
+            glazing_system.solar_results is not None
+            and glazing_system.photopic_results is not None
+        ):
             solar_results = glazing_system.solar_results
             photopic_results = glazing_system.photopic_results
         else:
             raise ValueError("Solar and photopic results must be computed first.")
-        
 
         # Initialize Contruction:ComplexFenestrationState dictionary with system and outer layer names
 
@@ -244,23 +300,31 @@ class EPModel:
                     {"value": 12.0},
                 ],
             },
-            construction_complex_fenestration_state[name]["solar_optical_complex_back_reflectance_matrix_name"]: {
+            construction_complex_fenestration_state[name][
+                "solar_optical_complex_back_reflectance_matrix_name"
+            ]: {
                 "number_of_columns": 145,
                 "number_of_rows": 145,
                 "values": [
                     {"value": val}
-                    for row in solar_results.system_results.back.reflectance.matrix for val in row
+                    for row in solar_results.system_results.back.reflectance.matrix
+                    for val in row
                 ],
             },
-            construction_complex_fenestration_state[name]["solar_optical_complex_front_transmittance_matrix_name" ]: {
+            construction_complex_fenestration_state[name][
+                "solar_optical_complex_front_transmittance_matrix_name"
+            ]: {
                 "number_of_columns": 145,
                 "number_of_rows": 145,
                 "values": [
                     {"value": val}
-                    for row in solar_results.system_results.front.transmittance.matrix for val in row
+                    for row in solar_results.system_results.front.transmittance.matrix
+                    for val in row
                 ],
             },
-            construction_complex_fenestration_state[name]["visible_optical_complex_back_transmittance_matrix_name"]: {
+            construction_complex_fenestration_state[name][
+                "visible_optical_complex_back_transmittance_matrix_name"
+            ]: {
                 "number_of_columns": 145,
                 "number_of_rows": 145,
                 "values": [
@@ -287,7 +351,9 @@ class EPModel:
                 "number_of_rows": 1,
                 "values": [
                     {"value": val}
-                    for val in solar_results.layer_results[0].back.absorptance.angular_total
+                    for val in solar_results.layer_results[
+                        0
+                    ].back.absorptance.angular_total
                 ],
             },
             construction_complex_fenestration_state[name][
@@ -413,31 +479,31 @@ class EPModel:
         for key, obj in mappings.items():
             self._add(key, obj)
 
-        # Set the all fenestration surface constructions to complex fenestration state
-        # pick the first cfs
-            cfs = list(self.epjs['Construction:ComplexFenestrationState'].keys())[0]
+            # Set the all fenestration surface constructions to complex fenestration state
+            # pick the first cfs
+            cfs = list(self.epjs["Construction:ComplexFenestrationState"].keys())[0]
             for window_name in self.epjs["FenestrationSurface:Detailed"]:
                 self.epjs["FenestrationSurface:Detailed"][window_name][
                     "construction_name"
                 ] = cfs
-       
+
     def add_lighting(self):
         """Add lighting objects to the epjs dictionary."""
 
         # Initialize lighting schedule type limit dictionary
-        schedule_type_limit = {} 
+        schedule_type_limit = {}
         schedule_type_limit["on_off"] = {
-            "lower_limit_value" : 0,
-            "upper_limit_value" : 1,
-            "numeric_type" : "Discrete",
-            "unit_type" : "Availability"
+            "lower_limit_value": 0,
+            "upper_limit_value": 1,
+            "numeric_type": "Discrete",
+            "unit_type": "Availability",
         }
 
         # Initialize lighting schedule dictionary
         lighting_schedule = {}
         lighting_schedule["constant_off"] = {
-            "schedule_type_limits_name" : "on_off",
-            "hourly_value" : 0
+            "schedule_type_limits_name": "on_off",
+            "hourly_value": 0,
         }
 
         # Initialize lights dictionary with a constant-off schedule for each zone
@@ -471,15 +537,14 @@ class EPModel:
             }
 
         mappings = {
-            "ScheduleTypeLimits" : schedule_type_limit,
-            "Schedule:Constant" : lighting_schedule,
-            "Lights" : lights
+            "ScheduleTypeLimits": schedule_type_limit,
+            "Schedule:Constant": lighting_schedule,
+            "Lights": lights,
         }
 
         for key, obj in mappings.items():
             self._add(key, obj)
-    
-    
+
 
 # def shade_controller(ep: EnergyPlusSetup, state) -> None:
 #     """
@@ -495,8 +560,8 @@ class EPModel:
 #     dhi = ep.get_variable_value(ep.handles.diffuse_horizontal_irradiance)
 #     if dni > 800:
 #         ep.actuate(ep.handles.window_actuators['Window1'], ep.handles.complex_fenestration_state['Window1'])
-# 
-# 
+#
+#
 # with EnergyPlusSetup(api, epjs) as ep:
 #     ep.set_callback("callback_begin_new_environment", shade_controller)
 #     ep.run()
