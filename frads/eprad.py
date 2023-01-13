@@ -179,12 +179,23 @@ class EnergyPlusSetup:
 
         return dt
 
-    def run(self, weather_file: Optional[str] = None):
-        with open("ep.json", "w") as wtr:
+    def run(
+        self,
+        weather_file: Optional[str] = None,
+        output_directory: Optional[str] = None,
+        output_prefix: Optional[str] = "eplus",
+    ):
+
+        options = {"-w": weather_file, "-d": output_directory, "-p": output_prefix}
+        # check if any of options are None, if so, dont pass them to run_energyplus
+        options = {k: v for k, v in options.items() if v is not None}
+        opt = [item for sublist in options.items() for item in sublist]
+
+        with open(f"{output_prefix}.json", "w") as wtr:
             json.dump(self.epjs, wtr)
-        # self.api.runtime.run_energyplus(self.state, ["-d", "output", "-r", "ep.json"])
+
         self.api.runtime.run_energyplus(
-            self.state, ["-w", weather_file, "-r", "ep.json"]
+            self.state, [*opt, "-r", f"{output_prefix}.json"]
         )
 
     def set_callback(self, method_name: str, func):
