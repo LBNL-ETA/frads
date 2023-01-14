@@ -27,7 +27,7 @@ class GlazingSystem:
 
     def __init__(self):
         self._name = ""
-        self.gaps = []
+        self._gaps = []
         self.layers = []
         self.glzsys = None
         self.photopic_results = None
@@ -46,6 +46,17 @@ class GlazingSystem:
         """Set the name of the glazing system."""
         self._name = value
 
+    @property
+    def gaps(self):
+        """Return the gaps."""
+        return self._gaps
+
+    @gaps.setter
+    def gaps(self, value: Sequence[Tuple[pwc.PredefinedGasType, float]]):
+        """Set the gaps."""
+        self._gaps = value
+        self.updated = True
+
     def add_glazing_layer(self, inp):
         """Add a glazing layer."""
         if isinstance(inp, (str, Path)):
@@ -60,7 +71,7 @@ class GlazingSystem:
             data = pwc.parse_json(inp)
         self.layers.append(data)
         if len(self.layers) > 1:
-            self.gaps.append(self.default_air_gap)
+            self._gaps.append(self.default_air_gap)
 
     def add_shading_layer(self, inp):
         """Add a shading layer."""
@@ -73,7 +84,7 @@ class GlazingSystem:
             data = pwc.parse_bsdf_xml_string(inp)
         self.layers.append(data)
         if len(self.layers) > 1:
-            self.gaps.append(self.default_air_gap)
+            self._gaps.append(self.default_air_gap)
 
     def build(self):
         """Build the glazing system."""
@@ -84,7 +95,7 @@ class GlazingSystem:
                 str(Path(__file__).parent / "data" / "optical_standards" / "W5_NFRC_2003.std")
             ),
             solid_layers=self.layers,
-            gap_layers=[create_gap(g[0], thickness=g[1]) for g in self.gaps],
+            gap_layers=[create_gap(*g[:-1], thickness=g[1]) for g in self.gaps],
             width_meters=1,
             height_meters=1,
             environment=pwc.nfrc_shgc_environments(),
