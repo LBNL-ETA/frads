@@ -428,9 +428,11 @@ def direct_sun_matrix_pt(
     """
 
     logger.info("Direct sun matrix for sensor grid")
+    cdsenv = [model.material_path, model.black_env_path, *model.cfs_paths]
+    _cfs_name = "".join([Path(cfs).stem for cfs in model.cfs_paths])
     for grid_name, sender_grid in model.sender_grid.items():
         mpath.pcdsmx[grid_name] = Path(
-            "Matrices", f"pcdsmx_{model.name}_{grid_name}.mtx"
+            "Matrices", f"pcdsmx_{model.name}_{grid_name}_{_cfs_name}.mtx"
         )
         if regen(mpath.pcdsmx[grid_name], config):
             logger.info("Generating using rcontrib...")
@@ -442,7 +444,6 @@ def direct_sun_matrix_pt(
             )
             cdsmx_opt = config["SimControl"].getoptions("cdsmx_opt")
             cdsmx_opt["n"] = config["SimControl"].getint("nprocess")
-            cdsenv = [model.material_path, model.black_env_path, *model.cfs_paths]
             sun_oct = Path(f"sun_{utils.id_generator()}.oct")
             matrix.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
             matrix.rcontrib(
@@ -475,6 +476,7 @@ def direct_sun_matrix_vu(
     mod_names = [f"{int(line[3:]):04d}" for line in rcvr_sun.modifier.splitlines()]
     sun_oct = Path(f"sun_{utils.id_generator()}.oct")
     cdsenv = [model.material_path, model.black_env_path, *model.cfs_paths]
+    _cfs_name = "".join([Path(cfs).stem for cfs in model.cfs_paths])
     matrix.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
     cdsmx_opt = config["SimControl"].getoptions("cdsmx_opt")
     cdsmx_opt["n"] = config["SimControl"].getint("nprocess")
@@ -494,8 +496,8 @@ def direct_sun_matrix_vu(
             "Generating direct-sun matrix material map with: \n %s", " ".join(cmd)
         )
         utils.run_write(cmd, mpath.cdmap[view])
-        mpath.vcdfmx[view] = Path("Matrices", f"vcdfmx_{model.name}_{view}")
-        mpath.vcdrmx[view] = Path("Matrices", f"vcdrmx_{model.name}_{view}")
+        mpath.vcdfmx[view] = Path("Matrices", f"vcdfmx_{model.name}_{view}_{_cfs_name}")
+        mpath.vcdrmx[view] = Path("Matrices", f"vcdrmx_{model.name}_{view}_{_cfs_name}")
         tempf = Path("Matrices", "vcdfmx")
         tempr = Path("Matrices", "vcdrmx")
         if regen(mpath.vcdfmx[view], config):

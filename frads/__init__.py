@@ -69,7 +69,7 @@ from .parsers import (
     parse_polygon,
 )
 
-from .raycall import oconv, rtrace, render
+# from .raycall import oconv, rtrace, render
 
 from .sky import basis_glow, gen_perez_sky
 
@@ -129,15 +129,15 @@ __all__ = [
     "parse_wea",
     "parse_polygon",
     "Primitive",
-    "oconv",
+    # "oconv",
     "points_as_sender",
     "rfluxmtx",
-    "rtrace",
+    # "rtrace",
     "sky_as_receiver",
     "surface_as_receiver",
     "sun_as_receiver",
     "surface_as_sender",
-    "render",
+    # "render",
     "unpack_primitives",
     "View",
     "view_as_sender",
