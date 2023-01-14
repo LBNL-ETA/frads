@@ -15,7 +15,7 @@ import pandas as pd
 
 Need to make sure EnergyPlus is in sys.path in order to load <code> pyenergyplus.api </code>
 
-```
+```python
 srcloc = {'win32': 'C:\\', 'darwin': '/Applications', 'linux': '/usr/local'}
 dname  = [os.path.join(srcloc[sys.platform], d) for d in os.listdir(srcloc[sys.platform]) if d.startswith('EnergyPlus')]
 ephome = dname.pop()
