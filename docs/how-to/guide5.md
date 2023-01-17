@@ -1,4 +1,31 @@
-# How to control CFS and lighting in E+ Model?
+# How to model dynamic shading control and daylight dimming with EnergyPlus?
+
+## Objective
+
+This notebook shows how to use EnergyPlusAPI to control the complex fenestration system (CFS) state and implement daylight dimming.
+
+## Prerequisites
+
+In order to run this notebook, you will need to install the following:
+
+* [energyplus](https://energyplus.net/) to simulate building energy.
+* [frads](https://github.com/LBNL-ETA/frads) to initialize EnergyPlus model, and to create cfs and daylighting dimming controls.
+
+Optional:
+
+* [pandas](https://pandas.pydata.org/docs/getting_started/install.html) and [matplotlib](https://matplotlib.org/stable/users/installing/index.html) to analyze and plot data.
+
+
+You will also need an EnergyPlus model in an idf or epjson file format. The model should contain the following:
+* at least one zone
+* at least one fenestration system
+
+## Workflow
+1. Initialize an E+ model with an input of idf or epjs file.
+2. Create Complex Fenestration System (CFS) glazing system for each fenestration construction state and add to E+ model
+3. Create lighting objects and add to E+ model
+4. Define controller function for CFS construction states and daylight dimming
+5. Initialize pyenergyplus.api to simulate
 
 ## Import required Python libraries
 
@@ -189,7 +216,6 @@ Data is accessed through handles, which can be accessed by calling the <code>han
 
 ```python
 def controller(state):
-    dni_thld = 800
     nominal_lighting_power = 30
 
     shade_names = {
