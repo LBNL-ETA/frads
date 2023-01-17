@@ -20,7 +20,7 @@ def ep_datetime_parser(inp):
 
 def load_epmodel(fpath: Path, api) -> dict:
     """Load and parse input file into a JSON object.
-    If the input file is in .idf fomart, use command-line
+    If the input file is in .idf format, use command-line
     energyplus program to convert it to epJSON format
     Args:
         fpath: input file path
@@ -230,6 +230,21 @@ class EPModel:
             >>> model.windows
         """
         return list(self.epjs["FenestrationSurface:Detailed"].keys())
+
+    @property
+    def walls_window(self):
+        walls_wndo = []
+        for k, v in self.epjs["FenestrationSurface:Detailed"].items():
+            walls_wndo.append(v["building_surface_name"])
+        return walls_wndo
+
+    @property
+    def floors(self):
+        floor = []
+        for k, v in self.epjs["BuildingSurface:Detailed"].items():
+            if v["surface_type"] == "Floor":
+                floor.append(k)
+        return floor
 
     @property
     def lighting_zone(self):
