@@ -52,7 +52,7 @@ class GlazingSystem:
         return self._gaps
 
     @gaps.setter
-    def gaps(self, value: Sequence[Tuple[pwc.PredefinedGasType, float]]):
+    def gaps(self, value: Tuple[Tuple[pwc.PredefinedGasType, float], float]):
         """Set the gaps."""
         self._gaps = value
         self.updated = True
