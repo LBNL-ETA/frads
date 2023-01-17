@@ -51,7 +51,12 @@ or on a time-step basis.
 import logging
 import shutil
 
+from .epjson2rad import epjson2rad
+
+from .eprad import load_epmodel, EnergyPlusSetup
+
 from .matrix import (
+    load_matrix,
     rfluxmtx,
     surface_as_sender,
     points_as_sender,
@@ -78,7 +83,10 @@ from .types import (
     WeaMetaData,
 )
 
+
 from .utils import gen_grid, unpack_primitives
+
+from .window import GlazingSystem
 
 __version__ = "0.2.8"
 
@@ -104,8 +112,13 @@ for prog in rad_progs:
 
 __all__ = [
     "basis_glow",
+    "epjson2rad",
+    "EnergyPlusSetup",
+    "GlazingSystem",
     "gen_perez_sky",
     "gen_grid",
+    "load_epmodel",
+    "load_matrix",
     "parse_primitive",
     "parse_epw",
     "parse_wea",
