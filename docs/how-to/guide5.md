@@ -1,10 +1,9 @@
 # How to control CFS and lighting in E+ Model?
 
+
 ## Import required Python libraries
 
 ```python
-import datetime
-import json
 import os
 from pathlib import Path
 import sys 
@@ -13,7 +12,13 @@ from frads import epjson2rad, eprad, parsers, matrix, methods, sky, types, windo
 import pandas as pd
 ```
 
-Need to make sure EnergyPlus is in sys.path in order to load <code> pyenergyplus.api </code>
+!!! note
+    You'll need to install [EnergyPlus](https://www.energyplus.net) befor proceeding.
+
+Importing EnergyPlus into Python is not so straightforward. You can run the following code
+to import EnergyPlusAPI in you had installed EnergyPlus in the default location for your
+operating system. If you had not installed EnergyPlus one of these location you'll need to 
+`append` the path to your `sys.path` before you can import EnergyPlusAPI. 
 
 ```python
 srcloc = {'win32': 'C:\\', 'darwin': '/Applications', 'linux': '/usr/local'}
