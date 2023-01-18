@@ -31,7 +31,7 @@ def tmit2tmis(tmit: float) -> float:
     b = 0.8402528435
     c = 0.9166530661
     d = 0.0036261119
-    tmis = ((math.sqrt(a * tmit ** 2 + b) - c ) / d) / tmit
+    tmis = ((math.sqrt(a * tmit**2 + b) - c) / d) / tmit
     return max(0, min(tmis, 1))
 
 
@@ -204,7 +204,9 @@ def parse_material_nomass(name: str, material: dict) -> EPlusOpaqueMaterial:
     )
 
 
-def parse_windowmaterial_complexshade(name: str, material: dict) -> EPlusWindowMaterialComplexShade:
+def parse_windowmaterial_complexshade(
+    name: str, material: dict
+) -> EPlusWindowMaterialComplexShade:
     """Parse EP WindowMaterial:ComplexShade."""
     return EPlusWindowMaterialComplexShade(
         name.replace(" ", "_"),
@@ -494,10 +496,15 @@ def epjson2rad(epjs: dict, epw=None) -> None:
             with open(tb_path, "w", encoding="ascii") as wtr:
                 wtr.write(" ".join([str(v) for v in val.tb.bsdf]))
             basis = "".join(
-                [word[0].lower() for word in bsdf.BASIS_DICT[str(val.tf.ncolumn)].split()]
+                [
+                    word[0].lower()
+                    for word in bsdf.BASIS_DICT[str(val.tf.ncolumn)].split()
+                ]
             )
             with open(opath, "wb") as wtr:
-                wtr.write(pr.wrapbsdf(basis=basis, tf=tf_path, tb=tb_path, unlink=True, n=key))
+                wtr.write(
+                    pr.wrapbsdf(basis=basis, tf=tf_path, tb=tb_path, unlink=True, n=key)
+                )
             xml_paths[key] = str(opath)
 
     # Write material file
@@ -506,7 +513,6 @@ def epjson2rad(epjs: dict, epw=None) -> None:
         for material in materials.values():
             if hasattr(material, "primitive"):
                 wtr.write(str(material.primitive))
-
 
     # For each zone write primitves to files and create a config file
     for name, zone in zones.items():
@@ -566,5 +572,5 @@ def epjson2rad(epjs: dict, epw=None) -> None:
             "grid_spacing": "1",
             "grid_height": "0.75",
         }
-        with open(f"{name.replace(' ', '_')}.cfg", "w", encoding="utf-8") as wtr:
+        with open(f"{name}.cfg", "w", encoding="utf-8") as wtr:
             mrad_config.write(wtr)
