@@ -552,17 +552,7 @@ class EPModel:
 
         # Add lighting output to the epjs dictionary
 
-        i = 1
-        for output in self.epjs["Output:Variable"].values():
-            i += 1
-            if output["variable_name"] == "Lights Electricity Rate":
-                break
-        else:
-            self.epjs["Output:Variable"][f"Output:Variable {i}"] = {
-                "key_value": "*",
-                "reporting_frequency": "Timestep",
-                "variable_name": "Lights Electricity Rate",
-            }
+        self.add_output("Lights Electricity Rate")
 
         mappings = {
             "ScheduleTypeLimits": schedule_type_limit,
@@ -572,6 +562,19 @@ class EPModel:
 
         for key, obj in mappings.items():
             self._add(key, obj)
+
+    def add_output(self, opt_name: str):
+        i = 1
+        for output in self.epjs["Output:Variable"].values():
+            i += 1
+            if output["variable_name"] == opt_name:
+                break
+        else:
+            self.epjs["Output:Variable"][f"Output:Variable {i}"] = {
+                "key_value": "*",
+                "reporting_frequency": "Timestep",
+                "variable_name": opt_name,
+            }
 
 
 # def shade_controller(ep: EnergyPlusSetup, state) -> None:
