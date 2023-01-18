@@ -27,7 +27,7 @@ class GlazingSystem:
 
     def __init__(self):
         self._name = ""
-        self.gaps = []
+        self._gaps = []
         self.layers = []
         self.glzsys = None
         self.photopic_results = None
@@ -45,6 +45,17 @@ class GlazingSystem:
     def name(self, value):
         """Set the name of the glazing system."""
         self._name = value
+
+    @property
+    def gaps(self):
+        """Return the gaps."""
+        return self._gaps
+
+    @gaps.setter
+    def gaps(self, value: Tuple[Tuple[pwc.PredefinedGasType, float], float]):
+        """Set the gaps."""
+        self._gaps = value
+        self.updated = True
 
     def add_glazing_layer(self, inp):
         """Add a glazing layer."""
@@ -91,7 +102,7 @@ class GlazingSystem:
                 )
             ),
             solid_layers=self.layers,
-            gap_layers=[create_gap(g[0], thickness=g[1]) for g in self.gaps],
+            gap_layers=[create_gap(*g[:-1], thickness=g[1]) for g in self.gaps],
             width_meters=1,
             height_meters=1,
             environment=pwc.nfrc_shgc_environments(),

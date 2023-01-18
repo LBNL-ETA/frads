@@ -38,21 +38,6 @@ You can verify that Python is installed by typing python from your cmd/powershel
 	Type "help", "copyright", "credits" or "license" for more information.
 	>>>
 
-### Install Radiance
-
-If you haven't already, you will need to install Radiance. `frads` will check your Radiance
-installation, so make sure you install it first.
-
-To install Radiance, visit Radiance Github [repo](https://github.com/LBNL-ETA/Radiance/releases)
- to download the latest release for your operating system.
-
-You can verify that Radiance is installed properly by typing in the command-line:
-
-```
-$ rtrace -version
-RADIANCE 5.4a ...
-```
-
 ### Install frads
 
 After you have Python installed, you should have `pip` command available in your shell environment as well. You can then use `pip` to install `frads`:

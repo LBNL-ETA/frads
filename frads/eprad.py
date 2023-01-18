@@ -1,3 +1,8 @@
+"""
+Class and functions for accessing EnergyPlus Python API
+"""
+
+import calendar
 import datetime
 import json
 from pathlib import Path
@@ -166,17 +171,13 @@ class EnergyPlusSetup:
         if day == 31 and month in [4, 6, 9, 11]:
             day = 1
             month += 1
-        if day == 32 and month in [1, 3, 5, 7, 8, 10, 12]:
+        elif day == 32 and month in [1, 3, 5, 7, 8, 10, 12]:
             day = 1
             month += 1
-        if year % 4 == 0 and day == 30 and month == 2:
+        # Assuming EPW never has Feb 29th 
+        elif day == 29 and month == 2:
             day = 1
             month += 1
-        else:
-            if day == 29 and month == 2:
-                day = 1
-                month += 1
-
         dt = datetime.datetime(year, month, day, hour, minute)
 
         return dt
