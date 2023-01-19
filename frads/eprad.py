@@ -69,26 +69,8 @@ class EnergyPlusSetup:
         self.state = self.api.state_manager.new_state()
         self.handles = Handles()
         self.window_surfaces = self.epjs["FenestrationSurface:Detailed"]
-        self.lights = self.epjs["Lights"]
-        self.api.exchange.request_variable(
-            self.state,
-            "Site Outdoor Air Drybulb Temperature".encode(),
-            "Environment".encode(),
-        )
-        self.api.exchange.request_variable(
-            self.state,
-            "Site Direct Solar Radiation Rate per Area".encode(),
-            "Environment".encode(),
-        )
-        self.api.exchange.request_variable(
-            self.state,
-            "Site Diffuse Solar Radiation Rate per Area".encode(),
-            "Environment".encode(),
-        )
-        for light in self.lights:
-            self.api.exchange.request_variable(
-                self.state, "Lights Total Heating Rate".encode(), light.encode()
-            )
+
+        self.request_variable()
 
         self.api.runtime.callback_begin_new_environment(self.state, self.get_handles())
 
@@ -108,6 +90,30 @@ class EnergyPlusSetup:
         return self.api.exchange.get_variable_handle(
             self.state, variable_name, variable_key
         )
+
+    def request_variable(self):
+        self.api.exchange.request_variable(
+            self.state,
+            "Site Outdoor Air Drybulb Temperature".encode(),
+            "Environment".encode(),
+        )
+        self.api.exchange.request_variable(
+            self.state,
+            "Site Direct Solar Radiation Rate per Area".encode(),
+            "Environment".encode(),
+        )
+        self.api.exchange.request_variable(
+            self.state,
+            "Site Diffuse Solar Radiation Rate per Area".encode(),
+            "Environment".encode(),
+        )
+
+        if "Lights" in self.epjs:
+            self.lights = self.epjs["Lights"]
+            for light in self.lights:
+                self.api.exchange.request_variable(
+                    self.state, "Lights Total Heating Rate".encode(), light.encode()
+                )
 
     def get_handles(self):
         def callback_function(state):
@@ -141,17 +147,18 @@ class EnergyPlusSetup:
                     state, "Surface", "Construction State", window.encode()
                 )
 
-            for light in self.lights:
-                self.handles.lights_electricity_energy[
-                    light
-                ] = self.api.exchange.get_variable_handle(
-                    state, "Lights Electricity Energy", light.encode()
-                )
-                self.handles.light_actuators[
-                    light
-                ] = self.api.exchange.get_actuator_handle(
-                    state, "Lights", "Electricity Rate", light.encode()
-                )
+            if "Lights" in self.epjs:
+                for light in self.lights:
+                    self.handles.lights_electricity_energy[
+                        light
+                    ] = self.api.exchange.get_variable_handle(
+                        state, "Lights Electricity Energy", light.encode()
+                    )
+                    self.handles.light_actuators[
+                        light
+                    ] = self.api.exchange.get_actuator_handle(
+                        state, "Lights", "Electricity Rate", light.encode()
+                    )
 
         return callback_function
 
@@ -174,10 +181,14 @@ class EnergyPlusSetup:
         elif day == 32 and month in [1, 3, 5, 7, 8, 10, 12]:
             day = 1
             month += 1
-        # Assuming EPW never has Feb 29th 
+        # Assuming EPW never has Feb 29th
         elif day == 29 and month == 2:
             day = 1
             month += 1
+        if month == 13:
+            month = 1
+            year += 1
+
         dt = datetime.datetime(year, month, day, hour, minute)
 
         return dt
@@ -249,7 +260,9 @@ class EPModel:
 
     @property
     def lighting_zone(self):
-        return list(self.epjs["Lights"].keys())
+        if "Lights" in self.epjs:
+            return list(self.epjs["Lights"].keys())
+        return "No Lights"
 
     @property
     def zones(self):
@@ -445,11 +458,11 @@ class EPModel:
             window_material_gap[f"{_gap_name}_layer"] = {
                 "gas_or_gas_mixture_": _gas_name,
                 "pressure": standard_atmosphere_pressure,
-                "thickness": gap[1],
+                "thickness": gap[-1],
             }
             window_material_gas[_gas_name] = {
                 "gas_type": gap[0][0].name.capitalize(),
-                "thickness": gap[1],
+                "thickness": gap[-1],
             }
 
         # Define glazing and shading layer
@@ -564,7 +577,7 @@ class EPModel:
         for key, obj in mappings.items():
             self._add(key, obj)
 
-    def add_output(self, opt_name: str):
+    def request_output(self, opt_name: str):
         i = 1
         for output in self.epjs["Output:Variable"].values():
             i += 1
