@@ -61,15 +61,19 @@ class GlazingSystem:
         """Add a glazing layer."""
         if isinstance(inp, (str, Path)):
             _path = Path(inp)
+            product_name = _path.stem
             if not _path.exists():
                 raise FileNotFoundError(inp)
-            if _path.suffix == "json":
+            if _path.suffix == ".json":
                 data = pwc.parse_json_file(str(_path))
             else:
                 data = pwc.parse_optics_file(str(_path))
         else:
             data = pwc.parse_json(inp)
+            product_name = inp["name"] or inp["product_name"]
+        data.product_name = data.product_name or product_name or str(inp)[:6]
         self.layers.append(data)
+
         if len(self.layers) > 1:
             self.gaps.append(self.default_air_gap)
         self.updated = True
@@ -92,6 +96,7 @@ class GlazingSystem:
         """Build the glazing system."""
         if (len(self.layers) - 1) != len(self.gaps):
             raise ValueError("Number of gaps must be one less than number of layers.")
+
         self.glzsys = pwc.GlazingSystem(
             optical_standard=pwc.load_standard(
                 str(
@@ -102,7 +107,7 @@ class GlazingSystem:
                 )
             ),
             solid_layers=self.layers,
-            gap_layers=[create_gap(*g[:-1], thickness=g[1]) for g in self.gaps],
+            gap_layers=[create_gap(*g[:-1], thickness=g[-1]) for g in self.gaps],
             width_meters=1,
             height_meters=1,
             environment=pwc.nfrc_shgc_environments(),
