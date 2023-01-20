@@ -17,8 +17,10 @@ Optional:
 
 
 You will also need an EnergyPlus model in an idf or epjson file format. The model should contain the following:
+
 * at least one zone
 * at least one fenestration system
+
 
 ## Workflow
 1. Initialize an E+ model with an input of idf or epjs file.
@@ -26,6 +28,32 @@ You will also need an EnergyPlus model in an idf or epjson file format. The mode
 3. Create lighting objects and add to E+ model
 4. Define controller function for CFS construction states and daylight dimming
 5. Initialize pyenergyplus.api to simulate
+
+```mermaid
+graph LR
+    subgraph pyenergyplus.api simulation
+    D[Radiance model]<-->B[EPmodel];
+    B<-->H[controller function]
+    H<-->D;
+    end
+    A[idf/epjs] --> |load epmodel| B;
+    C[lighting system] --> B;
+    E[glazing/shading system]--> B;
+```
+
+```mermaid
+graph LR
+    subgraph frads
+    B[WincalcEngine]
+    C[EnergyPlus]
+    D[Radiance]
+    end
+
+    A[IGSDB] --> B;
+    B --> D;
+    B --> C;
+    C <-->D
+```
 
 ## Import required Python libraries
 
@@ -40,7 +68,7 @@ from frads import epjson2rad, eprad, parsers, matrix, methods, sky, types, windo
 import pandas as pd
 ```
 
-Need to make sure EnergyPlus is in sys.path in order to load <code> pyenergyplus.api </code>
+Need to make sure EnergyPlus is in sys.path in order to load `pyenergyplus.api `
 
 ```python
 srcloc = {'win32': 'C:\\', 'darwin': '/Applications', 'linux': '/usr/local'}
@@ -55,16 +83,19 @@ from pyenergyplus.api import EnergyPlusAPI
 ##  Load EnergyPlus(E+) model
 The example idf file is from the EnergyPlus ExampleFiles directory. The building is 15.24m X 15.24m, single zone with one south-facing window.
 
-Initialize an E+ model by calling <code> eprad.load_epmodel </code> with an input of idf or epjs file.
+Initialize an E+ model by calling `eprad.load_epmodel`with an input of idf or epjs file. The example used here can be downloaded from [here](https://github.com/NREL/EnergyPlus/blob/develop/testfiles/1ZoneUncontrolled_win_1.idf).
 
 ```python
 idf_path = Path("1ZoneUncontrolled_win_1.idf")
 api = EnergyPlusAPI()
 epmodel = eprad.load_epmodel(idf_path, api)
 ```
+## Example 1 - shading control and daylight dimming
 
-## Add CFS objects to E+ model
-Create an unshaded glazing system, consisted of one layer of 6mm clear glass. Initialize a glazing system by calling <code> window.GlazingSystem()</code>. Then, use <code> add_glazing_layer</code>  and <code> add_shading_layer</code> respectively, to add glazing and shading layer to the glazing system. 
+### Add CFS objects to E+ model
+Initialize a glazing system by calling `window.GlazingSystem()`. Then, use `add_glazing_layer` and `add_shading_layer`respectively, to add glazing and shading layer to the glazing system. `add_glazing_layer ` takes in a `.dat` or `.json` file. `add_shading_layer` takes in a `.xml` file. Visit the [IGSDB](https://igsdb.lbl.gov/) website to download  `.json` files for glazing and `.xml` files for shading. If not specify, the default gap between the layers is air at 0.0127m thickness. See [Example 2](#example-2-electrochromic-glass-with-4-tinted-states) for how to customize a gap.
+
+Create an unshaded glazing system, consisted of one layer of 6mm clear glass with the default gap. 
 
 
 ```python
@@ -107,7 +138,7 @@ gs_shaded.name
 
 
 
-After the adding glazing and shading layers to the glazing system, compute solar and the solar and photopic results using <code> compute_solar_photopic_results</code>. Need to re-compute each time when the glazing system layering composition changes.
+After the adding glazing and shading layers to the glazing system, compute solar and the solar and photopic results using `compute_solar_photopic_results`. Need to re-compute each time when the glazing system layering composition changes.
 
 
 ```python
@@ -119,7 +150,7 @@ gs_unshaded.compute_solar_photopic_results()
 gs_shaded.compute_solar_photopic_results()
 ```
 
-Add the unshaded and shaded glazing systems to E+ model by calling <code>add_cfs</code>.
+Add the unshaded and shaded glazing systems to E+ model by calling `add_cfs`.
 
 
 ```python
@@ -127,8 +158,8 @@ epmodel.add_cfs(gs_unshaded)
 epmodel.add_cfs(gs_shaded)
 ```
 
-## Add lighting objects to E+ model
-Use <code>add_lighting</code> to add a lighting object for each of the zones in the building.
+### Add lighting objects to E+ model
+Use `add_lighting`to add a lighting object for each of the zones in the building.
 
 ```python
 epmodel.add_lighting()
@@ -182,16 +213,21 @@ epmodel.zones
 
     ['ZONE ONE']
 
+### Request output  variable
+Use `request_output`to request output variable that are not in the input  idf file before the simulation run.
+```python
+epmodel.request_output("Surface Inside Face Solar Radiation Heat Gain Rate per Area")
 
+```
 
-## Initialize Radiance model
-Create a Radiance model by calling <code>epjson2rad.epjson2rad</code> and passing in an epjs and epw files. The epjs file can be accessed by calling <code>epmodel.epjs</code>. The <code>epjson2rad.epjson2rad</code> function creates an <code>Objects</code> directory for material and geometry primitives and a <code>Resources</code> directory for transmission matrices (xml files). The <code>epjson2rad.epjson2rad</code> function also generates a <code>config</code> file, which contains information about simulation controls setting, site, model, and raysender. Use <code>methods.three_phase</code> to perform the three-phase method and generate the view and daylight matrices under the <code>Matrices</code> directory. Finally, load the view, daylight, and transmission matrices with <code>load_matrix</code>.
+### Initialize Radiance model
+Create a Radiance model by calling `epjson2rad.epjson2rad`and passing in an epjs and epw files. The epjs file can be accessed by calling `epmodel.epjs`. The `epjson2rad.epjson2rad`function creates an `Objects`directory for material and geometry primitives and a `Resources`directory for transmission matrices (xml files). The `epjson2rad.epjson2rad`function also generates a `config`file, which contains information about simulation controls setting, site, model, and raysender. Use `methods.three_phase`to perform the three-phase method and generate the view and daylight matrices under the `Matrices`directory. Finally, load the view, daylight, and transmission matrices with `load_matrix`.
 
 
 ```python
-zone = "ZONE_ONE"
-floor = "Zn001:Flr001"
-wall_wndo = "Zn001:Wall001"
+zone = epmodel.zones[0]
+floor = epmodel.floors[0]
+wall_wndo = epmodel.walls_window[0]
 
 # generate Radiance model
 # generate view, daylight, and transmission matrices
@@ -209,10 +245,10 @@ tmx_unshaded = matrix.load_matrix(f"Resources/Generic Clear Glass.xml")
 tmx_shaded = matrix.load_matrix(f"Resources/Generic Clear Glass_Satine 5500 5%, White Pearl.xml")
 ```
 
-## Define controller function for CFS construction states and daylight dimming
-Control fenestration construction based on time; the window is shaded from 11:00 to 15:00; otherwise, unshaded. The nominal lighting power of the light is 30W, controlled with linear daylight dimming based on the workplane illuminance. The workplane illuminance at each timestep is computed by calling <code>matrix.multiply_rgb</code> and pass in the view, trasmission, daylight, and sky matrices. Sky matrix is generated by calling <code>sky.genskymtx</code> and passing in a <code>WeaData</code> and <code>WeaMetaData</code> objects.
+### Define controller function for shading control and daylight dimming
+Control fenestration construction based on time; the window is shaded from 11:00 to 15:00; otherwise, unshaded. The nominal lighting power of the light is 30W, controlled with linear daylight dimming based on the workplane illuminance. The workplane illuminance at each timestep is computed by calling `matrix.multiply_rgb`and passing in the view, trasmission, daylight, and sky matrices. Sky matrix is generated by calling `sky.genskymtx`and passing in a `WeaData`and `WeaMetaData`objects.
 
-Data is accessed through handles, which can be accessed by calling the <code>handles</code> attribute of the <code> EnergyPlusSetup</code> class.  Call <code>get_variable_value</code> and pass in a variable handle to get a variable value (e.g. Direct normal irradiance and diffuse horizontal irradiance). Call <code>actuate</code> and pass in an actuactor handle and value to set the actuator value.
+Data is accessed through handles, which can be accessed by calling the `handles`attribute of the `EnergyPlusSetup`class.  Call `get_variable_value`and pass in a variable handle to get a variable value (e.g. Direct normal irradiance and diffuse horizontal irradiance). Call `actuate`and pass in an actuactor handle and value to set the actuator value.
 
 ```python
 def controller(state):
@@ -264,8 +300,8 @@ def controller(state):
 
     ep.actuate(light_handle, lighting_power)
 ```
-## Initialize pyenergyplus.api to simulate
-Register the controller functions to be call back by EnergyPlus by calling <code>set_callback</code> and passing in a callback point and function. To simulate, use <code>run</code> with optional parameters: <code>-w</code> weather file, <code>-d</code> output directory, and <code>-p</code> output prefix (default: eplus).
+### Initialize pyenergyplus.api to simulate
+Register the controller functions to be call back by EnergyPlus by calling `set_callback`and passing in a callback point and function. To simulate, use `run`with optional parameters: `-w`weather file, `-d`output directory, and `-p`output prefix (default: eplus).
 
 Refer to [Application Guide for EMS](https://energyplus.net/assets/nrel_custom/pdfs/pdfs_v22.1.0/EMSApplicationGuide.pdf) for descriptions of the calling points .
 
@@ -297,9 +333,9 @@ with eprad.EnergyPlusSetup(api, epmodel.epjs) as ep:
 ```
 
 
-## Load and visualize results
+### Load and visualize results
 
-Use <code>pd.read_csv</code> to read the output csv file.
+Use `pd.read_csv`to read the output csv file.
 
 ```python
 df = pd.read_csv(
@@ -314,48 +350,294 @@ Plot data on 07/21
 df_0721 = df.loc["1900-07-21"]
 ```
 
-Plot Window Transmitted Solar Radiation Rate. From 11:00 to 15:00, the window is shaded, where the fenestration construction is Generic Clear Glass_Satine 5500 5%, White Pearl. Otherwise, the window is unshaded, where the fenestration construction is Generic Clear Glass. The drop in transmitted solar radiation from 11:00 to 15:00 reflects the change in fenestration state from unshaded to shaded.
+ From 11:00 to 15:00, the window is shaded, where the fenestration construction is Generic Clear Glass_Satine 5500 5%, White Pearl. Otherwise, the window is unshaded, where the fenestration construction is Generic Clear Glass. The drop in transmitted solar radiation from 11:00 to 15:00 reflects the change in fenestration state from unshaded to shaded. The light is linearly dimmed in response to the workplane illuminance. Before the sunrise and after the sunset, the light is in full power. Then, in the morning from 5:30 to 11:00, when the window is unshaded, the lighting power decreases as the workplane illuminance increases; likewise inversely happened in the afternoon from 15:00 until the sunset. From 11:00 to 15:00, the lighting power is higher because the workplane illuminance decreases with the window changed to shaded.
 
 
 ```python
-df_0721[
-    "ZN001:WALL001:WIN001:Surface Window Transmitted Solar Radiation Rate [W](TimeStep)"
-].plot(ylabel=" Window Transmitted Solar Radiation Rate [W]")
-
-```
-
-
-
-
-    <AxesSubplot:xlabel='Date/Time', ylabel=' Window Transmitted Solar Radiation Rate [W]'>
-
-
-
-
-    
-![png](output_43_1.png)
-
-
-
-Plot lighting electricity rate. The light is linearly dimmed in response to the workplane illuminance. Before the sunrise and after the sunset, the light is in full power. Then, in the morning from 5:30 to 11:00, when the window is unshaded, the lighting power decreases as the workplane illuminance increases; likewise inversely happened in the afternoon from 15:00 until the sunset. From 11:00 to 15:00, the lighting power is higher because the workplane illuminance decreases with the window changed to shaded.
-
-
-```python
-df_0721["LIGHT_ZONE ONE:Lights Electricity Rate [W](TimeStep)"].plot(
-    ylabel="Lights Electricity Rate [W]"
+fig, ax = plt.subplots()
+ax.plot(
+    df_0721[
+        "ZN001:WALL001:WIN001:Surface Window Transmitted Solar Radiation Rate [W](TimeStep)"
+    ],
+    c="k",
+    linestyle="-",
+    label="ZN001:WALL001:WIN001",
+)
+ax1 = ax.twinx()
+ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+ax1.plot(
+    df_0721["LIGHT_ZONE ONE:Lights Electricity Rate [W](TimeStep)"],
+    c="k",
+    linestyle="--",
+    label="LIGHT_ZONE ONE (right)",
 )
 
+ax.axvspan(datetime.datetime.strptime("1900-07-21 11:00", "%Y-%m-%d %H:%M"), 
+(datetime.datetime.strptime("1900-07-21 15:00", "%Y-%m-%d %H:%M")), color="0.9")
+ax.annotate('Shaded',
+            xy=(datetime.datetime.strptime("1900-07-21 13:00", "%Y-%m-%d %H:%M"), 2250),
+            ha='center', color="r")
+ax.annotate('Unshaded',
+            xy=(datetime.datetime.strptime("1900-07-21 5:00", "%Y-%m-%d %H:%M"), 2250),
+            ha='center', color="r")
+ax.annotate('Unshaded',
+            xy=(datetime.datetime.strptime("1900-07-21 21:30", "%Y-%m-%d %H:%M"), 2250),
+            ha='center', color="r")
+
+
+ax.set(xlabel="Time", ylabel="Window Transmitted Solar Radiation Rate [W]")
+ax1.set(ylabel="Lights Electricity Rate [W]")
+fig.legend(loc="center", bbox_to_anchor=(0.5, 1.01), ncol=2, frameon=False)
+plt.tight_layout()
+
+```
+
+
+    
+![png](/assets/output_46_0.png)
+    
+
+
+
+Plot interior surfaces solar radiation heat gain rate per area
+
+
+```python
+fig, ax = plt.subplots()
+y_vals = [
+    col
+    for col in df_0721.columns
+    if "Surface Inside Face Solar Radiation Heat Gain Rate per Area" in col
+]
+
+for y_val in y_vals:
+    ax.plot(
+        df_0721[y_val],
+        linestyle="-",
+        label=y_val.split(":Surface")[0],
+    )
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+
+ax.set(xlabel="Time", ylabel="Solar Radiation Heat Gain Rate per Area [W/m2]")
+fig.legend(loc="center", bbox_to_anchor=(0.5, 1.01), ncol=3, frameon=False)
+plt.tight_layout()
+
+```
+
+
+    
+![png](/assets/output_47_0.png)
+    
+
+### Check implementation
+
+Check if the simulation is implemented correctly. Compare simulation results generated with the controller and no controller. 
+
+Simulate an unshaded single pane CFS state and not control by a controller function.
+
+```python
+epmodel.epjs["FenestrationSurface:Detailed"]["Zn001:Wall001:Win001"]["construction_name"] = "Generic Clear Glass"
+with eprad.EnergyPlusSetup(api, epmodel.epjs) as ep:
+    ep.run(
+        weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
+        output_prefix="single_glass",
+    )
 ```
 
 
 
 
-    <AxesSubplot:xlabel='Date/Time', ylabel='Lights Electricity Rate [W]'>
+```python
+df = pd.read_csv(
+    "./single_glassout.csv",
+    index_col=0,
+    parse_dates=True,
+    date_parser=eprad.ep_datetime_parser,
+)
+df_0721 = df.loc["1900-07-21"]
+
+fig, ax = plt.subplots()
+y_vals = [
+    col
+    for col in df_0721.columns
+    if "Surface Inside Face Solar Radiation Heat Gain Rate per Area" in col
+]
+
+for y_val in y_vals:
+    ax.plot(
+        df_0721[y_val],
+        linestyle="-",
+        label=y_val.split(":Surface")[0],
+    )
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+
+ax.set(xlabel="Time", ylabel="Solar Radiation Heat Gain Rate per Area [W/m2]")
+fig.legend(loc="center", bbox_to_anchor=(0.5, 1.01), ncol=3, frameon=False)
+plt.tight_layout()
+```
 
 
+
+![image](/assets/output_47_0.png)
+    
+
+
+## Example 2 - electrochromic glass with 4 tinted states
+
+### Add 4 tinted electrochromic states to E+ model
+Each glazing system is consisted of one layer of ec glass and one layer of clear glass. The gap between the glasses is 10% air and 90% argon. The default gap is air at 0.0127m thickness. To customize the gap, use the `gaps`attribute of the `GlazingSystem`class. The `gaps`attribute is a list of tuples. Each tuple consists of tuples, where the first item is the gas type and the second item is the gas ratio, and a float for the gap thickness. The default thickness is 0.0127m. Also, to customize the name of the glazing system, use the `name`attribute of the `GlazingSystem`class.
+
+
+```python
+gs_ec01 = window.GlazingSystem()
+gs_ec01.add_glazing_layer(
+    "products/igsdb_product_7405.json"
+)  # SageGlass SR2.0_7mm lami fully tinted 1%T
+gs_ec01.add_glazing_layer("products/CLEAR_3.DAT")
+gs_ec01.gaps = [((window.AIR, 0.1), (window.ARGON, 0.9), 0.0127)]
+gs_ec01.name = "ec01"
+
+gs_ec06 = window.GlazingSystem()
+gs_ec06.add_glazing_layer(
+    "products/igsdb_product_7407.json"
+)  # SageGlass® SR2.0_7mm lami int state 6%T
+gs_ec06.add_glazing_layer("products/CLEAR_3.DAT")
+gs_ec06.gaps = [((window.AIR, 0.1), (window.ARGON, 0.9), 0.0127)]
+gs_ec06.name = "ec06"
+
+gs_ec18 = window.GlazingSystem()
+gs_ec18.add_glazing_layer(
+    "products/igsdb_product_7404.json"
+)  # SageGlass® SR2.0_7mm lami int state 18%T
+gs_ec18.add_glazing_layer("products/CLEAR_3.DAT")
+gs_ec18.gaps = [((window.AIR, 0.1), (window.ARGON, 0.9), 0.0127)]
+gs_ec18.name = "ec18"
+
+gs_ec60 = window.GlazingSystem()
+gs_ec60.add_glazing_layer(
+    "products/igsdb_product_7406.json"
+)  # SageGlass® SR2.0_7mm lami full clear 60%T
+gs_ec60.add_glazing_layer("products/CLEAR_3.DAT")
+gs_ec60.gaps = [((window.AIR, 0.1), (window.ARGON, 0.9), 0.0127)]
+gs_ec60.name = "ec60"
+```
+
+
+```python
+gs_ec01.compute_solar_photopic_results()
+gs_ec06.compute_solar_photopic_results()
+gs_ec18.compute_solar_photopic_results()
+gs_ec60.compute_solar_photopic_results()
+
+```
+
+
+```python
+epmodel.add_cfs(gs_ec01)
+epmodel.add_cfs(gs_ec06)
+epmodel.add_cfs(gs_ec18)
+epmodel.add_cfs(gs_ec60)
+
+```
+### Define controller function for the EC states
+The elctrochromic glasses are controlled by time for the purpose of this demostration.
+
+```python
+def ec_controller(state):
+    shade_names = {
+        0: "ec01",
+        1: "ec06",
+        2: "ec18",
+        3: "ec60",
+    }
+
+    dt = ep.get_datetime()
+    # print(dt.month)
+   
+    ## control CFS construction
+    window_handle = ep.handles.window_actuators["Zn001:Wall001:Win001"]
+
+    #change the fenestration to shaded
+    if dt.hour >= 8 and dt.hour < 12:
+        _shades = 2
+    elif dt.hour > 12 and dt.hour < 17:
+        _shades = 1
+    elif dt.hour == 12:
+        _shades = 0
+    else:
+        _shades = 3
+
+    ep.actuate(
+        window_handle, ep.handles.complex_fenestration_state[shade_names[_shades]]
+    )
+```
+### Initialize pyenergyplus.api to simulate
+
+```python
+with eprad.EnergyPlusSetup(api, epmodel.epjs) as ep:
+    ep.set_callback("callback_begin_system_timestep_before_predictor", ec_controller)
+    ep.run(
+        weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
+        output_prefix="ec",
+    )
+```
+### Load and visualize results
+
+```python
+df = pd.read_csv(
+    "./ecout.csv",
+    index_col=0,
+    parse_dates=True,
+    date_parser=eprad.ep_datetime_parser,
+)
+df_0721 = df.loc["1900-07-21"]
+
+fig, ax = plt.subplots()
+ax.plot(
+    df_0721[
+        "ZN001:WALL001:WIN001:Surface Window Transmitted Solar Radiation Rate [W](TimeStep)"
+    ],
+    c="k",
+    linestyle="-",
+    label="ZN001:WALL001:WIN001",
+)
+ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+
+ax.axvspan(datetime.datetime.strptime("1900-07-21 8:00", "%Y-%m-%d %H:%M"), 
+(datetime.datetime.strptime("1900-07-21 12:00", "%Y-%m-%d %H:%M")), color="0.93")
+ax.axvspan(datetime.datetime.strptime("1900-07-21 13:00", "%Y-%m-%d %H:%M"), 
+(datetime.datetime.strptime("1900-07-21 17:00", "%Y-%m-%d %H:%M")), color="0.85")
+ax.axvspan(datetime.datetime.strptime("1900-07-21 12:00", "%Y-%m-%d %H:%M"), 
+(datetime.datetime.strptime("1900-07-21 13:00", "%Y-%m-%d %H:%M")), color="0.8")
+
+ax.annotate('EC60%',
+            xy=(datetime.datetime.strptime("1900-07-21 4:30", "%Y-%m-%d %H:%M"), 275),
+            ha='center', color="r")
+ax.annotate('18%',
+            xy=(datetime.datetime.strptime("1900-07-21 10:00", "%Y-%m-%d %H:%M"), 275),
+            ha='center', color="r")
+ax.annotate('6%',
+            xy=(datetime.datetime.strptime("1900-07-21 15:00", "%Y-%m-%d %H:%M"), 275),
+            ha='center', color="r")
+ax.annotate('1%',
+            xy=(datetime.datetime.strptime("1900-07-21 12:30", "%Y-%m-%d %H:%M"), 275),
+            ha='center', color="r")
+ax.annotate('60%',
+            xy=(datetime.datetime.strptime("1900-07-21 21:00", "%Y-%m-%d %H:%M"), 275),
+            ha='center', color="r")
+
+
+ax.set(xlabel="Time", ylabel="Window Transmitted Solar Radiation Rate [W]")
+plt.tight_layout()
+```
 
 
     
-![png](output_45_1.png)
+![png](/assets/output_56_0.png)
     
 
+
+
+```python
+
+```
