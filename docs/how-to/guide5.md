@@ -8,7 +8,7 @@ This notebook shows how to use EnergyPlusAPI to control the complex fenestration
 
 In order to run this notebook, you will need to install the following:
 
-* [energyplus](https://energyplus.net/) to simulate building energy.
+* [EnergyPlus](https://energyplus.net/) to simulate building energy.
 * [frads](https://github.com/LBNL-ETA/frads) to initialize EnergyPlus model, and to create cfs and daylighting dimming controls.
 
 Optional:
@@ -55,11 +55,10 @@ graph LR
     C <-->D
 ```
 
+
 ## Import required Python libraries
 
 ```python
-import datetime
-import json
 import os
 from pathlib import Path
 import sys 
@@ -68,7 +67,13 @@ from frads import epjson2rad, eprad, parsers, matrix, methods, sky, types, windo
 import pandas as pd
 ```
 
-Need to make sure EnergyPlus is in sys.path in order to load `pyenergyplus.api `
+!!! note
+    You'll need to install [EnergyPlus](https://www.energyplus.net) before proceeding.
+
+Importing EnergyPlus into Python is not so straightforward. You can run the following code
+to import EnergyPlusAPI if you had installed EnergyPlus in the default location for your
+operating system. If you had not installed EnergyPlus one of these location you'll need to 
+`append` the path to your `sys.path` before you can import EnergyPlusAPI. 
 
 ```python
 srcloc = {'win32': 'C:\\', 'darwin': '/Applications', 'linux': '/usr/local'}
