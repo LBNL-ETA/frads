@@ -399,7 +399,7 @@ plt.tight_layout()
 
 
     
-![png](/assets/output_46_0.png)
+![png](../../assets/output_46_0.png)
     
 
 
@@ -431,7 +431,7 @@ plt.tight_layout()
 
 
     
-![png](/assets/output_47_0.png)
+![png](../../assets/output_47_0.png)
     
 
 ### Check implementation
@@ -483,7 +483,7 @@ plt.tight_layout()
 
 
 
-![image](/assets/output_47_0.png)
+![image](../../assets/output_47_0.png)
     
 
 
@@ -638,7 +638,7 @@ plt.tight_layout()
 
 
     
-![png](/assets/output_56_0.png)
+![png](../../assets/output_56_0.png)
     
 
 
