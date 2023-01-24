@@ -566,7 +566,7 @@ class EPModel:
 
         # Add lighting output to the epjs dictionary
 
-        self.add_output("Lights Electricity Rate")
+        self.request_output("Lights Electricity Rate")
 
         mappings = {
             "ScheduleTypeLimits": schedule_type_limit,
