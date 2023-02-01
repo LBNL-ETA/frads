@@ -51,15 +51,26 @@ def load_epmodel(fpath: Path, api) -> dict:
     return EPModel(epjs)
 
 
+# class Handles:
+#     def __init__(self):
+#         self.environment = {}
+#         # self.outdoor_drybulb_temperature = None
+#         # self.direct_normal_irradiance = None
+#         # self.diffuse_horizontal_irradiance = None
+#         self.complex_fenestration_state = {}
+#         self.window_actuators = {}
+#         self.lights_electricity_energy = {}
+#         self.light_actuators = {}
+
+#     def get(self, name, key):
+#         return self.__dict__[name][key]
+
+
 class Handles:
     def __init__(self):
-        self.outdoor_drybulb_temperature = None
-        self.direct_normal_irradiance = None
-        self.diffuse_horizontal_irradiance = None
-        self.complex_fenestration_state = {}
-        self.window_actuators = {}
-        self.lights_electricity_energy = {}
-        self.light_actuators = {}
+        self.variable = {}
+        self.actuator = {}
+        self.construction = {}
 
 
 class EnergyPlusSetup:
@@ -68,9 +79,10 @@ class EnergyPlusSetup:
         self.epjs = epjs
         self.state = self.api.state_manager.new_state()
         self.handles = Handles()
-        self.window_surfaces = self.epjs["FenestrationSurface:Detailed"]
+        # self.handles = {'varibale': {}, 'actuator': {}, 'construction': {}}
+        # self.window_surfaces = self.epjs["FenestrationSurface:Detailed"]
 
-        self.request_variable()
+        # self.request_variable()
 
         self.api.runtime.callback_begin_new_environment(self.state, self.get_handles())
 
@@ -80,85 +92,142 @@ class EnergyPlusSetup:
     def __exit__(self, exc_type, exc_value, exc_tb):
         self.api.state_manager.delete_state(self.state)
 
-    def actuate(self, obj, value):
-        self.api.exchange.set_actuator_value(self.state, obj, value)
+    # def actuate(self, obj, value):
+    # self.api.exchange.set_actuator_value(self.state, obj, value)
 
-    def get_variable_value(self, handle):
-        return self.api.exchange.get_variable_value(self.state, handle)
-
-    def get_variable_handle(self, variable_name, variable_key):
-        return self.api.exchange.get_variable_handle(
-            self.state, variable_name, variable_key
+    def actuate(self, actuator_key, value):
+        self.api.exchange.set_actuator_value(
+            self.state, self.handles.actuator[actuator_key], value
         )
 
-    def request_variable(self):
-        self.api.exchange.request_variable(
-            self.state,
-            "Site Outdoor Air Drybulb Temperature".encode(),
-            "Environment".encode(),
-        )
-        self.api.exchange.request_variable(
-            self.state,
-            "Site Direct Solar Radiation Rate per Area".encode(),
-            "Environment".encode(),
-        )
-        self.api.exchange.request_variable(
-            self.state,
-            "Site Diffuse Solar Radiation Rate per Area".encode(),
-            "Environment".encode(),
+    # def get_variable_value(self, handle):
+    # return self.api.exchange.get_variable_value(self.state, handle)
+
+    def get_variable_value(self, name: str, key: str):
+        return self.api.exchange.get_variable_value(
+            self.state, self.handles.variable[key][name]
         )
 
-        if "Lights" in self.epjs:
-            self.lights = self.epjs["Lights"]
-            for light in self.lights:
-                self.api.exchange.request_variable(
-                    self.state, "Lights Total Heating Rate".encode(), light.encode()
-                )
+    # def get_variable_handle(self, variable_name, variable_key):
+    #     return self.api.exchange.get_variable_handle(
+    #         self.state, variable_name, variable_key
+    #     )
+
+    # def request_variable(self):
+    #     self.api.exchange.request_variable(
+    #         self.state,
+    #         "Site Outdoor Air Drybulb Temperature".encode(),
+    #         "Environment".encode(),
+    #     )
+    #     self.api.exchange.request_variable(
+    #         self.state,
+    #         "Site Direct Solar Radiation Rate per Area".encode(),
+    #         "Environment".encode(),
+    #     )
+    #     self.api.exchange.request_variable(
+    #         self.state,
+    #         "Site Diffuse Solar Radiation Rate per Area".encode(),
+    #         "Environment".encode(),
+    #     )
+
+    #     if "Lights" in self.epjs:
+    #         self.lights = self.epjs["Lights"]
+    #         for light in self.lights:
+    #             self.api.exchange.request_variable(
+    #                 self.state, "Lights Total Heating Rate".encode(), light.encode()
+    #             )
+
+    def request_variable(self, name: str, key: str):
+        self.api.exchange.request_variable(self.state, name, key)
+        # check key exists
+        if key not in self.handles.variable:
+            self.handles.variable[key] = {}
+        self.handles.variable[key][name] = None
+        # self.handles['ZONE ONE']['ZONE HUMIDITY'] = None
 
     def get_handles(self):
         def callback_function(state):
-            self.handles.outdoor_drybulb_temperature = (
-                self.api.exchange.get_variable_handle(
-                    state, "Site Outdoor Air Drybulb Temperature", "Environment"
-                )
-            )
-            self.handles.direct_normal_irradiance = (
-                self.api.exchange.get_variable_handle(
-                    state, "Site Direct Solar Radiation Rate per Area", "Environment"
-                )
-            )
-            self.handles.diffuse_horizontal_irradiance = (
-                self.api.exchange.get_variable_handle(
-                    state, "Site Diffuse Solar Radiation Rate per Area", "Environment"
-                )
-            )
-            construction_complex_fenestration_state = self.epjs[
-                "Construction:ComplexFenestrationState"
-            ]
 
-            for cfs in construction_complex_fenestration_state:
-                self.handles.complex_fenestration_state[
-                    cfs
-                ] = self.api.api.getConstructionHandle(state, cfs.encode())
-            for window in self.window_surfaces:
-                self.handles.window_actuators[
-                    window
-                ] = self.api.exchange.get_actuator_handle(
-                    state, "Surface", "Construction State", window.encode()
-                )
+            # self.handles.outdoor_drybulb_temperature = (
+            #     self.api.exchange.get_variable_handle(
+            #         state, "Site Outdoor Air Drybulb Temperature", "Environment"
+            #     )
+            # )
+            # self.handles.direct_normal_irradiance = (
+            #     self.api.exchange.get_variable_handle(
+            #         state, "Site Direct Solar Radiation Rate per Area", "Environment"
+            #     )
+            # )
+            # self.handles.diffuse_horizontal_irradiance = (
+            #     self.api.exchange.get_variable_handle(
+            #         state, "Site Diffuse Solar Radiation Rate per Area", "Environment"
+            #     )
+            # )
+            # construction_complex_fenestration_state = self.epjs[
+            #     "Construction:ComplexFenestrationState"
+            # ]
 
-            if "Lights" in self.epjs:
-                for light in self.lights:
-                    self.handles.lights_electricity_energy[
-                        light
-                    ] = self.api.exchange.get_variable_handle(
-                        state, "Lights Electricity Energy", light.encode()
-                    )
-                    self.handles.light_actuators[
-                        light
-                    ] = self.api.exchange.get_actuator_handle(
-                        state, "Lights", "Electricity Rate", light.encode()
-                    )
+            # for cfs in construction_complex_fenestration_state:
+            #     self.handles.complex_fenestration_state[
+            #         cfs
+            #     ] = self.api.api.getConstructionHandle(state, cfs.encode())
+            for key in self.handles.variable:
+                for name in self.handles.variable[key]:
+                    handle = self.api.exchange.get_variable_handle(state, name, key)
+                    if handle == -1:
+                        raise ValueError("Variable handle not found", name, key)
+                    self.handles.variable[key][name] = handle
+
+            for cfs in self.epjs["Construction:ComplexFenestrationState"]:
+                handle = self.api.api.getConstructionHandle(state, cfs.encode())
+                if handle == -1:
+                    raise ValueError("Construction handle not found", cfs)
+                self.handles.construction[cfs] = handle
+
+            for window in self.epjs["FenestrationSurface:Detailed"]:
+                handle = self.api.exchange.get_actuator_handle(
+                    state, "Surface", "Construction State", window
+                )
+                if handle == -1:
+                    raise ValueError("Window actuator not found", window)
+                self.handles.actuator[window] = handle
+
+            for light in self.epjs.get("Lights", []):
+                act_handle = self.api.exchange.get_actuator_handle(
+                    state, "Lights", "Electricity Rate", light
+                )
+                if act_handle == -1:
+                    raise ValueError("Light actuator not found", light)
+                self.handles.actuator[light] = act_handle
+
+                var_handle = self.api.exchange.get_variable_handle(
+                    state, "Lights Electricity Energy", light
+                )
+                if var_handle == -1:
+                    raise ValueError("Light variable not found", light)
+                self.handles.variable[light] = var_handle
+
+            # for window in self.window_surfaces:
+            #     self.handles.window_actuators[
+            #         window
+            #     ] = self.api.exchange.get_actuator_handle(
+            #         state, "Surface", "Construction State", window.encode()
+            #     )
+
+            # if "Lights" in self.epjs:
+            #     for light in self.lights:
+            #         self.handles.lights_electricity_energy[
+            #             light
+            #         ] = self.api.exchange.get_variable_handle(
+            #             state, "Lights Electricity Energy", light.encode()
+            #         )
+            #         self.handles.light_actuators[
+            #             light
+            #         ] = self.api.exchange.get_actuator_handle(
+            #             state, "Lights", "Electricity Rate", light.encode()
+            #         )
+
+            print(self.handles.actuator)
 
         return callback_function
 
