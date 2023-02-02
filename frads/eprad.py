@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from frads import matrix, sky, types
+from frads import sky
 
 
 def ep_datetime_parser(inp):
@@ -83,6 +83,15 @@ class EnergyPlusSetup:
         # self.window_surfaces = self.epjs["FenestrationSurface:Detailed"]
 
         # self.request_variable()
+        loc = list(self.epjs["Site:Location"].values())[0]
+        self.wea_meta = sky.WeaMetaData(
+            city="",
+            country="",
+            elevation=loc["elevation"],
+            latitude=loc["latitude"],
+            longitude=0 - loc["longitude"],
+            timezone=(0 - loc["time_zone"]) * 15,
+        )
 
         self.api.runtime.callback_begin_new_environment(self.state, self.get_handles())
 

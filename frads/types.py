@@ -9,14 +9,8 @@ import datetime
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
-from typing import Dict
-from typing import Iterable
-from typing import List
-from typing import NamedTuple
-from typing import Optional
-from typing import Sequence
-from typing import Tuple
-from typing import Union
+from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
+
 
 from frads.geom import Polygon, Vector
 
@@ -165,67 +159,6 @@ class PaneRGB(NamedTuple):
     trans_rgb: Iterable[float]
 
 
-class WeaMetaData(NamedTuple):
-    """Weather related meta data object.
-
-    Attributes:
-        city: City.
-        country: Country.
-        latitude: Latitude.
-        longitude: Longitude.
-        timezone: Timezone as standard meridian.
-        elevation: Site elevation (m).
-    """
-
-    city: str
-    country: str
-    latitude: float
-    longitude: float
-    timezone: int
-    elevation: float
-
-    def wea_header(self) -> str:
-        """Return a .wea format header."""
-        return (
-            f"place {self.city}_{self.country}\n"
-            f"latitude {self.latitude}\n"
-            f"longitude {self.longitude}\n"
-            f"time_zone {self.timezone}\n"
-            f"site_elevation {self.elevation}\n"
-            "weather_data_file_units 1\n"
-        )
-
-
-class WeaData(NamedTuple):
-    """Weather related data object.
-
-    Attributes:
-        month: Month.
-        day: Day.
-        hour: Hour.
-        minute: Minutes.
-        second: Seconds.
-        hours: Times with minutes as fraction.
-        dni: Direct normal irradiance (W/m2).
-        dhi: Diffuse horizontal irradiance (W/m2).
-        aod: Aeroal Optical Depth (default = 0).
-        cc: Cloud cover (default = 0).
-        year: default = 2000.
-    """
-
-    time: datetime.datetime
-    dni: float
-    dhi: float
-    aod: float = 0
-    cc: float = 0
-
-    def __str__(self) -> str:
-        return f"{self.time.month} {self.time.day} {self.time.hour+self.time.minute/60} {self.dni} {self.dhi}"
-
-    def dt_str(self) -> str:
-        return f"{self.time.month:02d}{self.time.day:02d}_{self.time.hour:02d}{self.time.minute:02d}"
-
-
 class MradModel(NamedTuple):
     """Mrad model object.
     Attributes:
@@ -255,7 +188,6 @@ class MradModel(NamedTuple):
     cfs_paths: list
     ncp_shades: dict
     black_env_path: Path
-
 
 
 @dataclass

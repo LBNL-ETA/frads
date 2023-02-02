@@ -8,25 +8,77 @@ import math
 import os
 from pathlib import Path
 import subprocess as sp
-from typing import Any
-from typing import List
-from typing import Optional
-from typing import Sequence
-from typing import Tuple
-from typing import Union
+from typing import Any, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import pyradiance as pr
 
-from frads import geom
-from frads import parsers
-from frads.types import WeaMetaData
-from frads.types import WeaData
-from frads import utils
+from frads import geom, parsers, utils
 
 logger: logging.Logger = logging.getLogger("frads.sky")
 
 # Solar disk solid angle (sr)
 SOLAR_SA = 6.7967e-5
+
+
+class WeaMetaData(NamedTuple):
+    """Weather related meta data object.
+
+    Attributes:
+        city: City.
+        country: Country.
+        latitude: Latitude.
+        longitude: Longitude.
+        timezone: Timezone as standard meridian.
+        elevation: Site elevation (m).
+    """
+
+    city: str
+    country: str
+    latitude: float
+    longitude: float
+    timezone: int
+    elevation: float
+
+    def wea_header(self) -> str:
+        """Return a .wea format header."""
+        return (
+            f"place {self.city}_{self.country}\n"
+            f"latitude {self.latitude}\n"
+            f"longitude {self.longitude}\n"
+            f"time_zone {self.timezone}\n"
+            f"site_elevation {self.elevation}\n"
+            "weather_data_file_units 1\n"
+        )
+
+
+class WeaData(NamedTuple):
+    """Weather related data object.
+
+    Attributes:
+        month: Month.
+        day: Day.
+        hour: Hour.
+        minute: Minutes.
+        second: Seconds.
+        hours: Times with minutes as fraction.
+        dni: Direct normal irradiance (W/m2).
+        dhi: Diffuse horizontal irradiance (W/m2).
+        aod: Aeroal Optical Depth (default = 0).
+        cc: Cloud cover (default = 0).
+        year: default = 2000.
+    """
+
+    time: datetime.datetime
+    dni: float
+    dhi: float
+    aod: float = 0
+    cc: float = 0
+
+    def __str__(self) -> str:
+        return f"{self.time.month} {self.time.day} {self.time.hour+self.time.minute/60} {self.dni} {self.dhi}"
+
+    def dt_str(self) -> str:
+        return f"{self.time.month:02d}{self.time.day:02d}_{self.time.hour:02d}{self.time.minute:02d}"
 
 
 def basis_glow(sky_basis: str) -> str:
@@ -208,25 +260,36 @@ def genskymtx(
     if wpath is None:
         if data is not None and meta is not None:
             inp = gen_wea(
-                [d.time for d in data], 
+                [d.time for d in data],
                 [d.dni for d in data],
-                [d.dhi for d in data], 
+                [d.dhi for d in data],
                 meta.latitude,
                 meta.longitude,
                 meta.timezone,
                 elevation=meta.elevation,
-                location=meta.city+meta.country
+                location=meta.city + meta.country,
             ).encode()
         else:
             raise ValueError("Either a .wea path or wea data is required.")
     else:
         inp = wpath
-    return pr.gendaymtx(inp, header=header, average=average, sun_only=sun_only, sky_only=sky_only, 
-                        solar_radiance=solar_radiance, sun_file=sun_file, sun_mods=sun_mods, 
-                        daylight_hours_only=daylight_hours_only, sky_color=sky_color, 
-                        ground_color=ground_color, rotate=rotate, outform=outform,
-                        onesun=onesun, mfactor=mfactor)
-
+    return pr.gendaymtx(
+        inp,
+        header=header,
+        average=average,
+        sun_only=sun_only,
+        sky_only=sky_only,
+        solar_radiance=solar_radiance,
+        sun_file=sun_file,
+        sun_mods=sun_mods,
+        daylight_hours_only=daylight_hours_only,
+        sky_color=sky_color,
+        ground_color=ground_color,
+        rotate=rotate,
+        outform=outform,
+        onesun=onesun,
+        mfactor=mfactor,
+    )
 
     # stdin = None
     # cmd = ["gendaymtx", "-m", str(mf)]
