@@ -53,10 +53,11 @@ import shutil
 
 from .epjson2rad import epjson2rad
 
-from .eprad import load_epmodel, EnergyPlusSetup
+from .eprad import load_epmodel, EnergyPlusSetup, ep_datetime_parser
 
 from .matrix import (
     load_matrix,
+    multiply_rgb,
     rfluxmtx,
     surface_as_sender,
     points_as_sender,
@@ -71,22 +72,28 @@ from .parsers import (
     parse_epw,
     parse_wea,
     parse_polygon,
+    parse_mrad_config,
 )
 
+from .methods import assemble_model, three_phase
 
-from .sky import basis_glow, gen_perez_sky
+from .sky import (
+    basis_glow,
+    gen_perez_sky,
+    genskymtx,
+    WeaData,
+    WeaMetaData,
+)
 
 from .types import (
     Primitive,
     View,
-    WeaData,
-    WeaMetaData,
 )
 
 
 from .utils import gen_grid, unpack_primitives
 
-from .window import GlazingSystem
+from .window import GlazingSystem, AIR, ARGON, KRYPTON, XENON
 
 __version__ = "0.2.8"
 
@@ -111,17 +118,24 @@ for prog in rad_progs:
 
 
 __all__ = [
+    "AIR",
+    "ARGON",
+    "assemble_model",
     "basis_glow",
-    "epjson2rad",
     "EnergyPlusSetup",
+    "ep_datetime_parser",
+    "epjson2rad",
     "GlazingSystem",
     "gen_perez_sky",
     "gen_grid",
+    "genskymtx",
+    "KRYPTON",
     "load_epmodel",
     "load_matrix",
+    "multiply_rgb",
     "parse_primitive",
     "parse_epw",
-    "parse_wea",
+    "parse_mrad_config" "parse_wea",
     "parse_polygon",
     "Primitive",
     "points_as_sender",
@@ -130,9 +144,11 @@ __all__ = [
     "surface_as_receiver",
     "sun_as_receiver",
     "surface_as_sender",
+    "three_phase",
     "unpack_primitives",
     "View",
     "view_as_sender",
     "WeaData",
     "WeaMetaData",
+    "XENON",
 ]
