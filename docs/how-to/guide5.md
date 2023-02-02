@@ -1,6 +1,9 @@
 # How to model dynamic shading control and daylight dimming with EnergyPlus?
 
-This notebook shows how to use EnergyPlusAPI to switch the complex fenestration system (CFS) construction state based on time and implement daylight dimming based on the workplane illuminance.
+This notebook shows how to use EnergyPlusAPI to 
+
+* switch the complex fenestration system (CFS) construction state based on time or direct normal irradiance
+* implement daylight dimming based on the workplane illuminance
 
 ## Prerequisites
 
@@ -70,8 +73,9 @@ import frads as fr
 import pandas as pd
 ```
 
-**NOTE:**
+!!! note 
     You'll need to install [EnergyPlus](https://www.energyplus.net) before proceeding.
+
 
 Importing EnergyPlus into Python is not so straightforward. You can run the following code
 to import EnergyPlusAPI if you had installed EnergyPlus in the default location for your
@@ -118,19 +122,12 @@ gs_unshaded = fr.GlazingSystem()
 gs_unshaded.add_glazing_layer("products/CLEAR_6.DAT")
 ```
 
-This is how you get the name of the glazing system.
+!!! note annotate "This is how you get the name of the glazing system."
 
-
-```python
-gs_unshaded.name
-```
-
-
-
-
-    'Generic Clear Glass'
-
-
+    ```
+    >>> gs_unshaded.name
+     'Generic Clear Glass'
+    ```
 
 Create a shaded glazing system, consisting of one layer of 6 mm clear glass and one layer of shading: 2011-SA1.
 
@@ -140,18 +137,6 @@ gs_shaded = fr.GlazingSystem()
 gs_shaded.add_glazing_layer("products/CLEAR_6.DAT")
 gs_shaded.add_shading_layer("products/2011-SA1.XML")
 ```
-
-
-```python
-gs_shaded.name
-```
-
-
-
-
-    'Generic Clear Glass_Satine 5500 5%, White Pearl'
-
-
 
 After adding glazing and shading layers to the glazing system, compute solar and the solar and photopic results using `compute_solar_photopic_results`. Need to re-compute each time when the glazing system layering composition changes.
 
@@ -179,79 +164,36 @@ Call `add_lighting`to add a lighting object for each of the zones in the buildin
 ```python
 epmodel.add_lighting()
 ```
+!!! note annotate "This is a list of attributes of the Lighting class."
 
-This is a list of attributes of the EPModel class
-
-
-```python
-epmodel.windows
-```
-
-
-
-
+    ```
+    >>> epmodel.windows
     ['Zn001:Wall001:Win001']
+    ```
 
-
-
-```python
-epmodel.walls_window
-
-```
-
-
-
-
+    ```
+    >>> epmodel.walls_window
     ['Zn001:Wall001']
+    ```
 
-
-
-
-```python
-epmodel.floors
-
-```
-
-
-
-
+    ```
+    >>> epmodel.floors
     ['Zn001:Flr001']
+    ```
 
-
-
-
-```python
-epmodel.cfs
-```
-
-
-
-
+    ```
+    >>> epmodel.cfs
     ['Generic Clear Glass', 'Generic Clear Glass_Satine 5500 5%, White Pearl']
+    ```
 
-
-
-
-```python
-epmodel.lighting_zone
-```
-
-
-
-
+    ```
+    >>> epmodel.lighting_zone
     ['Light_ZONE ONE']
-
-
-
-
-```python
-epmodel.zones
-```
-
-
-
-
+    ```
+    ```
+    >>> epmodel.zones
     ['ZONE ONE']
+    ```
 
 ### Initialize a Radiance model
 Create a Radiance model by calling `epjson2rad`and passing in an epjs and epw file. The epjs file can be accessed by calling `epmodel.epjs`.`epjson2rad` creates an `Objects`directory for material and geometry primitives and a `Resources`directory for transmission matrices (xml files). The `epjson2rad`function also generates a `config`file, which contains information about simulation controls setting, site, model, and raysender. 
@@ -567,7 +509,7 @@ gs_ec01.name = "ec01"
 gs_ec06 = fr.GlazingSystem()
 gs_ec06.add_glazing_layer(
     "products/igsdb_product_7407.json"
-)  # SageGlass® SR2.0_7mm lami int state 6%T
+)  # SageGlass SR2.0_7mm lami int state 6%T
 gs_ec06.add_glazing_layer("products/CLEAR_3.DAT")
 gs_ec06.gaps = [((fr.AIR, 0.1), (fr.ARGON, 0.9), 0.0127)]
 gs_ec06.name = "ec06"
@@ -575,7 +517,7 @@ gs_ec06.name = "ec06"
 gs_ec18 = fr.GlazingSystem()
 gs_ec18.add_glazing_layer(
     "products/igsdb_product_7404.json"
-)  # SageGlass® SR2.0_7mm lami int state 18%T
+)  # SageGlass SR2.0_7mm lami int state 18%T
 gs_ec18.add_glazing_layer("products/CLEAR_3.DAT")
 gs_ec18.gaps = [((fr.AIR, 0.1), (fr.ARGON, 0.9), 0.0127)]
 gs_ec18.name = "ec18"
@@ -583,7 +525,7 @@ gs_ec18.name = "ec18"
 gs_ec60 = fr.GlazingSystem()
 gs_ec60.add_glazing_layer(
     "products/igsdb_product_7406.json"
-)  # SageGlass® SR2.0_7mm lami full clear 60%T
+)  # SageGlass SR2.0_7mm lami full clear 60%T
 gs_ec60.add_glazing_layer("products/CLEAR_3.DAT")
 gs_ec60.gaps = [((fr.AIR, 0.1), (fr.ARGON, 0.9), 0.0127)]
 gs_ec60.name = "ec60"
