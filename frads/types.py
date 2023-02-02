@@ -5,7 +5,6 @@ The exceptions are the Vector and Polygon class in the geom.py module.
 
 """
 
-import datetime
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path

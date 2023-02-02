@@ -11,16 +11,19 @@ from typing import Dict, List
 import pyradiance as pr
 
 from frads import geom, utils, bsdf
-from frads.types import Primitive
-from frads.bsdf import BSDFData
-from frads.bsdf import RadMatrix
-from frads.types import EPlusWindowGas
-from frads.types import EPlusOpaqueMaterial
-from frads.types import EPlusWindowMaterial, EPlusWindowMaterialComplexShade
-from frads.types import EPlusConstruction
-from frads.types import EPlusOpaqueSurface
-from frads.types import EPlusFenestration
-from frads.types import EPlusZone
+from frads.types import 
+from frads.bsdf import BSDFData, RadMatrix
+from frads.types import (
+    EPlusWindowGas,
+    EPlusOpaqueMaterial,
+    EPlusWindowMaterial,
+    EPlusWindowMaterialComplexShade,
+    EPlusConstruction,
+    EPlusOpaqueSurface,
+    EPlusFenestration,
+    EPlusZone, Primitive
+)
+
 
 logger: logging.Logger = logging.getLogger("frads.epjson2rad")
 

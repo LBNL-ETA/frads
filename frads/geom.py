@@ -7,11 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Union
-from typing import List
-from typing import Tuple
-from typing import Sequence
-from typing import Iterable
+from typing import Union, List, Tuple, Sequence, Iterable
 
 
 @dataclass(frozen=True)

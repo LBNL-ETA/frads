@@ -8,15 +8,10 @@ from pathlib import Path
 import random
 import string
 import subprocess as sp
-from typing import Any, Dict, Optional, List
-from typing import Set
-from typing import Tuple
-from typing import Union
+from typing import Any, Dict, Optional, List, Set, Tuple, Union
 
-from frads import geom
-from frads import parsers
-from frads.types import Primitive
-from frads.types import PaneRGB
+from frads import geom, parsers
+from frads.types import PaneRGB, Primitive
 
 
 logger: logging.Logger = logging.getLogger("frads.utils")
