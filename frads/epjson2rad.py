@@ -11,7 +11,6 @@ from typing import Dict, List
 import pyradiance as pr
 
 from frads import geom, utils, bsdf
-from frads.types import 
 from frads.bsdf import BSDFData, RadMatrix
 from frads.types import (
     EPlusWindowGas,
@@ -21,7 +20,8 @@ from frads.types import (
     EPlusConstruction,
     EPlusOpaqueSurface,
     EPlusFenestration,
-    EPlusZone, Primitive
+    EPlusZone,
+    Primitive,
 )
 
 

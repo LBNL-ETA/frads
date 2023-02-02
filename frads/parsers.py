@@ -19,8 +19,8 @@ from frads import geom
 from frads.types import Primitive
 from frads.types import PaneProperty
 from frads.types import View
-from frads.types import WeaMetaData
-from frads.types import WeaData
+from frads.sky import WeaMetaData
+from frads.sky import WeaData
 
 
 def parse_mrad_config(cfg_path: Path) -> configparser.ConfigParser:

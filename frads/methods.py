@@ -10,20 +10,14 @@ from pathlib import Path
 import shutil
 import subprocess as sp
 import tempfile as tf
-from typing import Dict, List, Generator, Optional, Sequence, Tuple 
+from typing import Dict, List, Generator, Optional, Sequence, Tuple
 
 from frads import geom, sky, matrix
 from frads import mtxmult, parsers, utils
+
 # from frads import raycall
-from frads.types import Options
-from frads.types import Primitive
-from frads.types import Receiver
-from frads.types import Sender
-from frads.types import MradModel
-from frads.types import MradPath
-from frads.types import View
-from frads.types import WeaMetaData
-from frads.types import WeaData
+from frads.types import (Options, Primitive, Receiver, Sender, MradModel, MradPath, View)
+from frads.sky import WeaMetaData, WeaData
 
 import pyradiance as pr
 
@@ -168,7 +162,7 @@ def assemble_model(config: ConfigParser) -> Generator:
             wtr.write(str(primitive) + "\n")
     # Get window groups
     window_groups, window_normals = get_window_group(
-        config["Model"].getpaths("windows", []), 
+        config["Model"].getpaths("windows", []),
     )
     # Get BSDFs
     bsdf_mat = {
@@ -413,7 +407,14 @@ def blacken_env(model: MradModel, config: ConfigParser) -> Tuple[str, str]:
     #     frozen=True,
     # )
     with open(vmap_oct, "wb") as wtr:
-        wtr.write(pr.oconv(str(model.material_path), *[str(s) for s in config["Model"].getpaths("scene")], gwindow_path, frozen=True))
+        wtr.write(
+            pr.oconv(
+                str(model.material_path),
+                *[str(s) for s in config["Model"].getpaths("scene")],
+                gwindow_path,
+                frozen=True,
+            )
+        )
     logger.info("Generating view matrix material map octree")
     # raycall.oconv(
     #     str(model.material_path),
@@ -423,7 +424,14 @@ def blacken_env(model: MradModel, config: ConfigParser) -> Tuple[str, str]:
     #     frozen=True,
     # )
     with open(cdmap_oct, "wb") as wtr:
-        wtr.write(pr.oconv(str(model.material_path), *[str(s) for s in config["Model"].getpaths("scene")], bwindow_path, frozen=True))
+        wtr.write(
+            pr.oconv(
+                str(model.material_path),
+                *[str(s) for s in config["Model"].getpaths("scene")],
+                bwindow_path,
+                frozen=True,
+            )
+        )
     logger.info("Generating direct-sun matrix material map octree")
     os.remove(bwindow_path)
     os.remove(gwindow_path)
@@ -507,7 +515,7 @@ def direct_sun_matrix_vu(
         # utils.run_write(cmd, mpath.vmap[view])
         # cmd[-1] = cdmap_oct
         # logger.info(
-            # "Generating direct-sun matrix material map with: \n %s", " ".join(cmd)
+        # "Generating direct-sun matrix material map with: \n %s", " ".join(cmd)
         # )
         # utils.run_write(cmd, mpath.cdmap[view])
         with open(mpath.cdmap[view], "wb") as wtr:
@@ -854,9 +862,14 @@ def two_phase(model: MradModel, config: ConfigParser) -> MradPath:
     )
     if regen(mpath.smx, config):
         with open(mpath.smx, "wb") as wtr:
-            wtr.write(sky.genskymtx(
-                mfactor=int(config["SimControl"]["smx_basis"][-1]), 
-                data=wea_data, meta=wea_meta, rotate=config["Site"].getfloat("orientation")))
+            wtr.write(
+                sky.genskymtx(
+                    mfactor=int(config["SimControl"]["smx_basis"][-1]),
+                    data=wea_data,
+                    meta=wea_meta,
+                    rotate=config["Site"].getfloat("orientation"),
+                )
+            )
     prep_2phase_pt(mpath, model, config)
     prep_2phase_vu(mpath, model, config)
     if not config.getboolean("SimControl", "no_multiply", fallback=False):
@@ -881,13 +894,15 @@ def three_phase(
         end_hour=config.getfloat("Site", "end_hour"),
     )
     if regen(mpath.smx, config):
-        with open(mpath.smx, 'wb') as wtr:
-            wtr.write(sky.genskymtx(
-                mfactor=int(config["SimControl"]["smx_basis"][-1]),
-                data=wea_data,
-                meta=wea_meta,
-                rotate=config["Site"].getfloat("orientation"),
-            ))
+        with open(mpath.smx, "wb") as wtr:
+            wtr.write(
+                sky.genskymtx(
+                    mfactor=int(config["SimControl"]["smx_basis"][-1]),
+                    data=wea_data,
+                    meta=wea_meta,
+                    rotate=config["Site"].getfloat("orientation"),
+                )
+            )
     view_matrix_pt(mpath, model, config)
     view_matrix_vu(mpath, model, config)
     daylight_matrix(mpath, model, config)
@@ -895,7 +910,8 @@ def three_phase(
         if not (orientation := config["Site"].getfloat("orientation")) in (None, 0):
             rotate_radians = math.radians(orientation)
             rotated_window_normals = [
-                n.rotate_3d(geom.Vector(0, 0, 1), rotate_radians) for n in model.window_normals
+                n.rotate_3d(geom.Vector(0, 0, 1), rotate_radians)
+                for n in model.window_normals
             ]
         wea_data_d6, datetime_stamps_d6 = sky.filter_wea(
             wea_data,
@@ -904,36 +920,44 @@ def three_phase(
             start_hour=0,
             end_hour=0,
             remove_zero=True,
-            window_normals=rotated_window_normals if orientation else model.window_normals,
+            window_normals=rotated_window_normals
+            if orientation
+            else model.window_normals,
         )
         mpath.smxd = Path("Matrices") / (wea_name + "_d.smx")
-        with open(mpath.smxd, 'wb') as wtr:
-            wtr.write(sky.genskymtx(
-                mfactor=int(config["SimControl"]["smx_basis"][-1]),
-                data=wea_data,
-                meta=wea_meta,
-                sun_only=True,
-            ))
+        with open(mpath.smxd, "wb") as wtr:
+            wtr.write(
+                sky.genskymtx(
+                    mfactor=int(config["SimControl"]["smx_basis"][-1]),
+                    data=wea_data,
+                    meta=wea_meta,
+                    sun_only=True,
+                )
+            )
         mpath.smx_sun_img = Path("Matrices") / (wea_name + "_d6_img.smx")
-        with open(mpath.smx_sun_img, 'wb') as wtr:
-            wtr.write(sky.genskymtx(
-                mfactor=int(config["SimControl"]["cdsmx_basis"][-1]),
-                data=wea_data_d6,
-                meta=wea_meta,
-                rotate=config["Site"].getfloat("orientation"),
-                onesun=True,
-                sun_only=True,
-            ))
+        with open(mpath.smx_sun_img, "wb") as wtr:
+            wtr.write(
+                sky.genskymtx(
+                    mfactor=int(config["SimControl"]["cdsmx_basis"][-1]),
+                    data=wea_data_d6,
+                    meta=wea_meta,
+                    rotate=config["Site"].getfloat("orientation"),
+                    onesun=True,
+                    sun_only=True,
+                )
+            )
         mpath.smx_sun = Path("Matrices") / (wea_name + "_d6.smx")
-        with open(mpath.smx_sun, 'wb') as wtr:
-            wtr.write(sky.genskymtx(
-                mfactor=int(config["SimControl"]["cdsmx_basis"][-1]),
-                data=wea_data,
-                meta=wea_meta,
-                rotate=config["Site"].getfloat("orientation"),
-                onesun=True,
-                sun_only=True,
-            ))
+        with open(mpath.smx_sun, "wb") as wtr:
+            wtr.write(
+                sky.genskymtx(
+                    mfactor=int(config["SimControl"]["cdsmx_basis"][-1]),
+                    data=wea_data,
+                    meta=wea_meta,
+                    rotate=config["Site"].getfloat("orientation"),
+                    onesun=True,
+                    sun_only=True,
+                )
+            )
         vmap_oct, cdmap_oct = blacken_env(model, config)
         direct_sun_matrix_pt(mpath, model, config)
         if len(datetime_stamps_d6) > 0:
