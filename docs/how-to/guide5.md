@@ -2,8 +2,8 @@
 
 This notebook shows how to use EnergyPlusAPI to 
 
-* switch the complex fenestration system (CFS) construction state based on time or direct normal irradiance
-* implement daylight dimming based on the workplane illuminance
+* switch the complex fenestration system (CFS) construction state based on time ([Example 1](#example-1-shading-control-and-daylight-dimming)) or direct normal irradiance ([Example 2](#example-2-electrochromic-glass-with-4-tinted-states))
+* implement daylight dimming based on the workplane illuminance ([Example 1](#example-1-shading-control-and-daylight-dimming))
 
 ## Prerequisites
 
@@ -246,6 +246,8 @@ def controller(state):
     }
 
     dt = ep.get_datetime()
+
+    # get variable value that is requested before the simulation run and the callback function is called
     direct_normal_irradiance = ep.get_variable_value(
         name="Site Direct Solar Radiation Rate per Area", key="Environment"
     )
@@ -306,7 +308,7 @@ Refer to [Application Guide for EMS](https://energyplus.net/assets/nrel_custom/p
 
 ```python
 with fr.EnergyPlusSetup(api, epmodel.epjs) as ep:
-        ep.request_variable(
+    ep.request_variable(
         name="Site Direct Solar Radiation Rate per Area", key="Environment"
     )
     ep.request_variable(
@@ -561,8 +563,13 @@ def ec_controller(state):
     }
 
     dt = ep.get_datetime()
-   
+
     ## control CFS construction based on dni
+    # get variable value that is requested before the simulation run and the callback function is called
+    dni = ep.get_variable_value(
+        name="Site Direct Solar Radiation Rate per Area", key="Environment"
+    )
+
     if dni >= 800:
         _shades = 0
     elif dni < 800 and dni >= 600:
