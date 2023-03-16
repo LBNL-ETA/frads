@@ -10,13 +10,13 @@ from pathlib import Path
 import shutil
 import subprocess as sp
 import tempfile as tf
-from typing import Dict, List, Generator, Optional, Sequence, Tuple
+from typing import Dict, List, Generator, Sequence, Tuple
 
 from frads import geom, sky, matrix
 from frads import mtxmult, parsers, utils
 
 # from frads import raycall
-from frads.types import (Options, Primitive, Receiver, Sender, MradModel, MradPath, View)
+from frads.types import (Primitive, Receiver, Sender, MradModel, MradPath, View)
 from frads.sky import WeaMetaData, WeaData
 
 import pyradiance as pr
@@ -91,26 +91,32 @@ def get_wea_data(config: ConfigParser) -> Tuple[WeaMetaData, List[WeaData], str]
 def get_sender_grid(config: ConfigParser) -> Dict[str, Sender]:
     """Get point grid as ray senders."""
     sender_grid: Dict[str, Sender] = {}
-    if (grid_paths := config["RaySender"].getpaths("grid_surface")) is None:
-        return sender_grid
-    for gpath in grid_paths:
-        name: str = gpath.stem
-        # Take the first polygon primitive
-        gprimitives = utils.unpack_primitives(gpath)
-        surface_polygon = None
-        for prim in gprimitives:
-            if prim.ptype == "polygon":
-                surface_polygon = parsers.parse_polygon(prim.real_arg)
-        if surface_polygon is None:
-            raise ValueError(f"No polygon found in {gpath}")
-        sensor_pts = utils.gen_grid(
-            surface_polygon,
-            config["RaySender"].getfloat("grid_height"),
-            config["RaySender"].getfloat("grid_spacing"),
-        )
-        sender_grid[name] = matrix.points_as_sender(
-            pts_list=sensor_pts, ray_cnt=config["SimControl"].getint("ray_count")
-        )
+    if (grid_files := config["Raysender"].getpaths("grid_points")) is not None:
+        for gfile in grid_files:
+            name = gfile.stem
+            with open(gfile) as f:
+                sensor_pts = [[float(v) for v in l.split()] for l in f.readlines()]
+            sender_grid[name] = matrix.points_as_sender(pts_list=sensor_pts, ray_cnt=config["SimControl"].getint("ray_count"))
+    elif (grid_paths := config["RaySender"].getpaths("grid_surface")) is not None:
+        for gpath in grid_paths:
+            name: str = gpath.stem
+            # Take the first polygon primitive
+            gprimitives = utils.unpack_primitives(gpath)
+            surface_polygon = None
+            for prim in gprimitives:
+                if prim.ptype == "polygon":
+                    surface_polygon = parsers.parse_polygon(prim.real_arg)
+                    break
+            if surface_polygon is None:
+                raise ValueError(f"No polygon found in {gpath}")
+            sensor_pts = utils.gen_grid(
+                surface_polygon,
+                config["RaySender"].getfloat("grid_height"),
+                config["RaySender"].getfloat("grid_spacing"),
+            )
+            sender_grid[name] = matrix.points_as_sender(
+                pts_list=sensor_pts, ray_cnt=config["SimControl"].getint("ray_count")
+            )
     return sender_grid
 
 
