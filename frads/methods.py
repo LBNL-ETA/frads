@@ -91,7 +91,7 @@ def get_wea_data(config: ConfigParser) -> Tuple[WeaMetaData, List[WeaData], str]
 def get_sender_grid(config: ConfigParser) -> Dict[str, Sender]:
     """Get point grid as ray senders."""
     sender_grid: Dict[str, Sender] = {}
-    if (grid_files := config["Raysender"].getpaths("grid_points")) is not None:
+    if (grid_files := config["RaySender"].getpaths("grid_points")) is not None:
         for gfile in grid_files:
             name = gfile.stem
             with open(gfile) as f:
