@@ -36,9 +36,11 @@ def load_epmodel(fpath: Path, api) -> dict:
     if fpath.suffix == ".idf":
         state = api.state_manager.new_state()
         api.runtime.set_console_output_status(state, False)
-        api.runtime.run_energyplus(state, ["--convert-only", str(fpath)])
+        api.runtime.run_energyplus(
+            state, ["--convert-only", "-d", "Outputs", str(fpath)]
+        )
         api.state_manager.delete_state(state)
-        epjson_path = Path(fpath.with_suffix(".epJSON").name)
+        epjson_path = Path("Outputs").joinpath(fpath.with_suffix(".epJSON").name)
         if not epjson_path.is_file():
             raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
     elif fpath.suffix == ".epJSON":
