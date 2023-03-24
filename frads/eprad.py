@@ -83,10 +83,21 @@ class EnergyPlusSetup:
     def __exit__(self, exc_type, exc_value, exc_tb):
         self.api.state_manager.delete_state(self.state)
 
-    def actuate(self, actuator_key, value):
+    def actuate(self, name: str, key: str, value):
+        if key not in self.handles.actuator:
+            raise ValueError("Actuator not found", actuator_key)
         self.api.exchange.set_actuator_value(
-            self.state, self.handles.actuator[actuator_key], value
+            self.state, self.handles.actuator[key][name], value
         )
+
+    def request_actuator(self, state, component_type: str, name: str, key: str):
+        handle = self.api.exchange.get_actuator_handle(state, component_type, name, key)
+        if handle == -1:
+            raise ValueError(f"Actuator {component_type} {name} {key} not found", key)
+        # check key exists
+        if key not in self.handles.actuator:
+            self.handles.actuator[key] = {}
+        self.handles.actuator[key][name] = handle
 
     def get_variable_value(self, name: str, key: str):
         return self.api.exchange.get_variable_value(
@@ -112,27 +123,21 @@ class EnergyPlusSetup:
                 except TypeError:
                     print("No variables requested for", self.handles.variable, key)
 
-            for cfs in self.epjs["Construction:ComplexFenestrationState"]:
-                handle = self.api.api.getConstructionHandle(state, cfs.encode())
-                if handle == -1:
-                    raise ValueError("Construction handle not found", cfs)
-                self.handles.construction[cfs] = handle
+            if "Construction:ComplexFenestrationState" in self.epjs:
+                for cfs in self.epjs["Construction:ComplexFenestrationState"]:
+                    handle = self.api.api.getConstructionHandle(state, cfs.encode())
+                    if handle == -1:
+                        raise ValueError("Construction handle not found", cfs)
+                    self.handles.construction[cfs] = handle
 
-            for window in self.epjs["FenestrationSurface:Detailed"]:
-                handle = self.api.exchange.get_actuator_handle(
-                    state, "Surface", "Construction State", window
-                )
-                if handle == -1:
-                    raise ValueError("Window actuator not found", window)
-                self.handles.actuator[window] = handle
+            if "FenestrationSurface:Detailed" in self.epjs:
+                for window in self.epjs["FenestrationSurface:Detailed"]:
+                    self.request_actuator(
+                        state, "Surface", "Construction State", window
+                    )
 
             for light in self.epjs.get("Lights", []):
-                act_handle = self.api.exchange.get_actuator_handle(
-                    state, "Lights", "Electricity Rate", light
-                )
-                if act_handle == -1:
-                    raise ValueError("Light actuator not found", light)
-                self.handles.actuator[light] = act_handle
+                self.request_actuator(state, "Lights", "Electricity Rate", light)
 
                 self.request_variable("Lights Electricity Energy", light)
 
@@ -182,7 +187,6 @@ class EnergyPlusSetup:
         output_directory: Optional[str] = None,
         output_prefix: Optional[str] = "eplus",
     ):
-
         options = {"-w": weather_file, "-d": output_directory, "-p": output_prefix}
         # check if any of options are None, if so, dont pass them to run_energyplus
         options = {k: v for k, v in options.items() if v is not None}
