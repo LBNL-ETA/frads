@@ -137,15 +137,19 @@ def up_vector(primitives: list) -> geom.Vector:
         returns a str as x,y,z
 
     """
-    xaxis = geom.Vector(1, 0, 0)
-    yaxis = geom.Vector(0, 1, 0)
+    # xaxis = geom.Vector(1, 0, 0)
+    # yaxis = geom.Vector(0, 1, 0)
     norm_dir = samp_dir(primitives)
-    if norm_dir not in (xaxis, xaxis.scale(-1)):
-        # upvect = xaxis.cross(norm_dir)
-        upvect = norm_dir.cross(xaxis)
+    if norm_dir != geom.Vector(0, 0, 1):
+        upvect = norm_dir.cross(geom.Vector(0, 0, 1).cross(norm_dir)).normalize()
     else:
-        # upvect = yaxis.cross(norm_dir)
-        upvect = norm_dir.cross(yaxis)
+        upvect = geom.Vector(0, 1, 0)
+    # if norm_dir not in (xaxis, xaxis.scale(-1)):
+    #     # upvect = xaxis.cross(norm_dir)
+    #     upvect = norm_dir.cross(xaxis)
+    # else:
+    #     # upvect = yaxis.cross(norm_dir)
+    #     upvect = norm_dir.cross(yaxis)
     return upvect
 
 
