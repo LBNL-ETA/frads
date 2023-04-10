@@ -81,11 +81,13 @@ def view_as_sender(view: View, ray_cnt: int, xres: int, yres: int) -> Sender:
     new_xres, new_yres = int(res_eval[1]), int(res_eval[3])
     if (new_xres != xres) and (new_yres != yres):
         logger.info("Changed resolution to %s %s", new_xres, new_yres)
-    vwrays_cmd = ["vwrays", "-ff", "-x", str(new_xres), "-y", str(new_yres)]
+    # vwrays_cmd = ["vwrays", "-ff", "-x", str(new_xres), "-y", str(new_yres)]
+    vwrays_cmd = ["vwrays", "-ff"]
     if ray_cnt > 1:
         vwrays_cmd.extend(["-c", str(ray_cnt), "-pj", "0.7"])
     logger.debug("Ray count is %s", ray_cnt)
     vwrays_cmd += view.args()
+    vwrays_cmd += ['-x', str(new_xres), '-y', str(new_yres)]
     logger.info("Generate view rays with: \n%s", " ".join(vwrays_cmd))
     vwrays_proc = sp.run(vwrays_cmd, check=True, stdout=sp.PIPE)
     if view.vtype == "a":
@@ -300,9 +302,11 @@ def rfluxmtx(
             receiver_path, option=opt, sender=_sender, sys_paths=env
         )
         logger.info("Running rfluxmtx with:\n%s", " ".join(cmd))
-        proc = sp.run(cmd, check=True, input=stdin, stderr=sp.PIPE)
-        if proc.stderr != b"":
-            logger.warning(proc.stderr.decode())
+        try:
+            sp.run(cmd, check=True, input=stdin, stderr=sp.PIPE)
+        except sp.CalledProcessError as err:
+            logger.error("rfluxmtx failed with:\n%s", err.stderr.decode("ascii"))
+            raise err
 
 
 def rcvr_oct(receiver, env, oct_path: Union[str, Path]) -> None:
