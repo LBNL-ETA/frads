@@ -82,7 +82,7 @@ from .types import (
 
 from .utils import gen_grid, unpack_primitives
 
-__version__ = "0.2.9"
+__version__ = "0.2.10"
 
 logger: logging.Logger = logging.getLogger(__name__)
 
