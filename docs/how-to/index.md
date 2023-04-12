@@ -11,7 +11,7 @@ provided in this project.
 
 4. How to simulate annual melanopic equivalent daylight illuminance?
 
-5. How to setup a progressive simulation workflow?
+5. [How to model dynamic shading control and daylight dimming with EnergyPlus?](guide5.md)
 
 6. [How to setup a simple rtrace workflow?](guide6.md)
 
