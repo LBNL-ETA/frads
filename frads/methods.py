@@ -129,9 +129,6 @@ def get_sender_view(config: ConfigParser) -> Tuple[dict, dict]:
     if (view := config["RaySender"].getview("view")) is None:
         return sender_view, view_dicts
     view_name = "view_00"
-    # if "vf" in vdict:
-    # with open(vdict["vf"], "r", encoding="ascii") as rdr:
-    # vdict.update(parsers.parse_vu(rdr.read()))
     view_dicts[view_name] = view
     sender_view[view_name] = matrix.view_as_sender(
         view=view,
@@ -461,6 +458,8 @@ def direct_sun_matrix_pt(
         )
         if regen(mpath.pcdsmx[grid_name], config):
             logger.info("Generating using rcontrib...")
+            print(model.window_normals)
+            breakpoint()
             rcvr_sun = matrix.sun_as_receiver(
                 basis="r6",
                 smx_path=mpath.smx_sun,
@@ -516,7 +515,7 @@ def direct_sun_matrix_vu(
         # cmd = raycall.get_rpict_command(model.views[view], rpict_opt, octree=vmap_oct)
         # _pic = pr.rpict(modle.views[view], rpict_opt, octree=vmap_oct)
         with open(mpath.vmap[view], "wb") as wtr:
-            wtr.write(pr.rpict(model.views[view], vmap_oct, params=rpict_opt.args()))
+            wtr.write(pr.rpict(model.views[view].args(), vmap_oct, params=rpict_opt.args()))
         # logger.info("Generating view matrix material map with: \n %s", " ".join(cmd))
         # utils.run_write(cmd, mpath.vmap[view])
         # cmd[-1] = cdmap_oct
@@ -525,7 +524,7 @@ def direct_sun_matrix_vu(
         # )
         # utils.run_write(cmd, mpath.cdmap[view])
         with open(mpath.cdmap[view], "wb") as wtr:
-            wtr.write(pr.rpict(model.views[view], cdmap_oct, params=rpict_opt.args()))
+            wtr.write(pr.rpict(model.views[view].args(), cdmap_oct, params=rpict_opt.args()))
         mpath.vcdfmx[view] = Path("Matrices", f"vcdfmx_{model.name}_{view}")
         mpath.vcdrmx[view] = Path("Matrices", f"vcdrmx_{model.name}_{view}")
         tempf = Path("Matrices", "vcdfmx")
