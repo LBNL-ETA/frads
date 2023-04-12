@@ -273,7 +273,7 @@ def genskymtx(
             raise ValueError("Either a .wea path or wea data is required.")
     else:
         inp = wpath
-    return pr.gendaymtx(
+    _err, _out = pr.gendaymtx(
         inp,
         header=header,
         average=average,
@@ -290,6 +290,8 @@ def genskymtx(
         onesun=onesun,
         mfactor=mfactor,
     )
+    logger.warning(_err)
+    return _out
 
     # stdin = None
     # cmd = ["gendaymtx", "-m", str(mf)]
@@ -438,7 +440,7 @@ def gen_wea(
     rows.append(f"site_elevation {elevation}")
     rows.append("weather_data_file_units 1")
     for dt, dni, dhi in zip(datetimes, dirnorm, diffhor):
-        _hrs = dt.hour + dt.minute / 60 + 0.5  # middle of hour
+        _hrs = dt.hour + dt.minute / 60  # middle of hour
         _row = f"{dt.month} {dt.day} {_hrs} {dni} {dhi}"
         rows.append(_row)
     return "\n".join(rows)
