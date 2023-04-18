@@ -68,7 +68,6 @@ from .matrix import (
 )
 
 from .parsers import (
-    parse_primitive,
     parse_epw,
     parse_wea,
     parse_polygon,
@@ -133,7 +132,6 @@ __all__ = [
     "load_epmodel",
     "load_matrix",
     "multiply_rgb",
-    "parse_primitive",
     "parse_epw",
     "parse_mrad_config",
     "parse_wea",

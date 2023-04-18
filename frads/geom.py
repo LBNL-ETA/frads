@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Union, List, Tuple, Sequence, Iterable
+from typing import Union, List, Tuple, Sequence
 
 
 @dataclass(frozen=True)
@@ -180,7 +180,7 @@ class Polygon:
         vertices(List[Vector]): list of vertices of the polygon.
     """
 
-    vertices: Iterable[Vector]
+    vertices: List[Vector]
 
     def __post_init__(self) -> None:
         """."""
@@ -234,7 +234,7 @@ class Polygon:
             results.extend(reversed(new_other_vert[1:]))
             results.append(new_other_vert[0])
         results.extend(self.vertices)
-        return Polygon(tuple(results))
+        return Polygon(results)
 
     @property
     def normal(self) -> Vector:
@@ -290,7 +290,7 @@ class Polygon:
             sy = center.y + (vert.y - center.y) * scale_vect.y
             sz = center.z + (vert.z - center.z) * scale_vect.z
             new_vertices.append(Vector(sx, sy, sz))
-        return Polygon(tuple(new_vertices))
+        return Polygon(new_vertices)
 
     def extrude(self, vector: Vector) -> list:
         """Extrude the polygon.
@@ -308,22 +308,22 @@ class Polygon:
         for i in range(len(self.vertices) - 1):
             polygons.append(
                 Polygon(
-                    (
+                    [
                         self.vertices[i],
                         polygon2.vertices[i],
                         polygon2.vertices[i + 1],
                         self.vertices[i + 1],
-                    )
+                    ]
                 )
             )
         polygons.append(
             Polygon(
-                (
+                [
                     self.vertices[-1],
                     polygon2.vertices[-1],
                     polygon2.vertices[0],
                     self.vertices[0],
-                )
+                ]
             )
         )
         return polygons
@@ -354,7 +354,7 @@ class Polygon:
 
     def to_real(self) -> Union[List[float], List[int]]:
         """Convert the vertices to real arg string format."""
-        real_arg = [3 * len(self.vertices)]
+        real_arg = []
         for vert in self.vertices:
             real_arg.append(vert.x)
             real_arg.append(vert.y)
