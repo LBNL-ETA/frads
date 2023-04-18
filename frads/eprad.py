@@ -93,7 +93,7 @@ class EnergyPlusSetup:
         )
 
     def request_actuator(self, state, component_type: str, name: str, key: str):
-        if key in self.handles.actuator:
+        if (key, name) in self.handles.actuator.items():
             pass
         else:
             handle = self.api.exchange.get_actuator_handle(
@@ -114,7 +114,7 @@ class EnergyPlusSetup:
         )
 
     def request_variable(self, name: str, key: str):
-        if key in self.handles.variable:
+        if (key, name) in self.handles.actuator.items():
             pass
         else:
             self.api.exchange.request_variable(self.state, name, key)
