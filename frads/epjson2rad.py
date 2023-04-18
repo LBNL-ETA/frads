@@ -12,8 +12,7 @@ from typing import Dict, List
 
 import pyradiance as pr
 
-from frads import geom, utils, bsdf
-from frads.bsdf import BSDFData, RadMatrix
+from frads import geom, utils
 from frads.types import (
     EPlusWindowGas,
     EPlusOpaqueMaterial,
@@ -332,17 +331,24 @@ def parse_construction_complexfenestrationstate(epjs):
     matrices = {}
     for key, val in construction.items():
         val["ctype"] = "cfs"
-        tf_name = val["visible_optical_complex_front_transmittance_matrix_name"]
-        tb_name = val["visible_optical_complex_back_transmittance_matrix_name"]
-        tf_list = epjs["Matrix:TwoDimension"][tf_name]["values"]
-        tb_list = epjs["Matrix:TwoDimension"][tb_name]["values"]
-        ncolumns = epjs["Matrix:TwoDimension"][tf_name]["number_of_columns"]
-        nrows = epjs["Matrix:TwoDimension"][tf_name]["number_of_rows"]
-        tf_bsdf = [v["value"] for v in tf_list]
-        tb_bsdf = [v["value"] for v in tb_list]
-        tf = BSDFData(tf_bsdf, ncolumns, nrows)
-        tb = BSDFData(tb_bsdf, ncolumns, nrows)
-        matrices[key] = RadMatrix(tf, tb)
+        names = {
+            "tvf": val["visible_optical_complex_front_transmittance_matrix_name"],
+            "tvb": val["visible_optical_complex_back_transmittance_matrix_name"],
+            # "rvf": val["visible_optical_complex_front_reflectance_matrix_name"],
+            # "rvb": val["visible_optical_complex_back_reflectance_matrix_name"],
+            "tsf": val["solar_optical_complex_front_transmittance_matrix_name"],
+            # "tsb": val["solar_optical_complex_back_transmittance_matrix_name"],
+            # "rsf": val["solar_optical_complex_front_reflectance_matrix_name"],
+            "rsb": val["solar_optical_complex_back_reflectance_matrix_name"],
+        }
+        bsdf = {key: [v["value"] for v in epjs["Matrix:TwoDimension"][name]['values']]
+                for key, name in names.items()}
+        ncs = {key: epjs["Matrix:TwoDimension"][name]["number_of_columns"]
+                for key, name in names.items()}
+        nrs = {key: epjs["Matrix:TwoDimension"][name]["number_of_rows"]
+                for key, name in names.items()}
+        matrices[key] = {key: {"ncolumns": ncs[key], "nrows": nrs[key], "values": bsdf[key]} 
+                         for key in names}
         cfs[key] = EPlusConstruction(key, "cfs", [])
     return cfs, matrices
 
@@ -493,21 +499,21 @@ def epjson2rad(epjs: dict, epw=None) -> None:
         xml_paths = {}
         for key, val in matrices.items():
             opath = rsodir / (key + ".xml")
-            tf_path = rsodir / (key + "_tf.mtx")
-            tb_path = rsodir / (key + "_tb.mtx")
-            with open(tf_path, "w", encoding="ascii") as wtr:
-                wtr.write(" ".join([str(v) for v in val.tf.bsdf]))
-            with open(tb_path, "w", encoding="ascii") as wtr:
-                wtr.write(" ".join([str(v) for v in val.tb.bsdf]))
-            basis = "".join(
-                [
-                    word[0].lower()
-                    for word in bsdf.BASIS_DICT[str(val.tf.ncolumn)].split()
-                ]
-            )
+            _vis = pr.WrapBSDFInput("Visible")
+            _sol = pr.WrapBSDFInput("Solar")
+            for _key, _val in val.items():
+                _mtxpath = rsodir / f"{key}_{key}.mtx"
+                with open(_mtxpath, "w") as fp:
+                    fp.write(" ".join(str(v) for v in _val["values"]))
+                if _key[1] == "v":
+                    _vis.__setattr__(_key[0]+_key[-1], _mtxpath)
+                elif _key[1] == "s":
+                    _sol.__setattr__(_key[0]+_key[-1], _mtxpath)
+            basis = [i.name for i in pr.ABASELIST if i.nangles == val['tvf']['ncolumns']].pop()
+            abr_basis = "".join(i[0].lower() for i in basis.decode().lstrip("LBNL/").split())
             with open(opath, "wb") as wtr:
                 wtr.write(
-                    pr.wrapbsdf(basis=basis, tf=tf_path, tb=tb_path, unlink=True, n=key)
+                    pr.wrapbsdf(basis=abr_basis, inp=[_vis, _sol], unlink=True, n=key)
                 )
             xml_paths[key] = str(opath)
 
