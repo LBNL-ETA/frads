@@ -93,13 +93,20 @@ class EnergyPlusSetup:
         )
 
     def request_actuator(self, state, component_type: str, name: str, key: str):
-        handle = self.api.exchange.get_actuator_handle(state, component_type, name, key)
-        if handle == -1:
-            raise ValueError(f"Actuator {component_type} {name} {key} not found", key)
-        # check key exists
-        if key not in self.handles.actuator:
-            self.handles.actuator[key] = {}
-        self.handles.actuator[key][name] = handle
+        if key in self.handles.actuator:
+            pass
+        else:
+            handle = self.api.exchange.get_actuator_handle(
+                state, component_type, name, key
+            )
+            if handle == -1:
+                raise ValueError(
+                    f"Actuator {component_type} {name} {key} not found", key
+                )
+            # check key exists
+            if key not in self.handles.actuator:
+                self.handles.actuator[key] = {}
+            self.handles.actuator[key][name] = handle
 
     def get_variable_value(self, name: str, key: str):
         return self.api.exchange.get_variable_value(
@@ -107,11 +114,14 @@ class EnergyPlusSetup:
         )
 
     def request_variable(self, name: str, key: str):
-        self.api.exchange.request_variable(self.state, name, key)
-        # check key exists
-        if key not in self.handles.variable:
-            self.handles.variable[key] = {}
-        self.handles.variable[key][name] = None
+        if key in self.handles.variable:
+            pass
+        else:
+            self.api.exchange.request_variable(self.state, name, key)
+            # check key exists
+            if key not in self.handles.variable:
+                self.handles.variable[key] = {}
+            self.handles.variable[key][name] = None
 
     def get_handles(self):
         def callback_function(state):
@@ -142,7 +152,6 @@ class EnergyPlusSetup:
                 self.request_actuator(state, "Lights", "Electricity Rate", light)
 
                 self.request_variable("Lights Electricity Energy", light)
-
                 var_handle = self.api.exchange.get_variable_handle(
                     state, "Lights Electricity Energy", light
                 )
@@ -510,13 +519,13 @@ class EPModel:
         for key, obj in mappings.items():
             self._add(key, obj)
 
-            # Set the all fenestration surface constructions to complex fenestration state
-            # pick the first cfs
-            cfs = list(self.epjs["Construction:ComplexFenestrationState"].keys())[0]
-            for window_name in self.epjs["FenestrationSurface:Detailed"]:
-                self.epjs["FenestrationSurface:Detailed"][window_name][
-                    "construction_name"
-                ] = cfs
+        # Set the all fenestration surface constructions to complex fenestration state
+        # pick the first cfs
+        cfs = list(self.epjs["Construction:ComplexFenestrationState"].keys())[0]
+        for window_name in self.epjs["FenestrationSurface:Detailed"]:
+            self.epjs["FenestrationSurface:Detailed"][window_name][
+                "construction_name"
+            ] = cfs
 
     def add_lighting(self):
         """Add lighting objects to the epjs dictionary."""
