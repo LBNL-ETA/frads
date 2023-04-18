@@ -12,7 +12,7 @@ from typing import Any, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import pyradiance as pr
 
-from frads import geom, parsers, utils
+from frads import geom, utils
 
 logger: logging.Logger = logging.getLogger("frads.sky")
 
@@ -553,21 +553,22 @@ def filter_data_by_direct_sun(
         stderr=sp.PIPE,
         stdout=sp.PIPE,
     )
-    prims = parsers.parse_primitive(proc.stdout.splitlines())
+    # prims = parsers.parse_primitive(proc.stdout.splitlines())
+    prims = pr.parse_primitive(proc.stdout)
     light_prims = [prim for prim in prims if prim.ptype == "light"]
     keep_minutes = []
     if window_normal is not None:
         source_prims = [prim for prim in prims if prim.ptype == "source"]
         for lpr, spr in zip(light_prims, source_prims):
-            if lpr.real_arg[1] > 0:
-                sdir = geom.Vector(*spr.real_arg[1:4])
+            if lpr.fargs[0] > 0:
+                sdir = geom.Vector(*spr.fargs[:3])
                 for normal in window_normal:
                     if normal * sdir < -0.035:  # 2deg tolerance
                         keep_minutes.append(int(spr.modifier.lstrip("solar")))
                         break
     else:
         for lpr in light_prims:
-            if lpr.real_arg[1] > 0:
+            if lpr.fargs[0] > 0:
                 keep_minutes.append(int(lpr.identifier.lstrip("solar")))
     # inminutes = [solar_minute(d) for d in data]
     inminutes = []
