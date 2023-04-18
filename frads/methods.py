@@ -447,8 +447,6 @@ def direct_sun_matrix_pt(
         )
         if regen(mpath.pcdsmx[grid_name], config):
             logger.info("Generating using rcontrib...")
-            print(model.window_normals)
-            breakpoint()
             rcvr_sun = matrix.sun_as_receiver(
                 basis="r6",
                 smx_path=mpath.smx_sun,
