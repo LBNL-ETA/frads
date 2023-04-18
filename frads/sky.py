@@ -2,28 +2,83 @@
 Routines for generating sky models
 """
 
+import datetime
 import logging
 import math
 import os
 from pathlib import Path
 import subprocess as sp
-from typing import Any
-from typing import List
-from typing import Optional
-from typing import Sequence
-from typing import Tuple
-from typing import Union
+from typing import Any, List, NamedTuple, Optional, Sequence, Tuple, Union
 
-from frads import geom
-from frads import parsers
-from frads.types import WeaMetaData
-from frads.types import WeaData
-from frads import utils
+import pyradiance as pr
+
+from frads import geom, utils
 
 logger: logging.Logger = logging.getLogger("frads.sky")
 
 # Solar disk solid angle (sr)
 SOLAR_SA = 6.7967e-5
+
+
+class WeaMetaData(NamedTuple):
+    """Weather related meta data object.
+
+    Attributes:
+        city: City.
+        country: Country.
+        latitude: Latitude.
+        longitude: Longitude.
+        timezone: Timezone as standard meridian.
+        elevation: Site elevation (m).
+    """
+
+    city: str
+    country: str
+    latitude: float
+    longitude: float
+    timezone: int
+    elevation: float
+
+    def wea_header(self) -> str:
+        """Return a .wea format header."""
+        return (
+            f"place {self.city}_{self.country}\n"
+            f"latitude {self.latitude}\n"
+            f"longitude {self.longitude}\n"
+            f"time_zone {self.timezone}\n"
+            f"site_elevation {self.elevation}\n"
+            "weather_data_file_units 1\n"
+        )
+
+
+class WeaData(NamedTuple):
+    """Weather related data object.
+
+    Attributes:
+        month: Month.
+        day: Day.
+        hour: Hour.
+        minute: Minutes.
+        second: Seconds.
+        hours: Times with minutes as fraction.
+        dni: Direct normal irradiance (W/m2).
+        dhi: Diffuse horizontal irradiance (W/m2).
+        aod: Aeroal Optical Depth (default = 0).
+        cc: Cloud cover (default = 0).
+        year: default = 2000.
+    """
+
+    time: datetime.datetime
+    dni: float
+    dhi: float
+    aod: float = 0
+    cc: float = 0
+
+    def __str__(self) -> str:
+        return f"{self.time.month} {self.time.day} {self.time.hour+self.time.minute/60} {self.dni} {self.dhi}"
+
+    def dt_str(self) -> str:
+        return f"{self.time.month:02d}{self.time.day:02d}_{self.time.hour:02d}{self.time.minute:02d}"
 
 
 def basis_glow(sky_basis: str) -> str:
@@ -161,18 +216,25 @@ def gen_sun_source_culled(
     return os.linesep.join(out_lines), os.linesep.join(mod_str), full_mod_str
 
 
-def gendaymtx(
-    out: Union[str, Path],
-    mf: int,
+def genskymtx(
     data: Optional[Sequence[WeaData]] = None,
     meta: Optional[WeaMetaData] = None,
-    wpath: Optional[Path] = None,
-    direct: bool = False,
-    solar: bool = False,
+    wpath: Optional[Union[str, Path]] = None,
     onesun: bool = False,
+    header: bool = True,
+    average: bool = False,
+    sun_only: bool = False,
+    sky_only: bool = False,
+    sun_file: Optional[str] = None,
+    sun_mods: Optional[str] = None,
+    daylight_hours_only: bool = False,
+    sky_color: Optional[List[float]] = None,
+    ground_color: Optional[List[float]] = None,
     rotate: Optional[float] = None,
-    binary: bool = False,
-) -> List[str]:
+    outform: Optional[str] = None,
+    solar_radiance: bool = False,
+    mfactor: int = 1,
+) -> bytes:
     """
     Call gendaymtx to generate a sky/sun matrix
     and write results to out.  It takes either a .wea file path
@@ -195,52 +257,126 @@ def gendaymtx(
     Raises:
         ValueError: An error occurs if neither a .wea path nor wea data is provided.
     """
-    stdin = None
-    cmd = ["gendaymtx", "-m", str(mf)]
-    if binary:
-        cmd.append("-of")
-    if direct:
-        cmd.append("-d")
-    if onesun:
-        cmd.extend(["-5", ".533"])
-    if rotate is not None:
-        cmd.extend(["-r", str(rotate)])
-    if solar:
-        cmd.append("-O1")
-    if wpath is not None:
-        cmd.append(str(wpath))
-    elif (data is not None) and (meta is not None):
-        wea_input = meta.wea_header() + "\n".join(map(str, data))
-        stdin = wea_input.encode("utf-8")
+    if wpath is None:
+        if data is not None and meta is not None:
+            inp = gen_wea(
+                [d.time for d in data],
+                [d.dni for d in data],
+                [d.dhi for d in data],
+                meta.latitude,
+                meta.longitude,
+                meta.timezone,
+                elevation=meta.elevation,
+                location=meta.city + meta.country,
+            ).encode()
+        else:
+            raise ValueError("Either a .wea path or wea data is required.")
     else:
-        raise ValueError("Need to specify either .wea path or wea data.")
-    with open(out, "wb") as wtr:
-        logger.info("Calling gendaymtx with:\n%s", " ".join(cmd))
-        sp.run(cmd, check=True, input=stdin, stdout=wtr)
-    return cmd
+        inp = wpath
+    _err, _out = pr.gendaymtx(
+        inp,
+        header=header,
+        average=average,
+        sun_only=sun_only,
+        sky_only=sky_only,
+        solar_radiance=solar_radiance,
+        sun_file=sun_file,
+        sun_mods=sun_mods,
+        daylight_hours_only=daylight_hours_only,
+        sky_color=sky_color,
+        ground_color=ground_color,
+        rotate=rotate,
+        outform=outform,
+        onesun=onesun,
+        mfactor=mfactor,
+    )
+    logger.warning(_err)
+    return _out
+
+    # stdin = None
+    # cmd = ["gendaymtx", "-m", str(mf)]
+    # if binary:
+    #     cmd.append("-of")
+    # if direct:
+    #     cmd.append("-d")
+    # if onesun:
+    #     cmd.extend(["-5", ".533"])
+    # if rotate is not None:
+    #     cmd.extend(["-r", str(rotate)])
+    # if solar:
+    #     cmd.append("-O1")
+    # if wpath is not None:
+    #     cmd.append(str(wpath))
+    # elif (data is not None) and (meta is not None):
+    #     wea_input = meta.wea_header() + "\n".join(map(str, data))
+    #     stdin = wea_input.encode("utf-8")
+    # else:
+    #     raise ValueError("Need to specify either .wea path or wea data.")
+    # if out is not None:
+    #     with open(out, "wb") as wtr:
+    #         logger.info("Calling gendaymtx with:\n%s", " ".join(cmd))
+    #         sp.run(cmd, check=True, input=stdin, stdout=wtr)
+    # return cmd
 
 
-def gen_perez_sky(row: WeaData, meta, grefl: float = 0.2, spect: str = "0", rotate=None) -> str:
-    solar = False if spect == "0" else True
-    gendaylit = gendaylit_cmd(
-        str(row.time.month),
-        str(row.time.day),
-        str(row.time.hour + row.time.minute / 60 + row.time.second / 3600),
-        str(meta.latitude),
-        str(meta.longitude),
-        str(meta.timezone),
-        dir_norm_ir=str(row.dni),
-        dif_hor_ir=str(row.dhi),
+# def gen_perez_sky(row: WeaData, meta, grefl: float = 0.2, spect: str = "0", rotate=None) -> str:
+#     solar = False if spect == "0" else True
+#     gendaylit = gendaylit_cmd(
+#         str(row.time.month),
+#         str(row.time.day),
+#         str(row.time.hour + row.time.minute / 60 + row.time.second / 3600),
+#         str(meta.latitude),
+#         str(meta.longitude),
+#         str(meta.timezone),
+#         dir_norm_ir=str(row.dni),
+#         dif_hor_ir=str(row.dhi),
+#         solar=solar,
+#         grefl=grefl,
+#     )
+#     out = []
+#     rot = f"| xform -rz {rotate}" if rotate is not None else ""
+#     out.append(f"!{' '.join(gendaylit)}{rot} \n")
+#     out.append("skyfunc glow sglow 0 0 4 1 1 1 0\n")
+#     out.append("sglow source sky 0 0 4 0 0 1 180\n")
+#     out.append("sglow source ground 0 0 4 0 0 -1 180\n")
+#     return " ".join(out)
+
+
+def gen_perez_sky(
+    dt,
+    latitude: float,
+    longitude: float,
+    timezone: int,
+    year: Optional[int] = None,
+    dirnorm: Optional[float] = None,
+    diffhor: Optional[float] = None,
+    dirhor: Optional[float] = None,
+    dirnorm_illum: Optional[float] = None,
+    diffhor_illum: Optional[float] = None,
+    solar: bool = False,
+    grefl: Optional[float] = None,
+    rotate: Optional[float] = None,
+) -> bytes:
+    sun = pr.gendaylit(
+        dt,
+        latitude,
+        longitude,
+        timezone,
+        year,
+        dirnorm=dirnorm,
+        diffhor=diffhor,
+        dirhor=dirhor,
+        dirnorm_illum=dirnorm_illum,
+        diffhor_illum=diffhor_illum,
         solar=solar,
         grefl=grefl,
     )
-    out = []
-    rot = f"| xform -rz {rotate}" if rotate is not None else ""
-    out.append(f"!{' '.join(gendaylit)}{rot} \n")
-    out.append("skyfunc glow sglow 0 0 4 1 1 1 0\n")
-    out.append("sglow source sky 0 0 4 0 0 1 180\n")
-    out.append("sglow source ground 0 0 4 0 0 -1 180\n")
-    return " ".join(out)
+    if rotate:
+        sun = pr.xform(sun, rotatez=rotate)
+    out = [b"skyfunc glow sglow 0 0 4 1 1 1 0"]
+    out.append(b"sglow source sky 0 0 4 0 0 1 180")
+    out.append(b"sglow source ground 0 0 4 0 0 -1 180")
+    return sun + b"\n".join(out)
 
 
 def gendaylit_cmd(
@@ -275,6 +411,39 @@ def gendaylit_cmd(
     if solar:
         cmd += ["-O", "1"]
     return cmd
+
+
+def gen_wea(
+    datetimes: Sequence[datetime.datetime],
+    dirnorm: Sequence[float],
+    diffhor: Sequence[float],
+    latitude: float,
+    longitude: float,
+    timezone: int,
+    elevation: Optional[float] = None,
+    location: Optional[str] = None,
+) -> str:
+    """Generate wea file from datetime, location, and sky."""
+    if len(datetimes) != len(dirnorm) != len(diffhor):
+        raise ValueError("datetimes, dirnorm, and diffhor must be the same length")
+    rows = []
+    if location is None or location == "":
+        location = "_".join(
+            [str(i) for i in [latitude, longitude, timezone, elevation]]
+        )
+    if elevation is None:
+        elevation = 0
+    rows.append(f"place {location}")
+    rows.append(f"latitude {latitude}")
+    rows.append(f"longitude {longitude}")
+    rows.append(f"time_zone {timezone}")
+    rows.append(f"site_elevation {elevation}")
+    rows.append("weather_data_file_units 1")
+    for dt, dni, dhi in zip(datetimes, dirnorm, diffhor):
+        _hrs = dt.hour + dt.minute / 60  # middle of hour
+        _row = f"{dt.month} {dt.day} {_hrs} {dni} {dhi}"
+        rows.append(_row)
+    return "\n".join(rows)
 
 
 def solar_angle(
@@ -375,6 +544,7 @@ def filter_data_by_direct_sun(
         data(List[WeaData]):
     """
     wea_input = meta.wea_header() + "\n".join(map(str, data))
+    # pr.gendaymtx(wea_input, daylight_only=True, )
     proc = sp.run(
         ["gendaymtx", "-u", "-D", "-"],
         check=True,
@@ -383,21 +553,22 @@ def filter_data_by_direct_sun(
         stderr=sp.PIPE,
         stdout=sp.PIPE,
     )
-    prims = parsers.parse_primitive(proc.stdout.splitlines())
+    # prims = parsers.parse_primitive(proc.stdout.splitlines())
+    prims = pr.parse_primitive(proc.stdout)
     light_prims = [prim for prim in prims if prim.ptype == "light"]
     keep_minutes = []
     if window_normal is not None:
         source_prims = [prim for prim in prims if prim.ptype == "source"]
         for lpr, spr in zip(light_prims, source_prims):
-            if lpr.real_arg[1] > 0:
-                sdir = geom.Vector(*spr.real_arg[1:4])
+            if lpr.fargs[0] > 0:
+                sdir = geom.Vector(*spr.fargs[:3])
                 for normal in window_normal:
                     if normal * sdir < -0.035:  # 2deg tolerance
                         keep_minutes.append(int(spr.modifier.lstrip("solar")))
                         break
     else:
         for lpr in light_prims:
-            if lpr.real_arg[1] > 0:
+            if lpr.fargs[0] > 0:
                 keep_minutes.append(int(lpr.identifier.lstrip("solar")))
     # inminutes = [solar_minute(d) for d in data]
     inminutes = []

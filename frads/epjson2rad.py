@@ -1,29 +1,42 @@
 """Convert an EnergyPlus epJSON file into Radiance model[s]."""
 
 from configparser import ConfigParser
-import json
 import logging
 import math
+import json
 import os
 from pathlib import Path
-import subprocess as sp
 import sys
+import subprocess as sp
 from typing import Dict, List
 
-from frads import geom
-from frads import utils
-from frads.types import Primitive
-from frads.types import BSDFData
-from frads.types import RadMatrix
-from frads.types import EPlusWindowGas
-from frads.types import EPlusOpaqueMaterial
-from frads.types import EPlusWindowMaterial
-from frads.types import EPlusConstruction
-from frads.types import EPlusOpaqueSurface
-from frads.types import EPlusFenestration
-from frads.types import EPlusZone
+import pyradiance as pr
+
+from frads import geom, utils
+from frads.types import (
+    EPlusWindowGas,
+    EPlusOpaqueMaterial,
+    EPlusWindowMaterial,
+    EPlusWindowMaterialComplexShade,
+    EPlusConstruction,
+    EPlusOpaqueSurface,
+    EPlusFenestration,
+    EPlusZone,
+    Primitive,
+)
+
 
 logger: logging.Logger = logging.getLogger("frads.epjson2rad")
+
+
+def tmit2tmis(tmit: float) -> float:
+    """Convert from transmittance to transmissivity."""
+    a = 0.0072522239
+    b = 0.8402528435
+    c = 0.9166530661
+    d = 0.0036261119
+    tmis = ((math.sqrt(a * tmit**2 + b) - c) / d) / tmit
+    return max(0, min(tmis, 1))
 
 
 def thicken(
@@ -194,6 +207,26 @@ def parse_material_nomass(name: str, material: dict) -> EPlusOpaqueMaterial:
     )
 
 
+def parse_windowmaterial_complexshade(
+    name: str, material: dict
+) -> EPlusWindowMaterialComplexShade:
+    """Parse EP WindowMaterial:ComplexShade."""
+    return EPlusWindowMaterialComplexShade(
+        name.replace(" ", "_"),
+        material.get("layer_type", ""),
+        material.get("thickness", 0.002),
+        material.get("conductivity", 1.0),
+        material.get("ir_transmittance", 0.0),
+        material.get("front_emissivity", 0.84),
+        material.get("back_emissivity", 0.84),
+        material.get("top_opening_multiplier", 0.0),
+        material.get("bottom_opening_multiplier", 0.0),
+        material.get("left_side_opening_multiplier", 0.0),
+        material.get("right_side_opening_multiplier", 0.0),
+        material.get("front_opening_multiplier", 0.0),
+    )
+
+
 def parse_windowmaterial_gap(name: str, material: dict) -> EPlusWindowGas:
     """Parse EP WindowMaterial:Gap"""
     name = name.replace(" ", "_")
@@ -227,7 +260,7 @@ def parse_windowmaterial_simpleglazingsystem(
     identifier = name.replace(" ", "_")
     shgc = material["solar_heat_gain_coefficient"]
     tmit = material.get("visible_transmittance", shgc)
-    tmis = utils.tmit2tmis(tmit)
+    tmis = tmit2tmis(tmit)
     primitive = Primitive("void", "glass", identifier, ["0"], [3, tmis, tmis, tmis])
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
@@ -238,7 +271,7 @@ def parse_windowmaterial_simpleglazing(
     """Parse EP WindowMaterial:Simpleglazing"""
     identifier = name.replace(" ", "_")
     tmit = material["visible_transmittance"]
-    tmis = utils.tmit2tmis(tmit)
+    tmis = tmit2tmis(tmit)
     primitive = Primitive("void", "glass", identifier, ["0"], [3, tmis, tmis, tmis])
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
@@ -250,7 +283,7 @@ def parse_windowmaterial_glazing(name: str, material: dict) -> EPlusWindowMateri
         tmit = 1
     else:
         tmit = material["visible_transmittance_at_normal_incidence"]
-    tmis = utils.tmit2tmis(tmit)
+    tmis = tmit2tmis(tmit)
     primitive = Primitive("void", "glass", identifier, ["0"], [3, tmis, tmis, tmis])
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
@@ -298,18 +331,24 @@ def parse_construction_complexfenestrationstate(epjs):
     matrices = {}
     for key, val in construction.items():
         val["ctype"] = "cfs"
-        tf_name = val["visible_optical_complex_front_transmittance_matrix_name"]
-        tb_name = val["visible_optical_complex_back_transmittance_matrix_name"]
-        tf_list = epjs["Matrix:TwoDimension"][tf_name]["values"]
-        tb_list = epjs["Matrix:TwoDimension"][tb_name]["values"]
-        ncolumn = epjs["Matrix:TwoDimension"][tf_name]["number_of_columns"]
-        # if ncolumn < 145:
-        # raise ValueError("BSDF resolution too low to take advantage of Radiance")
-        tf_bsdf = [v["value"] for v in tf_list]
-        tb_bsdf = [v["value"] for v in tb_list]
-        tf = utils.bsdf2sdata(BSDFData(tf_bsdf, ncolumn, ncolumn))
-        tb = utils.bsdf2sdata(BSDFData(tb_bsdf, ncolumn, ncolumn))
-        matrices[key] = RadMatrix(tf, tb)
+        names = {
+            "tvf": val["visible_optical_complex_front_transmittance_matrix_name"],
+            "tvb": val["visible_optical_complex_back_transmittance_matrix_name"],
+            # "rvf": val["visible_optical_complex_front_reflectance_matrix_name"],
+            # "rvb": val["visible_optical_complex_back_reflectance_matrix_name"],
+            "tsf": val["solar_optical_complex_front_transmittance_matrix_name"],
+            # "tsb": val["solar_optical_complex_back_transmittance_matrix_name"],
+            # "rsf": val["solar_optical_complex_front_reflectance_matrix_name"],
+            "rsb": val["solar_optical_complex_back_reflectance_matrix_name"],
+        }
+        bsdf = {key: [v["value"] for v in epjs["Matrix:TwoDimension"][name]['values']]
+                for key, name in names.items()}
+        ncs = {key: epjs["Matrix:TwoDimension"][name]["number_of_columns"]
+                for key, name in names.items()}
+        nrs = {key: epjs["Matrix:TwoDimension"][name]["number_of_rows"]
+                for key, name in names.items()}
+        matrices[key] = {key: {"ncolumns": ncs[key], "nrows": nrs[key], "values": bsdf[key]} 
+                         for key in names}
         cfs[key] = EPlusConstruction(key, "cfs", [])
     return cfs, matrices
 
@@ -441,43 +480,48 @@ def parse_epjson(epjs: dict) -> tuple:
     return site, zones, constructions, materials, matrices
 
 
-def epjson2rad(epjs: dict) -> None:
+def epjson2rad(epjs: dict, epw=None) -> None:
     """Command-line program to convert a energyplus model into a Radiance model."""
     # Setup file structure
-    Path("Objects").mkdir(exist_ok=True)
-    Path("Matrices").mkdir(exist_ok=True)
+    objdir = Path("Objects")
+    objdir.mkdir(exist_ok=True)
+    mtxdir = Path("Matrices")
+    mtxdir.mkdir(exist_ok=True)
 
     site, zones, constructions, materials, matrices = parse_epjson(epjs)
-    building_name = epjs["Building"].popitem()[0].replace(" ", "_")
+    # building_name = epjs["Building"].popitem()[0].replace(" ", "_")
+    building_name = list(epjs["Building"].keys())[0].replace(" ", "_")
+
     if len(matrices) > 0:
-        Path("Resources").mkdir(exist_ok=True)
+        rsodir = Path("Resources")
+        rsodir.mkdir(exist_ok=True)
+        # Write matrix files to xml, if any
+        xml_paths = {}
+        for key, val in matrices.items():
+            opath = rsodir / (key + ".xml")
+            _vis = pr.WrapBSDFInput("Visible")
+            _sol = pr.WrapBSDFInput("Solar")
+            for _key, _val in val.items():
+                _mtxpath = rsodir / f"{key}_{key}.mtx"
+                with open(_mtxpath, "w") as fp:
+                    fp.write(" ".join(str(v) for v in _val["values"]))
+                if _key[1] == "v":
+                    _vis.__setattr__(_key[0]+_key[-1], _mtxpath)
+                elif _key[1] == "s":
+                    _sol.__setattr__(_key[0]+_key[-1], _mtxpath)
+            basis = [i.name for i in pr.ABASELIST if i.nangles == val['tvf']['ncolumns']].pop()
+            abr_basis = "".join(i[0].lower() for i in basis.decode().lstrip("LBNL/").split())
+            with open(opath, "wb") as wtr:
+                wtr.write(
+                    pr.wrapbsdf(basis=abr_basis, inp=[_vis, _sol], unlink=True, n=key)
+                )
+            xml_paths[key] = str(opath)
 
     # Write material file
     material_path = os.path.join("Objects", f"materials{building_name}.mat")
     with open(material_path, "w", encoding="ascii") as wtr:
         for material in materials.values():
             wtr.write(str(material.primitive))
-
-    # Write matrix files to xml, if any
-    xml_paths = {}
-    for key, val in matrices.items():
-        opath = os.path.join("Resources", key + ".xml")
-        tf_path = os.path.join("Resources", key + "_tf.mtx")
-        tb_path = os.path.join("Resources", key + "_tb.mtx")
-        with open(tf_path, "w", encoding="ascii") as wtr:
-            wtr.write(repr(val.tf))
-        with open(tb_path, "w", encoding="ascii") as wtr:
-            wtr.write(repr(val.tb))
-        # basis = ''.join([word[0] for word in val.tf.basis.split()])
-        basis = "".join(
-            [word[0].lower() for word in utils.BASIS_DICT[str(val.tf.ncolumn)].split()]
-        )
-        cmd = ["wrapBSDF", "-f", "n=" + key, "-a", basis]
-        cmd += ["-tf", tf_path, "-tb", tb_path, "-U"]
-        wb_process = sp.run(cmd, check=True, stdout=sp.PIPE, stderr=sp.PIPE)
-        with open(opath, "wb") as wtr:
-            wtr.write(wb_process.stdout)
-        xml_paths[key] = opath
 
     # For each zone write primitves to files and create a config file
     for name, zone in zones.items():
@@ -498,14 +542,13 @@ def epjson2rad(epjs: dict) -> None:
             "method": "",
         }
         mrad_config["Site"] = {
-            "wea_path": "",
-            "zipcode": "",
+            "epw_path": epw,
             "latitude": site["latitude"],
             "longitude": site["longitude"],
-            "start_hour": "",
-            "end_hour": "",
             "daylight_hours_only": "True",
         }
+        if epw is not None:
+            mrad_config["Site"]["epw_path"] = epw
         primitives = epluszone2rad(zone, constructions, materials)
         scene = []
         windows = []
@@ -538,7 +581,7 @@ def epjson2rad(epjs: dict) -> None:
             "grid_spacing": "1",
             "grid_height": "0.75",
         }
-        with open(f"{name.replace(' ', '_')}.cfg", "w", encoding="utf-8") as wtr:
+        with open(f"{name}.cfg", "w", encoding="utf-8") as wtr:
             mrad_config.write(wtr)
 
 

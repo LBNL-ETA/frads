@@ -10,29 +10,15 @@ from pathlib import Path
 import shutil
 import subprocess as sp
 import tempfile as tf
-from typing import List
-from typing import Dict
-from typing import Generator
-from typing import Sequence
-from typing import Tuple
+from typing import Dict, List, Generator, Sequence, Tuple
 
-from frads import geom
-from frads import sky
-from frads import matrix
+from frads import geom, sky, matrix
+from frads import mtxmult, parsers, utils
+from frads.matrix import Sender, Receiver
+from frads.types import MradModel, MradPath, View
+from frads.sky import WeaMetaData, WeaData
 
-from frads import mtxmult
-from frads import parsers
-from frads import raycall
-from frads import utils
-from frads.types import Options
-from frads.types import Primitive
-from frads.types import Receiver
-from frads.types import Sender
-from frads.types import MradModel
-from frads.types import MradPath
-from frads.types import View
-from frads.types import WeaMetaData
-from frads.types import WeaData
+import pyradiance as pr
 
 
 logger: logging.Logger = logging.getLogger("frads.methods")
@@ -53,7 +39,7 @@ def get_window_group(wpaths: List[Path]) -> Tuple[dict, list]:
         prims = utils.unpack_primitives(wpath)
         window_groups[wpath.stem] = prims
         # Taking normal from the first polygon
-        _normal = parsers.parse_polygon(prims[0].real_arg).normal
+        _normal = parsers.parse_polygon(prims[0].fargs).normal
         if _normal not in window_normals:
             window_normals.append(_normal)
     return window_groups, window_normals
@@ -70,11 +56,13 @@ def get_ncp_shades(npaths: List[Path]) -> dict:
 
 def get_wea_data(config: ConfigParser) -> Tuple[WeaMetaData, List[WeaData], str]:
     """Get wea data and parse into appropriate data types."""
+
     if wea_path := config["Site"].getpath("wea_path"):
         logger.info("Using user specified %s file.", wea_path)
         name = wea_path.stem
         with open(wea_path, "r", encoding="utf-8") as rdr:
             wea_metadata, wea_data = parsers.parse_wea(rdr.read())
+
     elif epw_path := config["Site"].getpath("epw_path"):
         logger.info("Converting %s to a .wea file", epw_path)
         name = epw_path.stem
@@ -88,26 +76,34 @@ def get_wea_data(config: ConfigParser) -> Tuple[WeaMetaData, List[WeaData], str]
 def get_sender_grid(config: ConfigParser) -> Dict[str, Sender]:
     """Get point grid as ray senders."""
     sender_grid: Dict[str, Sender] = {}
-    if (grid_paths := config["RaySender"].getpaths("grid_surface")) is None:
-        return sender_grid
-    for gpath in grid_paths:
-        name: str = gpath.stem
-        # Take the first polygon primitive
-        gprimitives = utils.unpack_primitives(gpath)
-        surface_polygon = None
-        for prim in gprimitives:
-            if prim.ptype == "polygon":
-                surface_polygon = parsers.parse_polygon(prim.real_arg)
-        if surface_polygon is None:
-            raise ValueError(f"No polygon found in {gpath}")
-        sensor_pts = utils.gen_grid(
-            surface_polygon,
-            config["RaySender"].getfloat("grid_height"),
-            config["RaySender"].getfloat("grid_spacing"),
-        )
-        sender_grid[name] = matrix.points_as_sender(
-            pts_list=sensor_pts, ray_cnt=config["SimControl"].getint("ray_count")
-        )
+    if (grid_files := config["RaySender"].getpaths("grid_points")) is not None:
+        for gfile in grid_files:
+            name = gfile.stem
+            with open(gfile) as f:
+                sensor_pts = [[float(v) for v in l.split()] for l in f.readlines()]
+            sender_grid[name] = matrix.points_as_sender(
+                pts_list=sensor_pts, ray_cnt=config["SimControl"].getint("ray_count")
+            )
+    elif (grid_paths := config["RaySender"].getpaths("grid_surface")) is not None:
+        for gpath in grid_paths:
+            name: str = gpath.stem
+            # Take the first polygon primitive
+            gprimitives = utils.unpack_primitives(gpath)
+            surface_polygon = None
+            for prim in gprimitives:
+                if prim.ptype == "polygon":
+                    surface_polygon = parsers.parse_polygon(prim.fargs)
+                    break
+            if surface_polygon is None:
+                raise ValueError(f"No polygon found in {gpath}")
+            sensor_pts = utils.gen_grid(
+                surface_polygon,
+                config["RaySender"].getfloat("grid_height"),
+                config["RaySender"].getfloat("grid_spacing"),
+            )
+            sender_grid[name] = matrix.points_as_sender(
+                pts_list=sensor_pts, ray_cnt=config["SimControl"].getint("ray_count")
+            )
     return sender_grid
 
 
@@ -120,9 +116,6 @@ def get_sender_view(config: ConfigParser) -> Tuple[dict, dict]:
     if (view := config["RaySender"].getview("view")) is None:
         return sender_view, view_dicts
     view_name = "view_00"
-    # if "vf" in vdict:
-    # with open(vdict["vf"], "r", encoding="ascii") as rdr:
-    # vdict.update(parsers.parse_vu(rdr.read()))
     view_dicts[view_name] = view
     sender_view[view_name] = matrix.view_as_sender(
         view=view,
@@ -148,10 +141,10 @@ def assemble_model(config: ConfigParser) -> Generator:
         for prim in utils.unpack_primitives(path):
             material_primitives.append(prim)
     material_primitives.append(
-        Primitive("void", "plastic", "black", ["0"], [5, 0, 0, 0, 0, 0])
+        pr.Primitive("void", "plastic", "black", ["0"], [0, 0, 0, 0, 0])
     )
     material_primitives.append(
-        Primitive("void", "glow", "glowing", ["0"], [4, 1, 1, 1, 0])
+        pr.Primitive("void", "glow", "glowing", ["0"], [1, 1, 1, 0])
     )
     material_path = Path(f"all_material_{utils.id_generator()}.rad")
     with open(material_path, "w", encoding="ascii") as wtr:
@@ -159,7 +152,7 @@ def assemble_model(config: ConfigParser) -> Generator:
             wtr.write(str(primitive) + "\n")
     # Get window groups
     window_groups, window_normals = get_window_group(
-        config["Model"].getpaths("windows", []), 
+        config["Model"].getpaths("windows", []),
     )
     # Get BSDFs
     bsdf_mat = {
@@ -270,7 +263,7 @@ def view_matrix_pt(
                 prim_list=window_prim,
                 basis=config["SimControl"]["vmx_basis"],
                 offset=None,
-                left=None,
+                left=False,
                 source="glow",
                 out=out,
             )
@@ -373,21 +366,21 @@ def blacken_env(model: MradModel, config: ConfigParser) -> Tuple[str, str]:
     for _, windows in model.window_groups.items():
         for window in windows:
             blackened_window.append(
-                Primitive(
+                pr.Primitive(
                     "black",
                     window.ptype,
                     window.identifier,
-                    window.str_arg,
-                    window.real_arg,
+                    window.sargs,
+                    window.fargs,
                 )
             )
             glowing_window.append(
-                Primitive(
+                pr.Primitive(
                     "glowing",
                     window.ptype,
                     window.identifier,
-                    window.str_arg,
-                    window.real_arg,
+                    window.sargs,
+                    window.fargs,
                 )
             )
     with open(bwindow_path, "w", encoding="ascii") as wtr:
@@ -396,21 +389,39 @@ def blacken_env(model: MradModel, config: ConfigParser) -> Tuple[str, str]:
         wtr.write("\n".join(list(map(str, glowing_window))))
     vmap_oct = f"vmap_{utils.id_generator()}.oct"
     cdmap_oct = f"cdmap_{utils.id_generator()}.oct"
-    raycall.oconv(
-        str(model.material_path),
-        *map(str, config["Model"].getpaths("scene")),
-        gwindow_path,
-        outpath=vmap_oct,
-        frozen=True,
-    )
+    # raycall.oconv(
+    #     str(model.material_path),
+    #     *map(str, config["Model"].getpaths("scene")),
+    #     gwindow_path,
+    #     outpath=vmap_oct,
+    #     frozen=True,
+    # )
+    with open(vmap_oct, "wb") as wtr:
+        wtr.write(
+            pr.oconv(
+                str(model.material_path),
+                *[str(s) for s in config["Model"].getpaths("scene")],
+                gwindow_path,
+                frozen=True,
+            )
+        )
     logger.info("Generating view matrix material map octree")
-    raycall.oconv(
-        str(model.material_path),
-        *map(str, config["Model"]["scene"].split()),
-        bwindow_path,
-        outpath=cdmap_oct,
-        frozen=True,
-    )
+    # raycall.oconv(
+    #     str(model.material_path),
+    #     *map(str, config["Model"]["scene"].split()),
+    #     bwindow_path,
+    #     outpath=cdmap_oct,
+    #     frozen=True,
+    # )
+    with open(cdmap_oct, "wb") as wtr:
+        wtr.write(
+            pr.oconv(
+                str(model.material_path),
+                *[str(s) for s in config["Model"].getpaths("scene")],
+                bwindow_path,
+                frozen=True,
+            )
+        )
     logger.info("Generating direct-sun matrix material map octree")
     os.remove(bwindow_path)
     os.remove(gwindow_path)
@@ -484,18 +495,18 @@ def direct_sun_matrix_vu(
     for view, sndr in model.sender_view.items():
         mpath.vmap[view] = Path("Matrices", f"vmap_{model.name}_{view}.hdr")
         mpath.cdmap[view] = Path("Matrices", f"cdmap_{model.name}_{view}.hdr")
-        rpict_opt = Options()
+        rpict_opt = pr.SamplingParameters()
         rpict_opt.ps = 1
         rpict_opt.ab = 0
         rpict_opt.av = (0.31831, 0.31831, 0.31831)
-        cmd = raycall.get_rpict_command(model.views[view], rpict_opt, octree=vmap_oct)
-        logger.info("Generating view matrix material map with: \n %s", " ".join(cmd))
-        utils.run_write(cmd, mpath.vmap[view])
-        cmd[-1] = cdmap_oct
-        logger.info(
-            "Generating direct-sun matrix material map with: \n %s", " ".join(cmd)
-        )
-        utils.run_write(cmd, mpath.cdmap[view])
+        with open(mpath.vmap[view], "wb") as wtr:
+            wtr.write(
+                pr.rpict(model.views[view].args(), vmap_oct, params=rpict_opt.args())
+            )
+        with open(mpath.cdmap[view], "wb") as wtr:
+            wtr.write(
+                pr.rpict(model.views[view].args(), cdmap_oct, params=rpict_opt.args())
+            )
         mpath.vcdfmx[view] = Path("Matrices", f"vcdfmx_{model.name}_{view}_{_cfs_name}")
         mpath.vcdrmx[view] = Path("Matrices", f"vcdrmx_{model.name}_{view}_{_cfs_name}")
         tempf = Path("Matrices", "vcdfmx")
@@ -837,13 +848,15 @@ def two_phase(model: MradModel, config: ConfigParser) -> MradPath:
         end_hour=config.getfloat("Site", "end_hour"),
     )
     if regen(mpath.smx, config):
-        sky.gendaymtx(
-            mpath.smx,
-            int(config["SimControl"]["smx_basis"][-1]),
-            data=wea_data,
-            meta=wea_meta,
-            rotate=config["Site"].getfloat("orientation"),
-        )
+        with open(mpath.smx, "wb") as wtr:
+            wtr.write(
+                sky.genskymtx(
+                    mfactor=int(config["SimControl"]["smx_basis"][-1]),
+                    data=wea_data,
+                    meta=wea_meta,
+                    rotate=config["Site"].getfloat("orientation"),
+                )
+            )
     prep_2phase_pt(mpath, model, config)
     prep_2phase_vu(mpath, model, config)
     if not config.getboolean("SimControl", "no_multiply", fallback=False):
@@ -857,9 +870,6 @@ def three_phase(
 ) -> MradPath:
     """3/5-phase simulation workflow."""
     do_multiply = config.getboolean("SimControl", "no_multiply", fallback=False)
-    psteps = 12 if direct else 4
-    if do_multiply:
-        psteps += 2
     mpath = MradPath()
     wea_meta, wea_data, wea_name = get_wea_data(config)
     mpath.smx = Path("Matrices") / (wea_name + ".smx")
@@ -871,13 +881,15 @@ def three_phase(
         end_hour=config.getfloat("Site", "end_hour"),
     )
     if regen(mpath.smx, config):
-        sky.gendaymtx(
-            mpath.smx,
-            int(config["SimControl"]["smx_basis"][-1]),
-            data=wea_data,
-            meta=wea_meta,
-            rotate=config["Site"].getfloat("orientation"),
-        )
+        with open(mpath.smx, "wb") as wtr:
+            wtr.write(
+                sky.genskymtx(
+                    mfactor=int(config["SimControl"]["smx_basis"][-1]),
+                    data=wea_data,
+                    meta=wea_meta,
+                    rotate=config["Site"].getfloat("orientation"),
+                )
+            )
     view_matrix_pt(mpath, model, config)
     view_matrix_vu(mpath, model, config)
     daylight_matrix(mpath, model, config)
@@ -885,7 +897,8 @@ def three_phase(
         if not (orientation := config["Site"].getfloat("orientation")) in (None, 0):
             rotate_radians = math.radians(orientation)
             rotated_window_normals = [
-                n.rotate_3d(geom.Vector(0, 0, 1), rotate_radians) for n in model.window_normals
+                n.rotate_3d(geom.Vector(0, 0, 1), rotate_radians)
+                for n in model.window_normals
             ]
         wea_data_d6, datetime_stamps_d6 = sky.filter_wea(
             wea_data,
@@ -894,36 +907,44 @@ def three_phase(
             start_hour=0,
             end_hour=0,
             remove_zero=True,
-            window_normals=rotated_window_normals if orientation else model.window_normals,
+            window_normals=rotated_window_normals
+            if orientation
+            else model.window_normals,
         )
         mpath.smxd = Path("Matrices") / (wea_name + "_d.smx")
-        sky.gendaymtx(
-            mpath.smxd,
-            int(config["SimControl"]["smx_basis"][-1]),
-            data=wea_data,
-            meta=wea_meta,
-            direct=True,
-        )
+        with open(mpath.smxd, "wb") as wtr:
+            wtr.write(
+                sky.genskymtx(
+                    mfactor=int(config["SimControl"]["smx_basis"][-1]),
+                    data=wea_data,
+                    meta=wea_meta,
+                    sun_only=True,
+                )
+            )
         mpath.smx_sun_img = Path("Matrices") / (wea_name + "_d6_img.smx")
-        sky.gendaymtx(
-            mpath.smx_sun_img,
-            int(config["SimControl"]["cdsmx_basis"][-1]),
-            data=wea_data_d6,
-            meta=wea_meta,
-            rotate=config["Site"].getfloat("orientation"),
-            onesun=True,
-            direct=True,
-        )
+        with open(mpath.smx_sun_img, "wb") as wtr:
+            wtr.write(
+                sky.genskymtx(
+                    mfactor=int(config["SimControl"]["cdsmx_basis"][-1]),
+                    data=wea_data_d6,
+                    meta=wea_meta,
+                    rotate=config["Site"].getfloat("orientation"),
+                    onesun=True,
+                    sun_only=True,
+                )
+            )
         mpath.smx_sun = Path("Matrices") / (wea_name + "_d6.smx")
-        sky.gendaymtx(
-            mpath.smx_sun,
-            int(config["SimControl"]["cdsmx_basis"][-1]),
-            data=wea_data,
-            meta=wea_meta,
-            rotate=config["Site"].getfloat("orientation"),
-            onesun=True,
-            direct=True,
-        )
+        with open(mpath.smx_sun, "wb") as wtr:
+            wtr.write(
+                sky.genskymtx(
+                    mfactor=int(config["SimControl"]["cdsmx_basis"][-1]),
+                    data=wea_data,
+                    meta=wea_meta,
+                    rotate=config["Site"].getfloat("orientation"),
+                    onesun=True,
+                    sun_only=True,
+                )
+            )
         vmap_oct, cdmap_oct = blacken_env(model, config)
         direct_sun_matrix_pt(mpath, model, config)
         if len(datetime_stamps_d6) > 0:

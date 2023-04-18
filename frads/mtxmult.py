@@ -39,7 +39,7 @@ def batch_dctimestep(
         cmd = ["dctimestep"] + [str(f) for f in mtx]
         cmd.append(str(sky))
         cmds.append(cmd)
-        outs.append(out_path)
+        outs.append(str(out_path))
     utils.batch_process(cmds, opaths=outs, nproc=nproc)
 
 

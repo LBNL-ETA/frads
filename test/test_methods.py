@@ -1,15 +1,11 @@
-import configparser
 import os
 from pathlib import Path
+import shutil
 import sys
 sys.path.append(".")
 
 from frads import methods
 from frads import parsers
-from frads import utils
-from frads.types import PaneProperty
-from frads.types import PaneRGB
-from frads.types import Primitive
 
 test_dir_path = Path(__file__).parent.resolve()
 reinsrc6_path = Path("Resources", "reinsrc6.rad")
@@ -25,4 +21,5 @@ def test_assemble_model():
         assert len(model.window_groups) == 2
         assert len(model.bsdf_xml) == 2
         assert model.sender_grid['floor'] is not None
+    os.removedirs("Matrices")
     os.chdir("..")

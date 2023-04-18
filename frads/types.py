@@ -5,18 +5,11 @@ The exceptions are the Vector and Polygon class in the geom.py module.
 
 """
 
-import datetime
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
-from typing import Dict
-from typing import Iterable
-from typing import List
-from typing import NamedTuple
-from typing import Optional
-from typing import Sequence
-from typing import Tuple
-from typing import Union
+from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
+
 
 from frads.geom import Polygon
 from frads.geom import Vector
@@ -77,98 +70,6 @@ class Alias:
         return output
 
 
-@dataclass(frozen=True)
-class Sender:
-    """Sender object for matrix generation.
-
-    Attributes:
-        form: types of sender, {surface(s)|view(v)|points(p)}
-        sender: the sender string
-        xres: sender x dimension
-        yres: sender y dimension
-    """
-
-    form: str
-    sender: bytes
-    xres: Optional[int]
-    yres: Optional[int]
-
-
-@dataclass
-class Receiver:
-    """Receiver object for matrix generation.
-
-    Attributes:
-        receiver: receiver string which can be appended to one another
-        basis: receiver basis, usually kf, r4, r6;
-        modifier: modifiers to the receiver objects;
-    """
-
-    receiver: str
-    basis: str
-    modifier: str = ""
-
-    def __add__(self, other) -> "Receiver":
-        return Receiver(
-            self.receiver + "\n" + other.receiver, self.basis, self.modifier
-        )
-
-
-@dataclass
-class ScatteringData:
-    """Scattering data object.
-
-    Attributes:
-        sdata: scattering data in nested lists.
-        ncolumn: number of columns
-        nrow: number of rows
-    """
-
-    sdata: List[float]
-    ncolumn: int
-    nrow: int
-
-    def __str__(self) -> str:
-        out = "#?RADIANCE\nNCOMP=3\n"
-        out += f"NROWS={self.nrow}\nNCOLS={self.ncolumn}\n"
-        out += "FORMAT=ascii\n\n"
-        for col in range(self.ncolumn):
-            for row in range(self.nrow):
-                val = self.sdata[row + col * self.ncolumn]
-                string = "\t".join([f"{val:7.5f}"] * 3)
-                out += string + "\t"
-            out += "\n"
-        return out
-
-
-@dataclass
-class BSDFData:
-    """BSDF data object.
-
-    Attributes:
-        bsdf: BSDF data.
-        ncolumn: number of columns
-        nrow: number of rows
-    """
-
-    bsdf: List[float]
-    ncolumn: int
-    nrow: int
-
-
-@dataclass(frozen=True)
-class RadMatrix:
-    """Radiance matrix object.
-
-    Attributes:
-        tf: front-side transmission
-        tb: back-side transmission
-    """
-
-    tf: ScatteringData
-    tb: ScatteringData
-
-
 class PaneProperty(NamedTuple):
     """Window pane property object.
 
@@ -219,67 +120,6 @@ class PaneRGB(NamedTuple):
     coated_rgb: Iterable[float]
     glass_rgb: Iterable[float]
     trans_rgb: Iterable[float]
-
-
-class WeaMetaData(NamedTuple):
-    """Weather related meta data object.
-
-    Attributes:
-        city: City.
-        country: Country.
-        latitude: Latitude.
-        longitude: Longitude.
-        timezone: Timezone as standard meridian.
-        elevation: Site elevation (m).
-    """
-
-    city: str
-    country: str
-    latitude: float
-    longitude: float
-    timezone: int
-    elevation: float
-
-    def wea_header(self) -> str:
-        """Return a .wea format header."""
-        return (
-            f"place {self.city}_{self.country}\n"
-            f"latitude {self.latitude}\n"
-            f"longitude {self.longitude}\n"
-            f"time_zone {self.timezone}\n"
-            f"site_elevation {self.elevation}\n"
-            "weather_data_file_units 1\n"
-        )
-
-
-class WeaData(NamedTuple):
-    """Weather related data object.
-
-    Attributes:
-        month: Month.
-        day: Day.
-        hour: Hour.
-        minute: Minutes.
-        second: Seconds.
-        hours: Times with minutes as fraction.
-        dni: Direct normal irradiance (W/m2).
-        dhi: Diffuse horizontal irradiance (W/m2).
-        aod: Aeroal Optical Depth (default = 0).
-        cc: Cloud cover (default = 0).
-        year: default = 2000.
-    """
-
-    time: datetime.datetime
-    dni: float
-    dhi: float
-    aod: float = 0
-    cc: float = 0
-
-    def __str__(self) -> str:
-        return f"{self.time.month} {self.time.day} {self.time.hour+self.time.minute/60} {self.dni} {self.dhi}"
-
-    def dt_str(self) -> str:
-        return f"{self.time.month:02d}{self.time.day:02d}_{self.time.hour:02d}{self.time.minute:02d}"
 
 
 class MradModel(NamedTuple):
@@ -404,6 +244,24 @@ class EPlusWindowMaterial:
     name: str
     visible_transmittance: float
     primitive: Primitive
+
+
+@dataclass
+class EPlusWindowMaterialComplexShade:
+    """EnergyPlus complex window material data container."""
+
+    name: str
+    layer_type: str
+    thickness: float
+    conductivity: float
+    ir_transmittance: float
+    front_emissivity: float
+    back_emissivity: float
+    top_opening_multiplier: float
+    bottom_opening_multiplier: float
+    left_side_opening_multiplier: float
+    right_side_opening_multiplier: float
+    front_opening_multiplier: float
 
 
 @dataclass

@@ -4,29 +4,57 @@ matrices by calling either rfluxmtx or rcontrib.
 """
 
 from __future__ import annotations
+from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
 import subprocess as sp
 import tempfile as tf
-from typing import Iterable
-from typing import List
-from typing import Optional
-from typing import Sequence
-from typing import Union
+from typing import List, Optional, Union, Sequence
 
-from frads import sky
-from frads import geom
-from frads import parsers
-from frads import raycall
-from frads import utils
-from frads.types import Primitive
-from frads.types import Receiver
-from frads.types import Sender
-from frads.geom import Vector
+from frads import geom, parsers, sky, utils
+import numpy as np
+import pyradiance as pr
 
 
 logger: logging.Logger = logging.getLogger("frads.matrix")
+
+
+@dataclass(frozen=True)
+class Sender:
+    """Sender object for matrix generation.
+
+    Attributes:
+        form: types of sender, {surface(s)|view(v)|points(p)}
+        sender: the sender string
+        xres: sender x dimension
+        yres: sender y dimension
+    """
+
+    form: str
+    sender: bytes
+    xres: Optional[int]
+    yres: Optional[int]
+
+
+@dataclass
+class Receiver:
+    """Receiver object for matrix generation.
+
+    Attributes:
+        receiver: receiver string which can be appended to one another
+        basis: receiver basis, usually kf, r4, r6;
+        modifier: modifiers to the receiver objects;
+    """
+
+    receiver: str
+    basis: str
+    modifier: str = ""
+
+    def __add__(self, other) -> "Receiver":
+        return Receiver(
+            self.receiver + "\n" + other.receiver, self.basis, self.modifier
+        )
 
 
 def surface_as_sender(prim_list: list, basis: str, offset=None, left=None) -> Sender:
@@ -34,10 +62,10 @@ def surface_as_sender(prim_list: list, basis: str, offset=None, left=None) -> Se
     Construct a sender from a surface.
 
     Args:
-        prim_list(list): a list of primitives
-        basis(str): sender sampling basis
-        offset(float): move the sender surface in its normal direction
-        left(bool): Use left-hand rule instead for matrix generation
+        prim_list: a list of primitives
+        basis: sender sampling basis
+        offset: move the sender surface in its normal direction
+        left: Use left-hand rule instead for matrix generation
 
     Returns:
         A sender object (Sender)
@@ -50,7 +78,7 @@ def surface_as_sender(prim_list: list, basis: str, offset=None, left=None) -> Se
     return Sender("s", prim_str.encode(), None, None)
 
 
-def view_as_sender(view: View, ray_cnt: int, xres: int, yres: int) -> Sender:
+def view_as_sender(view, ray_cnt: int, xres: int, yres: int) -> Sender:
     """
     Construct a sender from a view.
 
@@ -66,18 +94,9 @@ def view_as_sender(view: View, ray_cnt: int, xres: int, yres: int) -> Sender:
     """
     if (xres is None) or (yres is None):
         raise ValueError("Need to specify resolution")
-    res_cmd = [
-        "vwrays",
-        *view.args(),
-        "-x",
-        str(xres),
-        "-y",
-        str(yres),
-        "-d",
-    ]
-    logger.info("Check real image resolution: \n%s", " ".join(res_cmd))
-    res_proc = sp.run(res_cmd, check=True, stdout=sp.PIPE, encoding="ascii")
-    res_eval = res_proc.stdout.split()
+    res_eval = pr.vwrays(
+        view=view.args(), xres=xres, yres=yres, dimensions=True
+    ).split()
     new_xres, new_yres = int(res_eval[1]), int(res_eval[3])
     if (new_xres != xres) and (new_yres != yres):
         logger.info("Changed resolution to %s %s", new_xres, new_yres)
@@ -87,20 +106,85 @@ def view_as_sender(view: View, ray_cnt: int, xres: int, yres: int) -> Sender:
         vwrays_cmd.extend(["-c", str(ray_cnt), "-pj", "0.7"])
     logger.debug("Ray count is %s", ray_cnt)
     vwrays_cmd += view.args()
-    vwrays_cmd += ['-x', str(new_xres), '-y', str(new_yres)]
+    vwrays_cmd += ["-x", str(new_xres), "-y", str(new_yres)]
     logger.info("Generate view rays with: \n%s", " ".join(vwrays_cmd))
     vwrays_proc = sp.run(vwrays_cmd, check=True, stdout=sp.PIPE)
+    vwrays_proc = pr.vwrays(
+        view=view.args(),
+        outform="f",
+        xres=new_xres,
+        yres=new_yres,
+        ray_count=ray_cnt,
+        pixel_jitter=0.7,
+    )
     if view.vtype == "a":
-        flush_cmd = utils.get_flush_corner_rays_command(ray_cnt, xres)
+        flush_cmd = [
+            "rcalc",
+            "-if6",
+            "-of",
+            "-e",
+            f"DIM:{xres};CNT:{ray_cnt}",
+            "-e",
+            "pn=(recno-1)/CNT+.5",
+            "-e",
+            "frac(x):x-floor(x)",
+            "-e",
+            "xpos=frac(pn/DIM);ypos=pn/(DIM*DIM)",
+            "-e",
+            "incir=if(.25-(xpos-.5)*(xpos-.5)-(ypos-.5)*(ypos-.5),1,0)",
+            "-e",
+            "$1=$1;$2=$2;$3=$3;$4=$4*incir;$5=$5*incir;$6=$6*incir",
+        ]
         logger.info("Flushing -vta corner rays: \n%s", " ".join(flush_cmd))
-        flush_proc = sp.run(
-            flush_cmd, check=True, input=vwrays_proc.stdout, stdout=sp.PIPE
-        )
+        flush_proc = sp.run(flush_cmd, check=True, input=vwrays_proc, stdout=sp.PIPE)
         vrays = flush_proc.stdout
     else:
-        vrays = vwrays_proc.stdout
+        vrays = vwrays_proc
     logger.debug("View sender:\n%s", vrays)
     return Sender("v", vrays, xres, yres)
+
+
+def load_matrix(file: Union[bytes, str, Path], dtype: str = "float"):
+    """
+    Load a Radiance matrix file into numpy array.
+
+    Args:
+        file: a file path
+
+    Returns:
+        A numpy array
+    """
+    npdtype = np.double if dtype.startswith("d") else np.single
+    mtx = pr.rmtxop(file, outform=dtype[0].lower())
+    nrows, ncols, ncomp, _ = parsers.parse_rad_header(pr.getinfo(mtx).decode())
+    return np.frombuffer(pr.getinfo(mtx, strip_header=True), dtype=npdtype).reshape(
+        nrows, ncols, ncomp
+    )
+
+
+def load_image_matrix(file, outform="d") -> np.ndarray:
+    """
+    Load a Radiance HDR image into numpy array.
+    Args:
+        file: a file path
+    Returns:
+        A numpy array
+    """
+    xres, yres = pr.get_image_dimensions(file)
+    pix = pr.pvalue(file, outform=outform)
+    return np.frombuffer(pix, np.double).reshape(xres, yres, 3)
+
+
+def multiply_rgb(*mtx: np.ndarray, weights=None):
+    """Multiply matrices as numpy ndarray."""
+    resr = np.linalg.multi_dot([m[:, :, 0] for m in mtx])
+    resg = np.linalg.multi_dot([m[:, :, 1] for m in mtx])
+    resb = np.linalg.multi_dot([m[:, :, 2] for m in mtx])
+    if weights:
+        if len(weights) != 3:
+            raise ValueError("Weights should have 3 values")
+        return resr * weights[0] + resg * weights[1] + resb * weights[2]
+    return np.array((resr, resg, resb))
 
 
 def points_as_sender(pts_list: list, ray_cnt: Optional[int] = None) -> Sender:
@@ -128,7 +212,7 @@ def points_as_sender(pts_list: list, ray_cnt: Optional[int] = None) -> Sender:
 def sun_as_receiver(
     basis,
     smx_path: Path,
-    window_normals: Optional[List[Vector]],
+    window_normals: Optional[List[geom.Vector]],
     full_mod: bool = False,
 ) -> Receiver:
     """
@@ -176,7 +260,7 @@ def sky_as_receiver(basis: str, out) -> Receiver:
 
 
 def surface_as_receiver(
-    prim_list: Sequence[Primitive],
+    prim_list: List[pr.Primitive],
     basis: str,
     out: Union[None, str, Path],
     offset=None,
@@ -233,10 +317,10 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
     if out is not None:
         header += f'#@rfluxmtx o="{out}"\n\n'
     if source == "glow":
-        source_prim = Primitive("void", source, src_mod, ("0"), (4, 1, 1, 1, 0))
+        source_prim = pr.Primitive("void", source, src_mod, ("0"), (1, 1, 1, 0))
         header += str(source_prim)
     elif source == "light":
-        source_prim = Primitive("void", source, src_mod, ("0"), (3, 1, 1, 1))
+        source_prim = pr.Primitive("void", source, src_mod, ("0"), (1, 1, 1))
         header += str(source_prim)
     modifiers = [p.modifier for p in prims]
     content = ""
@@ -247,14 +331,14 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
             _identifier = prim.identifier
         _modifier = src_mod
         if offset is not None:
-            poly = parsers.parse_polygon(prim.real_arg)
+            poly = parsers.parse_polygon(prim.fargs)
             offset_vec = poly.normal.scale(offset)
             moved_pts = [pt + offset_vec for pt in poly.vertices]
             _real_args = geom.Polygon(moved_pts).to_real()
         else:
-            _real_args = prim.real_arg
-        new_prim = Primitive(
-            _modifier, prim.ptype, _identifier, prim.str_arg, _real_args
+            _real_args = prim.fargs
+        new_prim = pr.Primitive(
+            _modifier, prim.ptype, _identifier, prim.sargs, _real_args
         )
         content += str(new_prim) + "\n"
     return header + content
@@ -263,7 +347,7 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
 def rfluxmtx(
     sender: Sender,
     receiver: Receiver,
-    env: Iterable[Path],
+    env: Sequence[Path],
     opt: Optional[List[str]] = None,
 ) -> None:
     """
@@ -282,8 +366,8 @@ def rfluxmtx(
     if None in (sender, receiver):
         raise ValueError("Sender/Receiver object is None")
     opt = [] if opt is None else opt
-    _sender = None
-    stdin: Optional[bytes] = sender.sender
+    rays = None
+    surface = None
     with tf.TemporaryDirectory() as tempd:
         receiver_path = Path(tempd, "receiver")
         with open(receiver_path, "w", encoding="ascii") as wtr:
@@ -292,21 +376,14 @@ def rfluxmtx(
             sender_path = Path(tempd, "sender")
             with open(sender_path, "wb") as wtr:
                 wtr.write(sender.sender)
-            _sender = sender_path
-            stdin = None
+            surface = sender_path
         elif sender.form == "p":
             opt.extend(["-I+", "-faa", "-y", str(sender.yres)])
+            rays = sender.sender
         elif sender.form == "v":
             opt.extend(["-ffc", "-x", str(sender.xres), "-y", str(sender.yres), "-ld-"])
-        cmd = raycall.get_rfluxmtx_command(
-            receiver_path, option=opt, sender=_sender, sys_paths=env
-        )
-        logger.info("Running rfluxmtx with:\n%s", " ".join(cmd))
-        try:
-            sp.run(cmd, check=True, input=stdin, stderr=sp.PIPE)
-        except sp.CalledProcessError as err:
-            logger.error("rfluxmtx failed with:\n%s", err.stderr.decode("ascii"))
-            raise err
+            rays = sender.sender
+        pr.rfluxmtx(receiver_path, surface=surface, rays=rays, params=opt, scene=env)
 
 
 def rcvr_oct(receiver, env, oct_path: Union[str, Path]) -> None:
@@ -353,19 +430,38 @@ def rcontrib(
 
     """
     opt.append("-fo+")
+    xres = None
+    yres = None
+    inform = None
+    outform = None
     with tf.TemporaryDirectory() as tempd:
         modifier_path = os.path.join(tempd, "modifier")
         with open(modifier_path, "w", encoding="utf-8") as wtr:
             wtr.write(modifier)
-        cmd = ["rcontrib", *opt]
-        stdin = sender.sender
         if sender.form == "p":
-            cmd += ["-I+", "-faf", "-y", str(sender.yres)]
+            opt += ["-I+"]
+            inform = "a"
+            outform = "f"
+            yres = sender.yres
         elif sender.form == "v":
             out = Path(out)
             out.mkdir(exist_ok=True)
             out = out / "%04d.hdr"
-            cmd += ["-ffc", "-x", str(sender.xres), "-y", str(sender.yres)]
-        cmd += ["-o", str(out), "-M", modifier_path, str(octree)]
-        logger.info("Running rcontrib with:\n%s", " ".join(cmd))
-        sp.run(cmd, check=True, input=stdin)
+            inform = "f"
+            outform = "c"
+            xres = sender.xres
+            yres = sender.yres
+            # cmd += ["-ffc", "-x", str(sender.xres), "-y", str(sender.yres)]
+        mod = pr.RcModifier()
+        mod.modifier_path = modifier_path
+        mod.xres = xres
+        mod.yres = yres
+        mod.output = str(out)
+        pr.rcontrib(
+            sender.sender,
+            str(octree),
+            [mod],
+            inform=inform,
+            outform=outform,
+            params=opt,
+        )

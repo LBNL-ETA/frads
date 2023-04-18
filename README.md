@@ -1,6 +1,6 @@
 ![Install + Test](https://github.com/LBNL-ETA/frads/actions/workflows/main.yml/badge.svg)
-![CodeQL](https://github.com/LBNL-ETA/frads/actions/workflows/codeql-analysis.yml/badge.svg)
 [![Upload Python Package](https://github.com/LBNL-ETA/frads/actions/workflows/python-publish.yml/badge.svg)](https://github.com/LBNL-ETA/frads/actions/workflows/python-publish.yml)
+![Downloads](https://img.shields.io/pypi/dm/frads.svg)
 # _frads_: Framework for Radiance simulation control
 
 This is the repository for _frads_ development. Radiance is a free and open-source, raytracing-based lighting engine that is used extensively by engineering firms for innovative solar control, lighting, and daylighting design to improve the energy efficiency of buildings. With matrix algebraic methods, climate-based annual simulations can now be conducted in less than two minutes. _frads_ automates setup of these simulations by providing end users with an open-source, high-level abstraction of the Radiance command-line workflow (Unix toolbox model), helping to reduce the steep learning curve and associated user errors. _frads_ also provides the necessary infrastructure needed for seamless integration of Radiance and other modeling tools, such as EnergyPlus.
@@ -37,21 +37,6 @@ You can verify that Python is installed by typing python from your cmd/powershel
 	[GCC 4.x] on linux
 	Type "help", "copyright", "credits" or "license" for more information.
 	>>>
-
-### Install Radiance
-
-If you haven't already, you will need to install Radiance. `frads` will check your Radiance
-installation, so make sure you install it first.
-
-To install Radiance, visit Radiance Github [repo](https://github.com/LBNL-ETA/Radiance/releases)
- to download the latest release for your operating system.
-
-You can verify that Radiance is installed properly by typing in the command-line:
-
-```
-$ rtrace -version
-RADIANCE 5.4a ...
-```
 
 ### Install frads
 

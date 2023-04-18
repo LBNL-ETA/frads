@@ -24,7 +24,7 @@ from frads import room
 from frads import utils
 from frads.types import NcpModel
 from frads.types import PaneRGB
-from frads.types import Receiver
+from frads.matrix import Receiver
 
 
 logger: logging.Logger = logging.getLogger("frads")
@@ -357,7 +357,7 @@ def genmtx_pts_srf(args) -> None:
                 prim_list=_receiver,
                 basis=args.basis,
                 offset=args.offset,
-                left=None,
+                left=False,
                 source="glow",
                 out=outpath,
             )
@@ -392,7 +392,7 @@ def genmtx_vu_srf(args) -> None:
                 prim_list=_receiver,
                 basis=args.basis,
                 offset=args.offset,
-                left=None,
+                left=False,
                 source="glow",
                 out=outpath / "%04d.hdr",
             )

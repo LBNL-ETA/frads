@@ -4,7 +4,7 @@ sys.path.append(".")
 
 from frads import geom
 from frads import matrix
-from frads.types import Primitive
+import pyradiance as pr
 from frads.types import View
 from frads.types import ViewType
 
@@ -21,8 +21,8 @@ window_polygon = [
                   ])
 ]
 window_primitives = [
-    Primitive("void", "polygon", "window1", ("0"), window_polygon[0].to_real()),
-    Primitive("void", "polygon", "window2", ("0"), window_polygon[1].to_real())
+    pr.Primitive("void", "polygon", "window1", ("0"), window_polygon[0].to_real()),
+    pr.Primitive("void", "polygon", "window2", ("0"), window_polygon[1].to_real())
 ]
 
 def test_surface_as_sender():

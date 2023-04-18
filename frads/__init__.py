@@ -50,9 +50,14 @@ or on a time-step basis.
 
 import logging
 import shutil
-import subprocess as sp
+
+from .epjson2rad import epjson2rad
+
+from .eprad import load_epmodel, EnergyPlusSetup, ep_datetime_parser
 
 from .matrix import (
+    load_matrix,
+    multiply_rgb,
     rfluxmtx,
     surface_as_sender,
     points_as_sender,
@@ -63,26 +68,33 @@ from .matrix import (
 )
 
 from .parsers import (
-    parse_primitive,
     parse_epw,
     parse_wea,
     parse_polygon,
+    parse_mrad_config,
 )
 
-# from .raycall import oconv, rtrace, render
+from .methods import assemble_model, three_phase
 
-from .sky import basis_glow, gen_perez_sky
-
-from .types import (
-    Primitive,
-    View,
+from .sky import (
+    basis_glow,
+    gen_perez_sky,
+    genskymtx,
     WeaData,
     WeaMetaData,
 )
 
+from .types import (
+    Primitive,
+    View,
+)
+
+
 from .utils import gen_grid, unpack_primitives
 
-__version__ = "0.2.10"
+from .window import GlazingSystem, AIR, ARGON, KRYPTON, XENON
+
+__version__ = "0.3.0"
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -103,44 +115,39 @@ for prog in rad_progs:
     if ppath is None:
         logger.info("%s not found; check Radiance installation", prog)
 
-try:
-    # Check Radiance version, need to be at least 5.X
-    version_check: str = sp.run(
-        ["rtrace", "-version"],
-        check=True,
-        stdout=sp.PIPE,
-        encoding="ascii",
-    ).stdout
-    try:
-        rad_version = float(version_check.split()[1][:3])
-        if rad_version < 5.3:
-            logger.critical("Please upgrade to Radiance version 5.3 or later")
-    except ValueError:
-        logger.critical(version_check)
-except FileNotFoundError as err:
-    logger.critical(err)
 
 __all__ = [
+    "AIR",
+    "ARGON",
+    "assemble_model",
     "basis_glow",
+    "EnergyPlusSetup",
+    "ep_datetime_parser",
+    "epjson2rad",
+    "GlazingSystem",
     "gen_perez_sky",
     "gen_grid",
-    "parse_primitive",
+    "genskymtx",
+    "KRYPTON",
+    "load_epmodel",
+    "load_matrix",
+    "multiply_rgb",
     "parse_epw",
+    "parse_mrad_config",
     "parse_wea",
     "parse_polygon",
     "Primitive",
-    # "oconv",
     "points_as_sender",
     "rfluxmtx",
-    # "rtrace",
     "sky_as_receiver",
     "surface_as_receiver",
     "sun_as_receiver",
     "surface_as_sender",
-    # "render",
+    "three_phase",
     "unpack_primitives",
     "View",
     "view_as_sender",
     "WeaData",
     "WeaMetaData",
+    "XENON",
 ]
