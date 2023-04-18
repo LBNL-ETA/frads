@@ -4,6 +4,7 @@ matrices by calling either rfluxmtx or rcontrib.
 """
 
 from __future__ import annotations
+from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
@@ -12,12 +13,48 @@ import tempfile as tf
 from typing import List, Optional, Union, Sequence
 
 from frads import geom, parsers, sky, utils
-from frads.types import Primitive, Receiver, Sender
 import numpy as np
 import pyradiance as pr
 
 
 logger: logging.Logger = logging.getLogger("frads.matrix")
+
+
+@dataclass(frozen=True)
+class Sender:
+    """Sender object for matrix generation.
+
+    Attributes:
+        form: types of sender, {surface(s)|view(v)|points(p)}
+        sender: the sender string
+        xres: sender x dimension
+        yres: sender y dimension
+    """
+
+    form: str
+    sender: bytes
+    xres: Optional[int]
+    yres: Optional[int]
+
+
+@dataclass
+class Receiver:
+    """Receiver object for matrix generation.
+
+    Attributes:
+        receiver: receiver string which can be appended to one another
+        basis: receiver basis, usually kf, r4, r6;
+        modifier: modifiers to the receiver objects;
+    """
+
+    receiver: str
+    basis: str
+    modifier: str = ""
+
+    def __add__(self, other) -> "Receiver":
+        return Receiver(
+            self.receiver + "\n" + other.receiver, self.basis, self.modifier
+        )
 
 
 def surface_as_sender(prim_list: list, basis: str, offset=None, left=None) -> Sender:
@@ -69,7 +106,7 @@ def view_as_sender(view, ray_cnt: int, xres: int, yres: int) -> Sender:
         vwrays_cmd.extend(["-c", str(ray_cnt), "-pj", "0.7"])
     logger.debug("Ray count is %s", ray_cnt)
     vwrays_cmd += view.args()
-    vwrays_cmd += ['-x', str(new_xres), '-y', str(new_yres)]
+    vwrays_cmd += ["-x", str(new_xres), "-y", str(new_yres)]
     logger.info("Generate view rays with: \n%s", " ".join(vwrays_cmd))
     vwrays_proc = sp.run(vwrays_cmd, check=True, stdout=sp.PIPE)
     vwrays_proc = pr.vwrays(
@@ -99,9 +136,7 @@ def view_as_sender(view, ray_cnt: int, xres: int, yres: int) -> Sender:
             "$1=$1;$2=$2;$3=$3;$4=$4*incir;$5=$5*incir;$6=$6*incir",
         ]
         logger.info("Flushing -vta corner rays: \n%s", " ".join(flush_cmd))
-        flush_proc = sp.run(
-            flush_cmd, check=True, input=vwrays_proc, stdout=sp.PIPE
-        )
+        flush_proc = sp.run(flush_cmd, check=True, input=vwrays_proc, stdout=sp.PIPE)
         vrays = flush_proc.stdout
     else:
         vrays = vwrays_proc
@@ -122,7 +157,9 @@ def load_matrix(file: Union[bytes, str, Path], dtype: str = "float"):
     npdtype = np.double if dtype.startswith("d") else np.single
     mtx = pr.rmtxop(file, outform=dtype[0].lower())
     nrows, ncols, ncomp, _ = parsers.parse_rad_header(pr.getinfo(mtx).decode())
-    return np.frombuffer(pr.getinfo(mtx, strip_header=True), dtype=npdtype).reshape(nrows, ncols, ncomp)
+    return np.frombuffer(pr.getinfo(mtx, strip_header=True), dtype=npdtype).reshape(
+        nrows, ncols, ncomp
+    )
 
 
 def load_image_matrix(file, outform="d") -> np.ndarray:
@@ -140,9 +177,9 @@ def load_image_matrix(file, outform="d") -> np.ndarray:
 
 def multiply_rgb(*mtx: np.ndarray, weights=None):
     """Multiply matrices as numpy ndarray."""
-    resr = np.linalg.multi_dot([m[:,:,0] for m in mtx])
-    resg = np.linalg.multi_dot([m[:,:,1] for m in mtx])
-    resb = np.linalg.multi_dot([m[:,:,2] for m in mtx])
+    resr = np.linalg.multi_dot([m[:, :, 0] for m in mtx])
+    resg = np.linalg.multi_dot([m[:, :, 1] for m in mtx])
+    resb = np.linalg.multi_dot([m[:, :, 2] for m in mtx])
     if weights:
         if len(weights) != 3:
             raise ValueError("Weights should have 3 values")
@@ -223,7 +260,7 @@ def sky_as_receiver(basis: str, out) -> Receiver:
 
 
 def surface_as_receiver(
-    prim_list: Sequence[Primitive],
+    prim_list: List[pr.Primitive],
     basis: str,
     out: Union[None, str, Path],
     offset=None,
@@ -280,10 +317,10 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
     if out is not None:
         header += f'#@rfluxmtx o="{out}"\n\n'
     if source == "glow":
-        source_prim = Primitive("void", source, src_mod, ("0"), (4, 1, 1, 1, 0))
+        source_prim = pr.Primitive("void", source, src_mod, ("0"), (1, 1, 1, 0))
         header += str(source_prim)
     elif source == "light":
-        source_prim = Primitive("void", source, src_mod, ("0"), (3, 1, 1, 1))
+        source_prim = pr.Primitive("void", source, src_mod, ("0"), (1, 1, 1))
         header += str(source_prim)
     modifiers = [p.modifier for p in prims]
     content = ""
@@ -294,14 +331,14 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
             _identifier = prim.identifier
         _modifier = src_mod
         if offset is not None:
-            poly = parsers.parse_polygon(prim.real_arg)
+            poly = parsers.parse_polygon(prim.fargs)
             offset_vec = poly.normal.scale(offset)
             moved_pts = [pt + offset_vec for pt in poly.vertices]
             _real_args = geom.Polygon(moved_pts).to_real()
         else:
-            _real_args = prim.real_arg
-        new_prim = Primitive(
-            _modifier, prim.ptype, _identifier, prim.str_arg, _real_args
+            _real_args = prim.fargs
+        new_prim = pr.Primitive(
+            _modifier, prim.ptype, _identifier, prim.sargs, _real_args
         )
         content += str(new_prim) + "\n"
     return header + content

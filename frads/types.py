@@ -70,98 +70,6 @@ class Alias:
         return output
 
 
-@dataclass(frozen=True)
-class Sender:
-    """Sender object for matrix generation.
-
-    Attributes:
-        form: types of sender, {surface(s)|view(v)|points(p)}
-        sender: the sender string
-        xres: sender x dimension
-        yres: sender y dimension
-    """
-
-    form: str
-    sender: bytes
-    xres: Optional[int]
-    yres: Optional[int]
-
-
-@dataclass
-class Receiver:
-    """Receiver object for matrix generation.
-
-    Attributes:
-        receiver: receiver string which can be appended to one another
-        basis: receiver basis, usually kf, r4, r6;
-        modifier: modifiers to the receiver objects;
-    """
-
-    receiver: str
-    basis: str
-    modifier: str = ""
-
-    def __add__(self, other) -> "Receiver":
-        return Receiver(
-            self.receiver + "\n" + other.receiver, self.basis, self.modifier
-        )
-
-
-@dataclass
-class ScatteringData:
-    """Scattering data object.
-
-    Attributes:
-        sdata: scattering data in nested lists.
-        ncolumn: number of columns
-        nrow: number of rows
-    """
-
-    sdata: List[float]
-    ncolumn: int
-    nrow: int
-
-    def __str__(self) -> str:
-        out = "#?RADIANCE\nNCOMP=3\n"
-        out += f"NROWS={self.nrow}\nNCOLS={self.ncolumn}\n"
-        out += "FORMAT=ascii\n\n"
-        for col in range(self.ncolumn):
-            for row in range(self.nrow):
-                val = self.sdata[row + col * self.ncolumn]
-                string = "\t".join([f"{val:7.5f}"] * 3)
-                out += string + "\t"
-            out += "\n"
-        return out
-
-
-@dataclass
-class BSDFData:
-    """BSDF data object.
-
-    Attributes:
-        bsdf: BSDF data.
-        ncolumn: number of columns
-        nrow: number of rows
-    """
-
-    bsdf: List[float]
-    ncolumn: int
-    nrow: int
-
-
-@dataclass(frozen=True)
-class RadMatrix:
-    """Radiance matrix object.
-
-    Attributes:
-        tf: front-side transmission
-        tb: back-side transmission
-    """
-
-    tf: ScatteringData
-    tb: ScatteringData
-
-
 class PaneProperty(NamedTuple):
     """Window pane property object.
 
@@ -336,6 +244,24 @@ class EPlusWindowMaterial:
     name: str
     visible_transmittance: float
     primitive: Primitive
+
+
+@dataclass
+class EPlusWindowMaterialComplexShade:
+    """EnergyPlus complex window material data container."""
+
+    name: str
+    layer_type: str
+    thickness: float
+    conductivity: float
+    ir_transmittance: float
+    front_emissivity: float
+    back_emissivity: float
+    top_opening_multiplier: float
+    bottom_opening_multiplier: float
+    left_side_opening_multiplier: float
+    right_side_opening_multiplier: float
+    front_opening_multiplier: float
 
 
 @dataclass
