@@ -2,7 +2,7 @@
 Class and functions for accessing EnergyPlus Python API
 """
 
-import datetime
+from datetime import datetime, timedelta
 import json
 from pathlib import Path
 from typing import Optional
@@ -383,11 +383,11 @@ def ep_datetime_parser(inp):
     month, day = [int(i) for i in date.split("/")]
     hr, mi, sc = [int(i) for i in time.split(":")]
     if hr == 24 and mi == 0 and sc == 0:
-        return datetime.datetime(1900, month, day, 0, mi, sc) + datetime.timedelta(
+        return datetime(1900, month, day, 0, mi, sc) + timedelta(
             days=1
         )
     else:
-        return datetime.datetime(1900, month, day, hr, mi, sc)
+        return datetime(1900, month, day, hr, mi, sc)
 
 
 def load_epmodel(fpath: Path, api) -> EPModel:
@@ -519,27 +519,17 @@ class EnergyPlusSetup:
         hour = self.api.exchange.hour(self.state)
         minute = self.api.exchange.minutes(self.state)
 
+        date = datetime(year, month, day)
+
         if minute == 60:
             minute = 0
             hour += 1
+
         if hour == 24:
             hour = 0
-            day += 1
-        if day == 31 and month in [4, 6, 9, 11]:
-            day = 1
-            month += 1
-        elif day == 32 and month in [1, 3, 5, 7, 8, 10, 12]:
-            day = 1
-            month += 1
-        # Assuming EPW never has Feb 29th
-        elif day == 29 and month == 2:
-            day = 1
-            month += 1
-        if month == 13:
-            month = 1
-            year += 1
+            date += timedelta(days=1)
 
-        dt = datetime.datetime(year, month, day, hour, minute)
+        dt = date + timedelta(hours=hour, minutes=minute)
 
         return dt
 
