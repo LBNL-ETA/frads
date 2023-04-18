@@ -4,11 +4,12 @@ import sys
 sys.path.append(".")
 
 from frads import geom
+import pyradiance as pr
 from frads import parsers
 from frads import sky
 from frads import utils
-from frads.types import WeaData
-from frads.types import WeaMetaData
+from frads.sky import WeaData
+from frads.sky import WeaMetaData
 import logging
 
 logger = logging.getLogger()
@@ -40,7 +41,7 @@ def test_gen_sun_source_full():
     reinsrc4_path = test_dir / "Resources" / "reinsrc4.rad"
     mf = 4
     prim_str, mod_str = sky.gen_sun_source_full(mf)
-    prims = parsers.parse_primitive(prim_str.splitlines())
+    prims = pr.parse_primitive(prim_str)
     answer_prims = utils.unpack_primitives(reinsrc4_path)
     for aprim, prim in zip(prims, answer_prims):
         assert str(aprim) == str(prim)
