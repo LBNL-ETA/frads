@@ -241,6 +241,7 @@ def rad_mtxmult3(*mtxs, weights: tuple = (), no_header: bool = True):
 def mtxmult(*mtxs):
     """Generic matrix multiplications."""
     if NUMPY_FOUND:
+
         def mtx_parser(fpath):
             if fpath.suffix == ".xml":
                 proc = sp.run(
