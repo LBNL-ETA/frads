@@ -28,23 +28,8 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Download latest Radiance binaries
-      run: |
-        ver=$(gh release list -R LBNL-ETA/Radiance -L 1 | cut -f 3)
-        gh release download $ver -R LBNL-ETA/Radiance -p '*Linux.zip'
-
     - name: Download latest EnergyPlus
       run: gh release download -R NREL/EnergyPlus -p '*Ubuntu20*.tar.gz'
-
-    - name: Install Radiance
-      run: |
-        unzip Radiance_*_Linux.zip
-        tar -xvf radiance-*-Linux.tar.gz
-        mkdir buildRad
-        sudo cp -avr ./radiance-*-Linux/usr/local/radiance ./buildRad
-        export RAYPATH=.:${{ github.workspace }}/buildRad/radiance/lib
-        export PATH=$PATH:${{ github.workspace }}/buildRad/radiance/bin
-        rtrace -version
 
     - name: Install EnergyPlus
       run: |
@@ -60,12 +45,9 @@ jobs:
 
     - name: Run tests
       run: |
-        export RAYPATH=.:${{ github.workspace }}/buildRad/radiance/lib
-        export PATH=$PATH:${{ github.workspace }}/buildRad/radiance/bin
         export PATH=$PATH:${{ github.workspace }}/EnergyPlus
         energyplus --version
         rtrace -version
-        pip install numpy
         pip install pytest
         pytest test
 
@@ -85,23 +67,10 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Download latest Radiance binaries
-      run: |
-        ver=$(gh release list -R LBNL-ETA/Radiance -L 1 | cut -f 3)
-        gh release download $ver -R LBNL-ETA/Radiance -p '*OSX.zip'
-
     - name: Download latest EnergyPlus
       run: gh release download -R NREL/EnergyPlus -p '*macOS11*.tar.gz'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Install Radiance
-      run: |
-        unzip Radiance_*_OSX.zip
-        ls
-        export RAYPATH=.:${{ github.workspace }}/radiance/lib
-        export PATH=$PATH:${{ github.workspace }}/radiance/bin
-        rtrace -version
 
     - name: Install EnergyPlus
       run: |
@@ -117,12 +86,9 @@ jobs:
 
     - name: Run tests
       run: |
-        export RAYPATH=.:${{ github.workspace }}/radiance/lib
-        export PATH=$PATH:${{ github.workspace }}/radiance/bin
         export PATH=$PATH:${{ github.workspace }}/EnergyPlus
         energyplus --version
         rtrace -version
-        pip install numpy
         pip install pytest
         pytest test
 
@@ -145,19 +111,8 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Download latest Radiance binaries
-      run: gh release download -R LBNL-ETA/Radiance -p "*Windows.zip"
-
     - name: Download latest EnergyPlus
       run: gh release download -R NREL/EnergyPlus -p "*Windows*.zip"
-
-    - name: Install Radiance
-      run: |
-        unzip Radiance_*_Windows.zip
-        ls
-        set RAYPATH=.;${{ github.workspace }}\lib
-        set PATH=%PATH%;${{ github.workspace }}\bin
-        rtrace -version
 
     - name: Install EnergyPlus
       run: |
@@ -172,10 +127,6 @@ jobs:
 
     - name: Run tests
       run: |
-        set RAYPATH=.;${{ github.workspace }}\lib
-        set PATH=%PATH%;${{ github.workspace }}\bin
         set PATH=%PATH%;${{ github.workspace }}\EnergyPlus
-        rtrace -version
         pip install pytest
-        pip install numpy
-        pytest test
+        pytest 
