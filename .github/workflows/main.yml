@@ -82,7 +82,7 @@ jobs:
 
     - name: Install frads
       run: |
-        pip install pywincalc
+        sw_vers
         pip install .
 
     - name: Run tests
