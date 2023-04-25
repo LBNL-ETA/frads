@@ -81,7 +81,9 @@ jobs:
         export PATH=$PATH:${{ github.workspace }}/EnergyPlus
 
     - name: Install frads
-      run: pip install .
+      run: |
+        pip install pywincalc
+        pip install .
 
     - name: Run tests
       run: |
