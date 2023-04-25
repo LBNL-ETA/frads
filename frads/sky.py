@@ -7,7 +7,6 @@ import logging
 import math
 import os
 from pathlib import Path
-import subprocess as sp
 from typing import Any, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import pyradiance as pr
@@ -15,9 +14,6 @@ import pyradiance as pr
 from frads import geom, utils
 
 logger: logging.Logger = logging.getLogger("frads.sky")
-
-# Solar disk solid angle (sr)
-SOLAR_SA = 6.7967e-5
 
 
 class WeaMetaData(NamedTuple):
@@ -174,13 +170,10 @@ def gen_sun_source_culled(
     full_mod_str = os.linesep.join([f"sol{i}" for i in range(1, runlen)])
     win_norm = []
     if smx_path is not None:
-        cmd1 = ["rmtxop", "-ff", "-c", ".3", ".6", ".1", "-t", str(smx_path)]
-        cmd2 = ["getinfo", "-"]
-        cmd3 = ["total", f"-if{runlen-1}", "-t,"]
-        proc1 = sp.run(cmd1, check=True, stdout=sp.PIPE)
-        proc2 = sp.run(cmd2, check=True, input=proc1.stdout, stdout=sp.PIPE)
-        proc3 = sp.run(cmd3, check=True, input=proc2.stdout, stdout=sp.PIPE)
-        dtot = [float(i) for i in proc3.stdout.split(b",")]
+        cmd1 = pr.rmtxop(str(smx_path), outform='f', transpose=True, transform=(.3, .6, .1))
+        cmd2 = pr.getinfo(cmd1, strip_header=True)
+        proc3 = pr.total(cmd2, inform='f', incount=runlen-1, sep=',')
+        dtot = [float(i) for i in proc3.split(b",")]
     else:
         dtot = [1] * runlen
     out_lines = []
@@ -273,7 +266,7 @@ def genskymtx(
             raise ValueError("Either a .wea path or wea data is required.")
     else:
         inp = wpath
-    _err, _out = pr.gendaymtx(
+    _out = pr.gendaymtx(
         inp,
         header=header,
         average=average,
@@ -290,56 +283,7 @@ def genskymtx(
         onesun=onesun,
         mfactor=mfactor,
     )
-    logger.warning(_err)
     return _out
-
-    # stdin = None
-    # cmd = ["gendaymtx", "-m", str(mf)]
-    # if binary:
-    #     cmd.append("-of")
-    # if direct:
-    #     cmd.append("-d")
-    # if onesun:
-    #     cmd.extend(["-5", ".533"])
-    # if rotate is not None:
-    #     cmd.extend(["-r", str(rotate)])
-    # if solar:
-    #     cmd.append("-O1")
-    # if wpath is not None:
-    #     cmd.append(str(wpath))
-    # elif (data is not None) and (meta is not None):
-    #     wea_input = meta.wea_header() + "\n".join(map(str, data))
-    #     stdin = wea_input.encode("utf-8")
-    # else:
-    #     raise ValueError("Need to specify either .wea path or wea data.")
-    # if out is not None:
-    #     with open(out, "wb") as wtr:
-    #         logger.info("Calling gendaymtx with:\n%s", " ".join(cmd))
-    #         sp.run(cmd, check=True, input=stdin, stdout=wtr)
-    # return cmd
-
-
-# def gen_perez_sky(row: WeaData, meta, grefl: float = 0.2, spect: str = "0", rotate=None) -> str:
-#     solar = False if spect == "0" else True
-#     gendaylit = gendaylit_cmd(
-#         str(row.time.month),
-#         str(row.time.day),
-#         str(row.time.hour + row.time.minute / 60 + row.time.second / 3600),
-#         str(meta.latitude),
-#         str(meta.longitude),
-#         str(meta.timezone),
-#         dir_norm_ir=str(row.dni),
-#         dif_hor_ir=str(row.dhi),
-#         solar=solar,
-#         grefl=grefl,
-#     )
-#     out = []
-#     rot = f"| xform -rz {rotate}" if rotate is not None else ""
-#     out.append(f"!{' '.join(gendaylit)}{rot} \n")
-#     out.append("skyfunc glow sglow 0 0 4 1 1 1 0\n")
-#     out.append("sglow source sky 0 0 4 0 0 1 180\n")
-#     out.append("sglow source ground 0 0 4 0 0 -1 180\n")
-#     return " ".join(out)
 
 
 def gen_perez_sky(
@@ -544,17 +488,8 @@ def filter_data_by_direct_sun(
         data(List[WeaData]):
     """
     wea_input = meta.wea_header() + "\n".join(map(str, data))
-    # pr.gendaymtx(wea_input, daylight_only=True, )
-    proc = sp.run(
-        ["gendaymtx", "-u", "-D", "-"],
-        check=True,
-        input=wea_input,
-        encoding="ascii",
-        stderr=sp.PIPE,
-        stdout=sp.PIPE,
-    )
-    # prims = parsers.parse_primitive(proc.stdout.splitlines())
-    prims = pr.parse_primitive(proc.stdout)
+    out = pr.gendaymtx(wea_input.encode(), sun_file='-', daylight_hours_only=True)
+    prims = pr.parse_primitive(out.decode())
     light_prims = [prim for prim in prims if prim.ptype == "light"]
     keep_minutes = []
     if window_normal is not None:
