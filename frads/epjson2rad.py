@@ -22,7 +22,6 @@ from frads.types import (
     EPlusOpaqueSurface,
     EPlusFenestration,
     EPlusZone,
-    Primitive,
 )
 
 
@@ -165,12 +164,12 @@ def parse_material(name: str, material: dict) -> EPlusOpaqueMaterial:
     solar_absorptance = material.get("solar_absorptance", 0.7)
     visible_absorptance = material.get("visible_absorptance", 0.7)
     visible_reflectance = round(1 - visible_absorptance, 2)
-    primitive = Primitive(
+    primitive = pr.Primitive(
         "void",
         "plastic",
         name,
-        ["0"],
-        [5, visible_reflectance, visible_reflectance, visible_reflectance, 0, 0],
+        [],
+        [visible_reflectance, visible_reflectance, visible_reflectance, 0, 0],
     )
     return EPlusOpaqueMaterial(
         name,
@@ -190,12 +189,12 @@ def parse_material_nomass(name: str, material: dict) -> EPlusOpaqueMaterial:
     solar_absorptance = material.get("solar_absorptance", 0.7)
     visible_absorptance = material.get("visible_absorptance", 0.7)
     visible_reflectance = round(1 - visible_absorptance, 2)
-    primitive = Primitive(
+    primitive = pr.Primitive(
         "void",
         "plastic",
         name,
-        ["0"],
-        [5, visible_reflectance, visible_reflectance, visible_reflectance, 0, 0],
+        [],
+        [visible_reflectance, visible_reflectance, visible_reflectance, 0, 0],
     )
     return EPlusOpaqueMaterial(
         name,
@@ -261,7 +260,7 @@ def parse_windowmaterial_simpleglazingsystem(
     shgc = material["solar_heat_gain_coefficient"]
     tmit = material.get("visible_transmittance", shgc)
     tmis = tmit2tmis(tmit)
-    primitive = Primitive("void", "glass", identifier, ["0"], [3, tmis, tmis, tmis])
+    primitive = pr.Primitive("void", "glass", identifier, [], [tmis, tmis, tmis])
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
 
@@ -272,7 +271,7 @@ def parse_windowmaterial_simpleglazing(
     identifier = name.replace(" ", "_")
     tmit = material["visible_transmittance"]
     tmis = tmit2tmis(tmit)
-    primitive = Primitive("void", "glass", identifier, ["0"], [3, tmis, tmis, tmis])
+    primitive = pr.Primitive("void", "glass", identifier, [], [tmis, tmis, tmis])
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
 
@@ -284,7 +283,7 @@ def parse_windowmaterial_glazing(name: str, material: dict) -> EPlusWindowMateri
     else:
         tmit = material["visible_transmittance_at_normal_incidence"]
     tmis = tmit2tmis(tmit)
-    primitive = Primitive("void", "glass", identifier, ["0"], [3, tmis, tmis, tmis])
+    primitive = pr.Primitive("void", "glass", identifier, [], [tmis, tmis, tmis])
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
 
@@ -301,12 +300,12 @@ def parse_windowmaterial_blind(inp: dict) -> dict:
         # slat_thickness = val['slat_thickness']
         # slat_separation = val['slat_separation']
         # slat_angle = val['slat_angle']
-        blind_prims[key] = Primitive(
+        blind_prims[key] = pr.Primitive(
             "void",
             "plastic",
             _id,
-            ["0"],
-            [5, front_diff_vis_refl, front_diff_vis_refl, front_diff_vis_refl, 0, 0],
+            [],
+            [front_diff_vis_refl, front_diff_vis_refl, front_diff_vis_refl, 0, 0],
         )
         # genblinds_cmd = f"genblinds {_id} {_id} {slat_width} 3
         # {20*slat_separation} {slat_angle}"

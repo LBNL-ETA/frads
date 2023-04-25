@@ -14,10 +14,11 @@ from typing import List
 from typing import Optional
 from typing import Sequence
 
+import pyradiance as pr
 from frads import matrix
 from frads import geom
 from frads import parsers
-from frads.types import Primitive
+# from frads.types import Primitive
 from frads.types import NcpModel
 from frads import utils
 
@@ -63,7 +64,7 @@ def ncp_compute_front(model: NcpModel, src_dict, opt, refl: bool = False) -> Non
     """compute back side calculation."""
     sndr_prim = []
     for p in model.ports:
-        np = Primitive(
+        np = pr.Primitive(
             p.modifier,
             p.ptype,
             p.identifier,
@@ -371,15 +372,15 @@ def gen_ncp_mtx(
 
 
 def gen_port_prims_from_window_ncp(
-    wprim: Sequence[Primitive], nprim: Sequence[Primitive]
-) -> List[Primitive]:
+    wprim: Sequence[pr.Primitive], nprim: Sequence[pr.Primitive]
+) -> List[pr.Primitive]:
     """Generate port primitives from window and non-coplanar shading primitives."""
     if len(wprim) > 1:
         awprim = merge_windows(wprim)
     else:
         awprim = wprim[0]
-    wplg = parsers.parse_polygon(awprim.real_arg)
-    nplgs = [parsers.parse_polygon(p.real_arg) for p in nprim if p.ptype == "polygon"]
+    wplg = parsers.parse_polygon(awprim.fargs)
+    nplgs = [parsers.parse_polygon(p.fargs) for p in nprim if p.ptype == "polygon"]
     all_ports = gen_ports_from_window_ncp(wplg, nplgs)
     port_prims = []
     for idx, plg in enumerate(all_ports):
@@ -390,17 +391,17 @@ def gen_port_prims_from_window_ncp(
 
 
 def gen_port_prims_from_window(
-    wprim: Sequence[Primitive], depth: float, scale_factor: float
-) -> List[Primitive]:
+    wprim: Sequence[pr.Primitive], depth: float, scale_factor: float
+) -> List[pr.Primitive]:
     """Generate port primitives from window primitives, depth, and scale factor."""
     if len(wprim) > 1:
         awprim = merge_windows(wprim)
     else:
         awprim = wprim[0]
-    wpoly = parsers.parse_polygon(awprim.real_arg)
+    wpoly = parsers.parse_polygon(awprim.fargs)
     extrude_vector = wpoly.normal.reverse().scale(depth)
     scale_vector = geom.Vector(scale_factor, scale_factor, scale_factor)
-    scaled_window = wpoly.scale(scale_vector, wpoly.centroid())
+    scaled_window = wpoly.scale(scale_vector, wpoly.centroid)
     all_ports = scaled_window.extrude(extrude_vector)[1:]
     port_prims = []
     for idx, plg in enumerate(all_ports):
@@ -442,12 +443,12 @@ def gen_ports_from_window_ncp(
     for deg in range(90):
         rad = math.radians(deg)
         win_polygon_r = wp.rotate(zaxis, rad)
-        win_normals.append(win_polygon_r.normal())
+        win_normals.append(win_polygon_r.normal)
         ncs_polygon_r = [p.rotate(zaxis, rad) for p in np]
         ncs_polygon_r.append(win_polygon_r)
         _bbox = geom.getbbox(ncs_polygon_r, offset=0.0)
         bboxes.append(_bbox)
-        area_list.append(_bbox[0].area())
+        area_list.append(_bbox[0].area)
     # Rotate to position
     deg = area_list.index(min(area_list))
     rrad = math.radians(deg)
@@ -458,10 +459,10 @@ def gen_ports_from_window_ncp(
     return rotate_back
 
 
-def merge_windows(prims: Sequence[Primitive]) -> Primitive:
+def merge_windows(prims: Sequence[pr.Primitive]) -> pr.Primitive:
     """Merge rectangles if coplanar."""
-    polygons = [parsers.parse_polygon(p.real_arg) for p in prims]
-    normals = [p.normal() for p in polygons]
+    polygons = [parsers.parse_polygon(p.fargs) for p in prims]
+    normals = [p.normal for p in polygons]
     if len(set(normals)) > 1:
         raise ValueError("Windows not co-planar")
     points = [i for p in polygons for i in p.vertices]

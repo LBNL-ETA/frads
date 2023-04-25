@@ -85,7 +85,6 @@ from .sky import (
 )
 
 from .types import (
-    Primitive,
     View,
 )
 
@@ -136,7 +135,6 @@ __all__ = [
     "parse_mrad_config",
     "parse_wea",
     "parse_polygon",
-    "Primitive",
     "points_as_sender",
     "rfluxmtx",
     "sky_as_receiver",

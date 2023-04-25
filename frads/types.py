@@ -10,64 +10,9 @@ from dataclasses import field
 from pathlib import Path
 from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
 
-
+import pyradiance as pr
 from frads.geom import Polygon
 from frads.geom import Vector
-
-
-class Primitive(NamedTuple):
-    """Radiance Primitive.
-
-    Attributes one-to-one mapped from Radiance.
-
-    Attributes:
-        modifier: modifier, which primitive modifies this one
-        ptype: primitive type
-        identifier: identifier, name of this primitive
-        str_arg: string argument
-        real_arg: real argument
-        int_arg: integer argument, not used in Radiance (default="0")
-    """
-
-    modifier: str
-    ptype: str
-    identifier: str
-    str_arg: Sequence[str]
-    real_arg: Sequence[Union[int, float]]
-    int_arg: str = "0"
-
-    def __repr__(self) -> str:
-        output = (
-            f"Primitive({self.modifier}, {self.ptype}, "
-            f"{self.identifier}, {self.str_arg}, "
-            f"{self.int_arg}, {self.real_arg})"
-        )
-        return output
-
-    def __str__(self) -> str:
-        output = (
-            f"{self.modifier} {self.ptype} {self.identifier}\n"
-            f"{int(self.str_arg[0])} {' '.join(self.str_arg[1:])}\n"
-            f"{self.int_arg}\n"
-            f"{int(self.real_arg[0])} "
-            f"{' '.join(map(str, self.real_arg[1:]))}\n"
-        )
-        return output
-
-
-@dataclass
-class Alias:
-    modifier: str
-    name_to: str
-    name_from: str
-
-    def __repr__(self) -> str:
-        output = f"Alias({self.modifier}, {self.name_to}, {self.name_from})"
-        return output
-
-    def __str__(self) -> str:
-        output = f"{self.modifier} alias {self.name_to} {self.name_from}"
-        return output
 
 
 class PaneProperty(NamedTuple):
@@ -142,7 +87,7 @@ class MradModel(NamedTuple):
 
     name: str
     material_path: Path
-    window_groups: Dict[str, List[Primitive]]
+    window_groups: Dict[str, List[pr.Primitive]]
     window_normals: List[Vector]
     sender_grid: dict
     sender_view: dict
@@ -206,8 +151,8 @@ class MradPath:
 class NcpModel:
     """Non-coplanar data model."""
 
-    windows: Sequence[Primitive]
-    ports: Sequence[Primitive]
+    windows: Sequence[pr.Primitive]
+    ports: Sequence[pr.Primitive]
     env: Iterable[Path]
     sbasis: str
     rbasis: str
@@ -233,7 +178,7 @@ class EPlusOpaqueMaterial:
     solar_absorptance: float
     visible_absorptance: float
     visible_reflectance: float
-    primitive: Primitive
+    primitive: pr.Primitive
     thickness: float = 0.0
 
 
@@ -243,7 +188,7 @@ class EPlusWindowMaterial:
 
     name: str
     visible_transmittance: float
-    primitive: Primitive
+    primitive: pr.Primitive
 
 
 @dataclass

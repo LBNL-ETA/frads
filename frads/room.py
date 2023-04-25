@@ -2,9 +2,9 @@
 from typing import List
 from typing import Optional
 
+import pyradiance as pr
 from frads import geom
 from frads import utils
-from frads.types import Primitive
 
 
 class Surface:
@@ -20,7 +20,7 @@ class Surface:
         self.windows: List[Surface] = []
         self._modifier: str = "void"
         self._identifier: str = "void"
-        self._primitives: Optional[List[Primitive]] = None
+        self._primitives: Optional[List[pr.Primitive]] = None
 
     @property
     def modifier(self):
@@ -43,16 +43,16 @@ class Surface:
         self._identifier = identifier
 
     @property
-    def primitives(self) -> Optional[List[Primitive]]:
+    def primitives(self) -> Optional[List[pr.Primitive]]:
         """."""
         self._primitives = []
         for idx, polygon in enumerate(self.polygons):
             self._primitives.append(
-                Primitive(
+                pr.Primitive(
                     self.modifier,
                     "polygon",
                     f"{self.identifier}_{idx:02d}",
-                    ["0"],
+                    [],
                     polygon.to_real(),
                 )
             )
@@ -95,12 +95,12 @@ class Surface:
         """Rotate the surface counter clock-wise."""
         polygons = []
         for plg in self.polygons:
-            polygons.append(plg.rotate3d(deg, geom.Vector(0, 0, 1)))
+            polygons.append(plg.rotate(deg, geom.Vector(0, 0, 1)))
         self.polygons = polygons
         for window in self.windows:
             wpolygons = []
             for plg in window.polygons:
-                wpolygons.append(plg.rotate3d(deg, geom.Vector(0, 0, 1)))
+                wpolygons.append(plg.rotate(deg, geom.Vector(0, 0, 1)))
 
 
 class Room:
