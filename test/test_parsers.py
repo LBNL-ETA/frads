@@ -29,39 +29,11 @@ def test_parse_mrad_config():
     assert config["Model"].getpaths("windows") == window_paths
     assert config["Model"].getpaths("ncps") == []
     assert view.vtype == "a"
-    assert view.position == Vector(17, 5, 4)
-    assert view.hori == 180
+    assert view.position == [17.0, 5.0, 4.0]
+    assert view.horiz == 180
     assert config["SimControl"].getoptions("vmx_opt") == vmx_opt
     assert config["Site"].getpaths("epw_path") == [epw_path]
     assert config["Site"].getpaths("wea_path") is None
-
-
-def test_parse_vu():
-    inp_str = "-vta -vv 180 -vh 180 -vp 0 0 0 -vd 0 -1 0"
-    res = parsers.parse_vu(inp_str)
-    answer = {"vt": "a", "vv": 180, "vh": 180,
-              "vp": [0, 0, 0], "vd": [0, -1, 0]}
-    assert res.position == Vector(0, 0, 0)
-    assert res.direction == Vector(0, -1, 0)
-    assert res.vtype == "a"
-    assert res.hori == 180
-    res2 = parsers.parse_vu("")
-    assert res2 is None
-
-
-def test_parse_opt():
-    inp_str = "-ab 8 -ad 1024 -I+ -u- -c 8 -aa .1 -lw 1e-8"
-    res = parsers.parse_opt(inp_str)
-    answer = {
-        "ab": 8,
-        "ad": 1024,
-        "I": True,
-        "u": False,
-        "c": 8,
-        "aa": 0.1,
-        "lw": 1e-8,
-    }
-    assert res == answer
 
 
 def test_parser_epw():

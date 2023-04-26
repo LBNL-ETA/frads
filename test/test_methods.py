@@ -21,5 +21,5 @@ def test_assemble_model():
         assert len(model.window_groups) == 2
         assert len(model.bsdf_xml) == 2
         assert model.sender_grid['floor'] is not None
-    os.removedirs("Matrices")
+    # os.removedirs("Matrices")
     os.chdir("..")
