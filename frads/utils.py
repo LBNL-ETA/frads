@@ -43,10 +43,10 @@ def polygon2prim(polygon: geom.Polygon, modifier: str, identifier: str) -> Primi
     return Primitive(modifier, "polygon", identifier, [""], polygon.to_real())
 
 
-def unpack_idf(path: str) -> dict:
-    """Read and parse and idf files."""
-    with open(path, "r") as rdr:
-        return parsers.parse_idf(rdr.read())
+# def unpack_idf(path: str) -> dict:
+#     """Read and parse and idf files."""
+#     with open(path, "r") as rdr:
+#         return parsers.parse_idf(rdr.read())
 
 
 def frange_inc(start, stop, step):

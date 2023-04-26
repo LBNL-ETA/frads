@@ -12,7 +12,7 @@ from typing import Dict, List
 
 import pyradiance as pr
 
-from frads import geom, utils
+from . import geom, utils
 from frads.types import (
     EPlusWindowGas,
     EPlusOpaqueMaterial,

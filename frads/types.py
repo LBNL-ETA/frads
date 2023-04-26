@@ -8,7 +8,7 @@ The exceptions are the Vector and Polygon class in the geom.py module.
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
-from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import Dict, Iterable, List, NamedTuple, Sequence, Tuple
 
 import pyradiance as pr
 from frads.geom import Polygon
@@ -262,60 +262,6 @@ class ViewType:
     hemispherical_fisheye = "h"
     angular_fisheye = "a"
     planisphere_fishsye = "s"
-
-
-@dataclass
-class View:
-    """View data object."""
-
-    position: Vector
-    direction: Vector
-    up: Vector = Vector(0, 0, 1)
-    vtype: str = "v"
-    vert: float = 45
-    hori: float = 45
-    aft: float = 0
-    fore: float = 0
-    shift: float = 0
-    lift: float = 0
-    xres: int = 256
-    yres: int = 256
-
-    def __str__(self) -> str:
-        return (
-            f"-vt{self.vtype} "
-            f"-vp {self.position} -vd {self.direction} "
-            f"-vu {self.up} "
-            f"-vv {self.vert} -vh {self.hori}"
-            f"-x {self.xres} -y {self.yres}"
-        )
-
-    def args(self) -> list:
-        return [
-            f"-vt{self.vtype}",
-            "-vp",
-            *map(str, self.position.to_list()),
-            "-vd",
-            *map(str, self.direction.to_list()),
-            "-vu",
-            *map(str, self.up.to_list()),
-            "-vv",
-            str(self.vert),
-            "-vh",
-            str(self.hori),
-            "-vo",
-            str(self.fore),
-            "-va",
-            str(self.aft),
-            "-vs",
-            str(self.shift),
-            "-vl",
-            str(self.lift),
-            "-x",
-            str(self.xres),
-            "-y",
-            str(self.yres),
-        ]
 
 
 class ColorPrimaries(NamedTuple):

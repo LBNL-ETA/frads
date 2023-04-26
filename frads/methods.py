@@ -15,7 +15,8 @@ from typing import Dict, List, Generator, Sequence, Tuple
 from frads import geom, sky, matrix
 from frads import mtxmult, parsers, utils
 from frads.matrix import Sender, Receiver
-from frads.types import MradModel, MradPath, View
+from frads.types import MradModel, MradPath
+
 from frads.sky import WeaMetaData, WeaData
 
 import pyradiance as pr
@@ -112,7 +113,7 @@ def get_sender_view(config: ConfigParser) -> Tuple[dict, dict]:
     Args:
         config: MradConfig object"""
     sender_view: Dict[str, matrix.Sender] = {}
-    view_dicts: Dict[str, View] = {}
+    view_dicts: Dict[str, pr.View] = {}
     if (view := config["RaySender"].getview("view")) is None:
         return sender_view, view_dicts
     view_name = "view_00"
@@ -389,13 +390,6 @@ def blacken_env(model: MradModel, config: ConfigParser) -> Tuple[str, str]:
         wtr.write("\n".join(list(map(str, glowing_window))))
     vmap_oct = f"vmap_{utils.id_generator()}.oct"
     cdmap_oct = f"cdmap_{utils.id_generator()}.oct"
-    # raycall.oconv(
-    #     str(model.material_path),
-    #     *map(str, config["Model"].getpaths("scene")),
-    #     gwindow_path,
-    #     outpath=vmap_oct,
-    #     frozen=True,
-    # )
     with open(vmap_oct, "wb") as wtr:
         wtr.write(
             pr.oconv(
@@ -406,13 +400,6 @@ def blacken_env(model: MradModel, config: ConfigParser) -> Tuple[str, str]:
             )
         )
     logger.info("Generating view matrix material map octree")
-    # raycall.oconv(
-    #     str(model.material_path),
-    #     *map(str, config["Model"]["scene"].split()),
-    #     bwindow_path,
-    #     outpath=cdmap_oct,
-    #     frozen=True,
-    # )
     with open(cdmap_oct, "wb") as wtr:
         wtr.write(
             pr.oconv(
@@ -501,11 +488,11 @@ def direct_sun_matrix_vu(
         rpict_opt.av = (0.31831, 0.31831, 0.31831)
         with open(mpath.vmap[view], "wb") as wtr:
             wtr.write(
-                pr.rpict(model.views[view].args(), vmap_oct, params=rpict_opt.args())
+                pr.rpict(model.views[view].args(), vmap_oct, xres=model.views[view].xres, yres=model.views[view].yres, params=rpict_opt.args())
             )
         with open(mpath.cdmap[view], "wb") as wtr:
             wtr.write(
-                pr.rpict(model.views[view].args(), cdmap_oct, params=rpict_opt.args())
+                pr.rpict(model.views[view].args(), cdmap_oct, xres=model.views[view].xres, yres=model.views[view].yres, params=rpict_opt.args())
             )
         mpath.vcdfmx[view] = Path("Matrices", f"vcdfmx_{model.name}_{view}_{_cfs_name}")
         mpath.vcdrmx[view] = Path("Matrices", f"vcdrmx_{model.name}_{view}_{_cfs_name}")
