@@ -84,11 +84,6 @@ from .sky import (
     WeaMetaData,
 )
 
-from .types import (
-    View,
-)
-
-
 from .utils import gen_grid, unpack_primitives
 
 from .window import GlazingSystem, AIR, ARGON, KRYPTON, XENON
@@ -143,7 +138,6 @@ __all__ = [
     "surface_as_sender",
     "three_phase",
     "unpack_primitives",
-    "View",
     "view_as_sender",
     "WeaData",
     "WeaMetaData",

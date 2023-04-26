@@ -7,15 +7,15 @@ from datetime import datetime
 from pathlib import Path
 import re
 from typing import Tuple, Any
-from typing import Dict
 from typing import Generator
 from typing import List
-from typing import Sequence
+from typing import Optional, Sequence
 from typing import Union
 
+from pyradiance import param as radparam
+from pyradiance import model
 from frads import geom
 from frads.types import PaneProperty
-from frads.types import View
 from frads.sky import WeaMetaData
 from frads.sky import WeaData
 
@@ -31,7 +31,8 @@ def parse_mrad_config(cfg_path: Path) -> configparser.ConfigParser:
         converters={
             "path": lambda x: Path(x.strip()),
             "paths": lambda x: [Path(i) for i in x.split()],
-            "options": parse_opt,
+            # "options": parse_opt,
+            "options": radparam.parse_rtrace_args,
             "view": parse_vu,
         },
     )
@@ -69,29 +70,6 @@ def parse_epw(epw_str: str) -> tuple:
     return meta_data, data
 
 
-def parse_idf(content: str) -> dict:
-    """Parse an IDF file into a dictionary."""
-    sections = content.rstrip().split(";")
-    sub_sections: List[List[str]] = []
-    obj_dict: Dict[str, List[List[str]]] = {}
-    for sec in sections:
-        sec_lines = sec.splitlines()
-        _lines = []
-        for sl in sec_lines:
-            content = sl.split("!")[0]
-            if content != "":
-                _lines.append(content)
-        _lines = " ".join(_lines).split(",")
-        clean_lines = [i.strip() for i in _lines]
-        sub_sections.append(clean_lines)
-
-    for ssec in sub_sections:
-        obj_dict[ssec[0].lower()] = []
-    for ssec in sub_sections:
-        obj_dict[ssec[0].lower()].append(ssec[1:])
-    return obj_dict
-
-
 def parse_igsdb_json(json_obj: dict) -> PaneProperty:
     """Parse a JSON file from IGSDB."""
     name = json_obj["name"].replace(" ", "_")
@@ -120,105 +98,6 @@ def parse_igsdb_json(json_obj: dict) -> PaneProperty:
         reflectance_front,
         reflectance_back,
     )
-
-
-def get_rcontrib_options_args(parser):
-    """Add rcontrib specific options to a parser."""
-    parser.add_argument(
-        "-I", action="store_true", dest="I", default=None, help="Toggle Ill"
-    )
-    parser.add_argument(
-        "-I+", action="store_true", dest="I", default=None, help="Ill. On"
-    )
-    parser.add_argument(
-        "-I-", action="store_false", dest="I", default=None, help="Ill. Off"
-    )
-    parser.add_argument(
-        "-i", action="store_true", dest="i", default=None, help="Toggle ill(final)"
-    )
-    parser.add_argument(
-        "-i+", action="store_true", dest="i", default=None, help="Ill(final). On"
-    )
-    parser.add_argument(
-        "-i-", action="store_false", dest="i", default=None, help="Ill(final). Off"
-    )
-    parser.add_argument(
-        "-V",
-        action="store_true",
-        dest="V",
-        default=None,
-        help="Toggle to compute cofficent",
-    )
-    parser.add_argument(
-        "-V+",
-        action="store_true",
-        dest="V",
-        default=None,
-        help="Use actual source value",
-    )
-    parser.add_argument(
-        "-V-", action="store_false", dest="V", default=None, help="Compute coefficients"
-    )
-    parser.add_argument("-ab", type=int, metavar="", help="ambient bounces")
-    parser.add_argument("-ad", type=int, metavar="", help="Ambient division")
-    parser.add_argument("-c", type=int, metavar="", help="ray count")
-    parser.add_argument("-dc", type=int, metavar="", help="direct certainty")
-    parser.add_argument("-dj", type=float, metavar="", help="direct jitter")
-    parser.add_argument("-dp", type=int, metavar="", help="direct pixel")
-    parser.add_argument("-dr", type=int, metavar="", help="direct rely")
-    parser.add_argument("-ds", type=int, metavar="", help="direct sampling")
-    parser.add_argument("-dt", type=int, metavar="", help="direct smapling threshol")
-    parser.add_argument("-lr", type=int, metavar="", help="reflectance limits")
-    parser.add_argument("-lw", type=float, metavar="", help="limit weight")
-    parser.add_argument("-ss", type=int, metavar="", help="specular sampling")
-    parser.add_argument("-st", type=int, metavar="", help="specular sampling threshold")
-    return parser
-
-
-def get_rtrace_options_args(parser):
-    """Add rtrace options and flags to a parser."""
-    parser.add_argument("-u", action="store_true", dest="u", default=None)
-    parser.add_argument("-u+", action="store_true", dest="u", default=None)
-    parser.add_argument("-u-", action="store_false", dest="u", default=None)
-    parser.add_argument("-ld", dest="ld", help="Limit ray distance")
-    parser.add_argument(
-        "-ld-",
-        action="store_false",
-        dest="ld",
-        default=None,
-        help="Unlimit ray distance",
-    )
-    parser.add_argument("-aa", type=float, metavar="", help="ambient accuracy")
-    parser.add_argument("-ar", type=int, metavar="", help="ambient resolution")
-    parser.add_argument("-as", type=int, metavar="", help="ambient super sampling")
-    parser.add_argument("-av", type=float, nargs=3, metavar="", help="ambient values")
-    parser = get_rcontrib_options_args(parser)
-    return parser
-
-
-def parse_opt(opt_str: str) -> dict:
-    """Parsing option string into a dictionary.
-
-    Args:
-        opt_str: rtrace option parameters as a string
-
-    Returns:
-        An option dictionary
-    """
-
-    args_list = opt_str.strip().split()
-    oparser = argparse.ArgumentParser()
-    oparser.add_argument("-w", action="store_true", dest="w", default=None)
-    oparser.add_argument("-w+", action="store_true", dest="w", default=None)
-    oparser.add_argument("-w-", action="store_false", dest="w", default=None)
-    oparser.add_argument("-f", action="store")
-    oparser.add_argument("-hd", action="store_const", const="", default=None)
-    oparser.add_argument("-n", type=int)
-    oparser = get_rtrace_options_args(oparser)
-    args, _ = oparser.parse_known_args(args_list)
-    opt_dict = vars(args)
-    opt_dict = {k: v for (k, v) in opt_dict.items() if v is not None}
-    return opt_dict
 
 
 def parse_optics(fpath) -> PaneProperty:
@@ -302,7 +181,7 @@ def parse_rad_header(header_str: str) -> tuple:
     return nrow, ncol, ncomp, dtype
 
 
-def parse_vu(vu_str: str) -> View:
+def parse_vu(vu_str: str) -> Optional[model.View]:
     """Parse view string into a View object.
 
     Args:
@@ -316,19 +195,9 @@ def parse_vu(vu_str: str) -> View:
         return
     args_list = vu_str.strip().split()
     vparser = argparse.ArgumentParser()
-    vparser.add_argument("-v", action="store", dest="vt")
-    vparser.add_argument("-vp", nargs=3, type=float)
-    vparser.add_argument("-vd", nargs=3, type=float)
-    vparser.add_argument("-vu", nargs=3, type=float)
-    vparser.add_argument("-vv", type=float)
-    vparser.add_argument("-vh", type=float)
-    vparser.add_argument("-vo", type=float)
-    vparser.add_argument("-va", type=float)
-    vparser.add_argument("-vs", type=float)
-    vparser.add_argument("-vl", type=float)
+    vparser = radparam.add_view_args(vparser)
     vparser.add_argument("-x", type=int)
     vparser.add_argument("-y", type=int)
-    vparser.add_argument("-vf", type=argparse.FileType("r"))
     args, _ = vparser.parse_known_args(args_list)
     if args.vf is not None:
         args, _ = vparser.parse_known_args(
@@ -337,25 +206,21 @@ def parse_vu(vu_str: str) -> View:
         args.vf.close()
     if None in (args.vp, args.vd):
         raise ValueError("Invalid view")
-    view = View(geom.Vector(*args.vp), geom.Vector(*args.vd))
-    if args.vt is not None:
-        view.vtype = args.vt[-1]
+    view = model.View(
+        position=args.vp,
+        direction=args.vd,
+        vtype=args.vt[-1],
+        horiz=args.vh,
+        vert=args.vv,
+        vfore=args.vo,
+        vaft=args.va,
+        hoff=args.vs,
+        voff=args.vl,
+    )
     if args.x is not None:
         view.xres = args.x
     if args.y is not None:
         view.yres = args.y
-    if args.vv is not None:
-        view.vert = args.vv
-    if args.vh is not None:
-        view.hori = args.vh
-    if args.vo is not None:
-        view.fore = args.vo
-    if args.va is not None:
-        view.aft = args.va
-    if args.vs is not None:
-        view.shift = args.vs
-    if args.vl is not None:
-        view.lift = args.vl
     return view
 
 
