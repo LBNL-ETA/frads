@@ -12,6 +12,7 @@ import sys
 import tempfile as tf
 from typing import List
 
+import pyradiance as pr
 from frads import color
 from frads import color_data
 from frads import epjson2rad
@@ -306,8 +307,9 @@ def genmtx_pts_sky(args) -> None:
 
 def genmtx_vu_sky(args) -> None:
     """Generate a view to sky matrix."""
-    with open(args.vu, "r", encoding="ascii") as rdr:
-        view = parsers.parse_vu(rdr.readlines()[-1])  # use the last view
+    view = pr.load_views(args.vu)[0]
+    # with open(args.vu, "r", encoding="ascii") as rdr:
+    #     view = parsers.parse_vu(rdr.readlines()[-1])  # use the last view
     sender = matrix.view_as_sender(
         view,
         ray_cnt=1,
@@ -367,8 +369,9 @@ def genmtx_pts_srf(args) -> None:
 
 def genmtx_vu_srf(args) -> None:
     """Generate a view to surface matrix."""
-    with open(args.vu, "r", encoding="ascii") as rdr:
-        view = parsers.parse_vu(rdr.readlines()[-1])
+    view = pr.load_views(args.vu)[0]
+    # with open(args.vu, "r", encoding="ascii") as rdr:
+    #     view = parsers.parse_vu(rdr.readlines()[-1])
     sender = matrix.view_as_sender(
         view,
         ray_cnt=1,
@@ -461,14 +464,15 @@ def genmtx_pts_sun(args) -> None:
 
 def genmtx_vu_sun(args) -> None:
     """Generate a view to sun matrix."""
-    with open(args.vu, "r", encoding="ascii") as rdr:
-        view = parsers.parse_vu(rdr.readlines()[-1])
-        sender = matrix.view_as_sender(
-            view,
-            ray_cnt=1,
-            xres=args.resolu[0],
-            yres=args.resolu[1],
-        )
+    view = pr.load_views(args.vu)[0]
+    # with open(args.vu, "r", encoding="ascii") as rdr:
+    #     view = parsers.parse_vu(rdr.readlines()[-1])
+    sender = matrix.view_as_sender(
+        view,
+        ray_cnt=1,
+        xres=args.resolu[0],
+        yres=args.resolu[1],
+    )
     wnormals = None
     if args.window is not None:
         wnormals = utils.primitive_normal(args.window)
