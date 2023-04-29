@@ -5,7 +5,6 @@ sys.path.append(".")
 from frads import geom
 from frads import matrix
 import pyradiance as pr
-import pyradiance as pr
 
 window_polygon = [
     geom.Polygon([geom.Vector(0, 0, 0),

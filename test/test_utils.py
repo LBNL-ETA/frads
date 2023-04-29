@@ -3,10 +3,7 @@ from pathlib import Path
 import sys
 sys.path.append(".")
 
-from frads import geom
 from frads import utils
-from frads.types import PaneProperty
-from frads.types import PaneRGB
 from pyradiance import Primitive
 
 
