@@ -7,9 +7,8 @@ from pathlib import Path
 import subprocess as sp
 from typing import Tuple, List
 from typing import Optional
-
-from frads import parsers
-from frads import utils
+import pyradiance as pr
+from frads import utils, matrix
 
 try:
     import numpy as np
@@ -36,7 +35,7 @@ def batch_dctimestep(
     outs: List[str] = []
     for sky in sorted(sky_dir.glob("*")):
         out_path = out_dir / sky.with_suffix(".hdr")
-        cmd = ["dctimestep"] + [str(f) for f in mtx]
+        cmd = [str(pr.BINPATH / "dctimestep")] + [str(f) for f in mtx]
         cmd.append(str(sky))
         cmds.append(cmd)
         outs.append(str(out_path))
@@ -111,7 +110,7 @@ def mtxstr2nparray(data_str: bytes):
     else:
         linesep2 = b"\n\n"
     chunks = data_str.split(linesep2, 1)
-    nrow, ncol, ncomp, dtype = parsers.parse_rad_header(chunks[0].decode())
+    nrow, ncol, ncomp, dtype = matrix.parse_rad_header(chunks[0].decode())
     if dtype == "ascii":
         data = np.array([line.split() for line in chunks[1].splitlines()], dtype=float)
     else:
@@ -140,7 +139,7 @@ def smx2nparray(data_str):
     chunks = data_str.split(linesep2)
     header_str = chunks[0].decode()
     content = chunks[1:]
-    nrow, ncol, ncomp, dtype = parsers.parse_rad_header(header_str)
+    nrow, ncol, ncomp, dtype = matrix.parse_rad_header(header_str)
     if dtype == "ascii":
         data = [i.splitlines() for i in content if i != b""]
         rdata = np.array(
@@ -205,16 +204,16 @@ def rad_mtxmult3(*mtxs, weights: tuple = (), no_header: bool = True):
     if len(mtxs) not in (2, 4):
         raise ValueError("Only works with two or four matrices")
     if os.path.isfile(mtxs[-1]):
-        cmd1 = ["dctimestep", "-od"] + list(mtxs)
+        cmd1 = [str(pr.BINPATH / "dctimestep"), "-od"] + list(mtxs)
         inp1 = None
     else:
-        cmd1 = ["dctimestep", "-od"] + list(mtxs)[:-1]
+        cmd1 = [str(pr.BINPATH / "dctimestep"), "-od"] + list(mtxs)[:-1]
         inp1 = mtxs[-1].encode()
     if weights == ():
         weights = (47.4, 119.9, 11.6)
         logger.warning("Using default photopic RGB weights")
     cmd2 = [
-        "rmtxop",
+        str(pr.BINPATH / "rmtxop"),
         "-fa",
         "-c",
         str(weights[0]),
@@ -228,7 +227,7 @@ def rad_mtxmult3(*mtxs, weights: tuple = (), no_header: bool = True):
     if out1.stdout is not None:
         out1.stdout.close()
     if no_header:
-        cmd3 = ["getinfo", "-"]
+        cmd3 = [str(pr.BINPATH / "getinfo"), "-"]
         out3 = sp.Popen(cmd3, stdin=out2.stdout, stdout=sp.PIPE)
         if out2.stdout is not None:
             out2.stdout.close()
@@ -269,6 +268,6 @@ def mtxmult(*mtxs):
 def get_imgmult_cmd(*mtx: Path, odir: Path) -> List[str]:
     """Image-based matrix multiplication using dctimestep."""
     odir.mkdir(exist_ok=True)
-    cmd = ["dctimestep", "-oc", "-o", str(odir / "%04d.hdr")]
+    cmd = [str(pr.BINPATH / "dctimestep"), "-oc", "-o", str(odir / "%04d.hdr")]
     cmd += [str(m) for m in mtx]
     return cmd

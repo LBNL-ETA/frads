@@ -1,6 +1,6 @@
 import tempfile
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, NamedTuple, Tuple
 
 import pyradiance as pr
 import pywincalc as pwc
@@ -9,6 +9,21 @@ AIR = pwc.PredefinedGasType.AIR
 KRYPTON = pwc.PredefinedGasType.KRYPTON
 XENON = pwc.PredefinedGasType.XENON
 ARGON = pwc.PredefinedGasType.ARGON
+
+
+class PaneRGB(NamedTuple):
+    """Pane color data object.
+
+    Attributes:
+        measured_data: measured data as a PaneProperty object.
+        coated_rgb: Coated side RGB.
+        glass_rgb: Non-coated side RGB.
+        trans_rgb: Transmittance RGB.
+    """
+    measured_data: pwc.ProductData
+    coated_rgb: Tuple[float, float, float]
+    glass_rgb: Tuple[float, float, float]
+    trans_rgb: Tuple[float, float, float]
 
 
 def create_gap(*gases_ratios: Tuple[pwc.PredefinedGasType, float], thickness):
@@ -203,3 +218,80 @@ class GlazingSystem:
                         t=str(self._thickness),
                     )
                 )
+
+
+def get_glazing_primitive(panes: List[PaneRGB]) -> pr.Primitive:
+    """Generate a BRTDfunc to represent a glazing system."""
+    if len(panes) > 2:
+        raise ValueError("Only double pane supported")
+    names = []
+    for pane in panes:
+        names.append(pane.measured_data.product_name or "Unnamed")
+    name = "+".join(names)
+    if len(panes) == 1:
+        str_arg = [
+            "sr_clear_r",
+            "sr_clear_g",
+            "sr_clear_b",
+            "st_clear_r",
+            "st_clear_g",
+            "st_clear_b",
+            "0",
+            "0",
+            "0",
+            "glaze1.cal",
+        ]
+        coated_real = 1 if panes[0].measured_data.coated_side == "front" else -1
+        real_arg = [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            coated_real,
+            *[round(i, 3) for i in panes[0].glass_rgb],
+            *[round(i, 3) for i in panes[0].coated_rgb],
+            *[round(i, 3) for i in panes[0].trans_rgb],
+        ]
+    else:
+        s12t_r, s12t_g, s12t_b = panes[0].trans_rgb
+        s34t_r, s34t_g, s34t_b = panes[1].trans_rgb
+        if panes[0].measured_data.coated_side == "back":
+            s2r_r, s2r_g, s2r_b = panes[0].coated_rgb
+            s1r_r, s1r_g, s1r_b = panes[0].glass_rgb
+        else:  # front or neither side coated
+            s2r_r, s2r_g, s2r_b = panes[0].glass_rgb
+            s1r_r, s1r_g, s1r_b = panes[0].coated_rgb
+        if panes[1].measured_data.coated_side == "back":
+            s4r_r, s4r_g, s4r_b = panes[1].coated_rgb
+            s3r_r, s3r_g, s3r_b = panes[1].glass_rgb
+        else:  # front or neither side coated
+            s4r_r, s4r_g, s4r_b = panes[1].glass_rgb
+            s3r_r, s3r_g, s3r_b = panes[1].coated_rgb
+        str_arg = [
+            (
+                f"if(Rdot,cr(fr({s4r_r:.3f}),ft({s34t_r:.3f}),fr({s2r_r:.3f})),"
+                f"cr(fr({s1r_r:.3f}),ft({s12t_r:.3f}),fr({s3r_r:.3f})))"
+            ),
+            (
+                f"if(Rdot,cr(fr({s4r_g:.3f}),ft({s34t_g:.3f}),fr({s2r_g:.3f})),"
+                f"cr(fr({s1r_g:.3f}),ft({s12t_g:.3f}),fr({s3r_g:.3f})))"
+            ),
+            (
+                f"if(Rdot,cr(fr({s4r_b:.3f}),ft({s34t_b:.3f}),fr({s2r_b:.3f})),"
+                f"cr(fr({s1r_b:.3f}),ft({s12t_b:.3f}),fr({s3r_b:.3f})))"
+            ),
+            f"ft({s34t_r:.3f})*ft({s12t_r:.3f})",
+            f"ft({s34t_g:.3f})*ft({s12t_g:.3f})",
+            f"ft({s34t_b:.3f})*ft({s12t_b:.3f})",
+            "0",
+            "0",
+            "0",
+            "glaze2.cal",
+        ]
+        real_arg = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    return pr.Primitive("void", "BRTDfunc", name, str_arg, real_arg)

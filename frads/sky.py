@@ -77,6 +77,63 @@ class WeaData(NamedTuple):
         return f"{self.time.month:02d}{self.time.day:02d}_{self.time.hour:02d}{self.time.minute:02d}"
 
 
+def parse_epw(epw_str: str) -> tuple:
+    """Parse epw file and return wea header and data."""
+    raw = epw_str.splitlines()
+    epw_header = raw[0].split(",")
+    content = raw[8:]
+    data = []
+    for li in content:
+        line = li.split(",")
+        year = int(line[0])
+        month = int(line[1])
+        day = int(line[2])
+        hour = int(line[3]) - 1
+        dir_norm = float(line[14])
+        dif_hor = float(line[15])
+        cc = float(line[19])
+        aod = float(line[26])
+        data.append(
+            WeaData(datetime.datetime(year, month, day, hour, 30), dir_norm, dif_hor, cc, aod)
+        )
+    city = epw_header[1]
+    country = epw_header[3]
+    latitude = float(epw_header[6])
+    longitude = -1 * float(epw_header[7])
+    tz = int(float(epw_header[8])) * (-15)
+    elevation = float(epw_header[9].rstrip())
+    meta_data = WeaMetaData(city, country, latitude, longitude, tz, elevation)
+    return meta_data, data
+
+
+def parse_wea(wea_str: str) -> Tuple[WeaMetaData, List[WeaData]]:
+    """Parse a wea file in its entirety."""
+    lines = wea_str.splitlines()
+    place = lines[0].split(" ", 1)[1]
+    lat = float(lines[1].split(" ", 1)[1])
+    lon = float(lines[2].split(" ", 1)[1])
+    tz = int(float(lines[3].split(" ", 1)[1]))
+    ele = float(lines[4].split(" ", 1)[1])
+    meta_data = WeaMetaData(place, "", lat, lon, tz, ele)
+    year = datetime.datetime.today().year
+    data = []
+    for li in lines[6:]:
+        if li.strip() == "":
+            continue
+        line = li.split()
+        month = int(line[0])
+        day = int(line[1])
+        hours = float(line[2])
+        hour = int(hours)
+        minute = int((hours - hour) * 60)
+        dir_norm = float(line[3])
+        dif_hor = float(line[4])
+        data.append(
+            WeaData(datetime.datetime(year, month, day, hour, minute), dir_norm, dif_hor)
+        )
+    return meta_data, data
+
+
 def basis_glow(sky_basis: str) -> str:
     """
     Generate a set of regular sky and ground glow primitives string.

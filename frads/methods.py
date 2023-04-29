@@ -3,6 +3,7 @@
 
 from configparser import ConfigParser
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 import logging
 import math
 import os
@@ -10,19 +11,96 @@ from pathlib import Path
 import shutil
 import subprocess as sp
 import tempfile as tf
-from typing import Dict, List, Generator, Sequence, Tuple
+from typing import Dict, List, Generator, NamedTuple, Sequence, Tuple
 
-from frads import geom, sky, matrix
-from frads import mtxmult, parsers, utils
+from frads import geom, sky, matrix, mtxmult, utils
 from frads.matrix import Sender, Receiver
-from frads.types import MradModel, MradPath
-
 from frads.sky import WeaMetaData, WeaData
 
 import pyradiance as pr
 
 
 logger: logging.Logger = logging.getLogger("frads.methods")
+
+
+class MradModel(NamedTuple):
+    """Mrad model object.
+    Attributes:
+        name: Model name
+        material_path: Material path
+        window_groups: Window primitives grouped by files
+        window_normals: Window normals
+        sender_grid: Grid ray samples mapped to grid surface name.
+        sender_view: View ray samples mapped to view name.
+        views: Mapping from View name to view properties.
+        receiver_sky: Sky as the receiver object.
+        bsdf_xml: Mapping from window groupd name to BSDF file path.
+        cfs_paths: The list of files used for direct-sun coefficient calculations.
+        ncp_shades: The list of non-coplanar shading files.
+        black_env_path: Blackened environment file path.
+
+    """
+
+    name: str
+    material_path: Path
+    window_groups: Dict[str, List[pr.Primitive]]
+    window_normals: List[geom.Vector]
+    sender_grid: dict
+    sender_view: dict
+    views: dict
+    bsdf_xml: dict
+    cfs_paths: list
+    ncp_shades: dict
+    black_env_path: Path
+
+
+@dataclass
+class MradPath:
+    """
+    This dataclass object holds all the paths during a mrad run.
+    All attributes are initiated with default_factory set to the attribute's type,
+    which means this object can be instantiated without any arguments and
+    add define its attributes later.
+
+    Attributes:
+        pvmx: Point view matrix paths mapped to grid name.
+        pvmxd: Direct only point view matrix paths mapped to grid name.
+        pdsmx: Point daylight coefficient matrix file paths mapped to grid name.
+        pcdsmx: Point direct-sun coefficient matrix file paths mapped to grid name.
+        vvmx: View view matrix paths mapped to view name.
+        vvmxd: Direct only view view matrix paths mapped to view name.
+        vdsmx: View daylight coefficient matrix file paths mapped to grid name.
+        vcdsmx: View direct-sun coefficient matrix file paths mapped to view name.
+        vcdfmx: View direct-sun coefficient(f) matrix file paths mapped to view name.
+        vcdrmx: View direct-sun coefficient(r) matrix file paths mapped to view name.
+        vmap: View matrix material map mapped to view name.
+        cdmap: Direct-sun matrix material map mapped to view name.
+        dmx: Daylight matrix file paths mapped to window name.
+        dmxd: Direct daylight matrix mapped to window name.
+        smxd: Sun-only (3-4 sun patches) sky matrix file path.
+        smx: sky matrix file path.
+        smx_sun: Sun-only (one sun patch) sky matrix file path for illuminance.
+        smx_sun_img: Sun-only (one sun pathc) sky matrix file path for rendering.
+    """
+
+    pvmx: Dict[str, Path] = field(default_factory=dict)
+    vvmx: Dict[str, Path] = field(default_factory=dict)
+    dmx: Dict[str, Path] = field(default_factory=dict)
+    pdsmx: Dict[str, Path] = field(default_factory=dict)
+    vdsmx: Dict[str, Path] = field(default_factory=dict)
+    pcdsmx: Dict[str, Path] = field(default_factory=dict)
+    vcdsmx: Dict[str, Path] = field(default_factory=dict)
+    vcdfmx: Dict[str, Path] = field(default_factory=dict)
+    vcdrmx: Dict[str, Path] = field(default_factory=dict)
+    vmap: Dict[str, Path] = field(default_factory=dict)
+    cdmap: Dict[str, Path] = field(default_factory=dict)
+    smxd: Path = field(default_factory=Path)
+    pvmxd: Dict[str, Path] = field(default_factory=dict)
+    vvmxd: Dict[str, Path] = field(default_factory=dict)
+    dmxd: Dict[str, Path] = field(default_factory=dict)
+    smx: Path = field(default_factory=Path)
+    smx_sun: Path = field(default_factory=Path)
+    smx_sun_img: Path = field(default_factory=Path)
 
 
 def get_window_group(wpaths: List[Path]) -> Tuple[dict, list]:
@@ -40,7 +118,7 @@ def get_window_group(wpaths: List[Path]) -> Tuple[dict, list]:
         prims = utils.unpack_primitives(wpath)
         window_groups[wpath.stem] = prims
         # Taking normal from the first polygon
-        _normal = parsers.parse_polygon(prims[0].fargs).normal
+        _normal = geom.parse_polygon(prims[0].fargs).normal
         if _normal not in window_normals:
             window_normals.append(_normal)
     return window_groups, window_normals
@@ -62,13 +140,13 @@ def get_wea_data(config: ConfigParser) -> Tuple[WeaMetaData, List[WeaData], str]
         logger.info("Using user specified %s file.", wea_path)
         name = wea_path.stem
         with open(wea_path, "r", encoding="utf-8") as rdr:
-            wea_metadata, wea_data = parsers.parse_wea(rdr.read())
+            wea_metadata, wea_data = sky.parse_wea(rdr.read())
 
     elif epw_path := config["Site"].getpath("epw_path"):
         logger.info("Converting %s to a .wea file", epw_path)
         name = epw_path.stem
         with open(epw_path, "r", encoding="utf-8") as rdr:
-            wea_metadata, wea_data = parsers.parse_epw(rdr.read())
+            wea_metadata, wea_data = sky.parse_epw(rdr.read())
     else:
         raise ValueError("Need either a .wea or a .epw file")
     return wea_metadata, wea_data, name
@@ -93,7 +171,7 @@ def get_sender_grid(config: ConfigParser) -> Dict[str, Sender]:
             surface_polygon = None
             for prim in gprimitives:
                 if prim.ptype == "polygon":
-                    surface_polygon = parsers.parse_polygon(prim.fargs)
+                    surface_polygon = geom.parse_polygon(prim.fargs)
                     break
             if surface_polygon is None:
                 raise ValueError(f"No polygon found in {gpath}")

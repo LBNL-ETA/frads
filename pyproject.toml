@@ -10,7 +10,7 @@ dependencies = [
     "pyradiance == 0.0.10a1",
     "numpy",
     "matplotlib",
-    "pywincalc >= 3.0.0", 
+    "pywincalc >= 3.1.0", 
 ]
 
 [tool.setuptools.dynamic]

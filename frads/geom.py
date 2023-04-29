@@ -493,3 +493,17 @@ def merge_polygon(polygons: Sequence[Polygon]) -> Polygon:
         raise ValueError("Windows not co-planar")
     points = [i for p in polygons for i in p.vertices]
     return convexhull(points, normals[0])
+
+
+def parse_polygon(real_args: Sequence[Union[int, float]]) -> Polygon:
+    """Parse real arguments to polygon.
+    Args:
+        primitive: a dictionary object containing a primitive
+
+    Returns:
+        modified primitive
+    """
+    coords = real_args
+    arg_cnt = len(real_args)
+    vertices = [Vector(*coords[i : i + 3]) for i in range(0, arg_cnt, 3)]
+    return Polygon(vertices)

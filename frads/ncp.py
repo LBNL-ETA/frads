@@ -4,6 +4,7 @@ This module contains functionalities relating to generating matrices for
 non-coplanar shading systems
 """
 
+from dataclasses import dataclass
 import logging
 import math
 import os
@@ -17,12 +18,22 @@ from typing import Sequence
 import pyradiance as pr
 from frads import matrix
 from frads import geom
-from frads import parsers
 # from frads.types import Primitive
-from frads.types import NcpModel
+# from frads.types import NcpModel
 from frads import utils
 
 logger: logging.Logger = logging.getLogger("frads.mfacade")
+
+
+@dataclass
+class NcpModel:
+    """Non-coplanar data model."""
+
+    windows: Sequence[pr.Primitive]
+    ports: Sequence[pr.Primitive]
+    env: List[Path]
+    sbasis: str
+    rbasis: str
 
 
 def ncp_compute_back(
@@ -46,7 +57,7 @@ def ncp_compute_back(
         )
         if refl:
             logger.info("Front reflection for window %s", idx)
-            wflip = parsers.parse_polygon(wp.real_arg).flip()
+            wflip = geom.parse_polygon(wp.real_arg).flip()
             wflip_prim = utils.polygon2prim(wflip, "breceiver", f"window{idx}")
             back_rcvr = matrix.surface_as_receiver(
                 prim_list=[wflip_prim],
@@ -69,7 +80,7 @@ def ncp_compute_front(model: NcpModel, src_dict, opt, refl: bool = False) -> Non
             p.ptype,
             p.identifier,
             p.str_arg,
-            parsers.parse_polygon(p.real_arg).flip().to_real(),
+            geom.parse_polygon(p.real_arg).flip().to_real(),
         )
         sndr_prim.append(np)
     sndr = matrix.surface_as_sender(
@@ -78,7 +89,7 @@ def ncp_compute_front(model: NcpModel, src_dict, opt, refl: bool = False) -> Non
     logger.info("Computing for back side")
     for idx, wp in enumerate(model.windows):
         logger.info("Back transmission for window %s", idx)
-        wplg = parsers.parse_polygon(wp.real_arg).flip()
+        wplg = geom.parse_polygon(wp.real_arg).flip()
         rcvr_prim = utils.polygon2prim(wplg, "breceiver", f"window{idx}")
         rcvr = matrix.surface_as_receiver(
             prim_list=[rcvr_prim],
@@ -379,8 +390,8 @@ def gen_port_prims_from_window_ncp(
         awprim = merge_windows(wprim)
     else:
         awprim = wprim[0]
-    wplg = parsers.parse_polygon(awprim.fargs)
-    nplgs = [parsers.parse_polygon(p.fargs) for p in nprim if p.ptype == "polygon"]
+    wplg = geom.parse_polygon(awprim.fargs)
+    nplgs = [geom.parse_polygon(p.fargs) for p in nprim if p.ptype == "polygon"]
     all_ports = gen_ports_from_window_ncp(wplg, nplgs)
     port_prims = []
     for idx, plg in enumerate(all_ports):
@@ -398,7 +409,7 @@ def gen_port_prims_from_window(
         awprim = merge_windows(wprim)
     else:
         awprim = wprim[0]
-    wpoly = parsers.parse_polygon(awprim.fargs)
+    wpoly = geom.parse_polygon(awprim.fargs)
     extrude_vector = wpoly.normal.reverse().scale(depth)
     scale_vector = geom.Vector(scale_factor, scale_factor, scale_factor)
     scaled_window = wpoly.scale(scale_vector, wpoly.centroid)
@@ -461,7 +472,7 @@ def gen_ports_from_window_ncp(
 
 def merge_windows(prims: Sequence[pr.Primitive]) -> pr.Primitive:
     """Merge rectangles if coplanar."""
-    polygons = [parsers.parse_polygon(p.fargs) for p in prims]
+    polygons = [geom.parse_polygon(p.fargs) for p in prims]
     normals = [p.normal for p in polygons]
     if len(set(normals)) > 1:
         raise ValueError("Windows not co-planar")
