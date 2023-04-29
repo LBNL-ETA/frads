@@ -8,15 +8,40 @@ from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
+import re
 import tempfile as tf
 from typing import List, Optional, Union, Sequence
 
-from frads import geom, parsers, sky, utils
+from frads import geom, sky, utils
 import numpy as np
 import pyradiance as pr
 
 
 logger: logging.Logger = logging.getLogger("frads.matrix")
+
+
+def parse_rad_header(header_str: str) -> tuple:
+    """Parse a Radiance matrix file header.
+
+    Args:
+        header_str(str): header as string
+    Returns:
+        A tuple contain nrow, ncol, ncomp, datatype
+    Raises:
+        ValueError if any of NROWs NCOLS NCOMP FORMAT is not found.
+        (This is problematic as it can happen)
+    """
+    compiled = re.compile(
+        r" NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ", flags=re.X
+    )
+    matches = compiled.findall(header_str)
+    if len(matches) != 4:
+        raise ValueError("Can't find one of the header entries.")
+    nrow = int([mat[0] for mat in matches if mat[0] != ""][0])
+    ncol = int([mat[1] for mat in matches if mat[1] != ""][0])
+    ncomp = int([mat[2] for mat in matches if mat[2] != ""][0])
+    dtype = [mat[3] for mat in matches if mat[3] != ""][0].strip()
+    return nrow, ncol, ncomp, dtype
 
 
 @dataclass(frozen=True)
@@ -136,7 +161,7 @@ def load_matrix(file: Union[bytes, str, Path], dtype: str = "float"):
     """
     npdtype = np.double if dtype.startswith("d") else np.single
     mtx = pr.rmtxop(file, outform=dtype[0].lower())
-    nrows, ncols, ncomp, _ = parsers.parse_rad_header(pr.getinfo(mtx).decode())
+    nrows, ncols, ncomp, _ = parse_rad_header(pr.getinfo(mtx).decode())
     return np.frombuffer(pr.getinfo(mtx, strip_header=True), dtype=npdtype).reshape(
         nrows, ncols, ncomp
     )
@@ -311,7 +336,7 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
             _identifier = prim.identifier
         _modifier = src_mod
         if offset is not None:
-            poly = parsers.parse_polygon(prim.fargs)
+            poly = geom.parse_polygon(prim.fargs)
             offset_vec = poly.normal.scale(offset)
             moved_pts = [pt + offset_vec for pt in poly.vertices]
             _real_args = geom.Polygon(moved_pts).to_real()
