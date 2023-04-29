@@ -5,9 +5,7 @@ sys.path.append(".")
 from frads import geom
 from frads import matrix
 import pyradiance as pr
-# from frads.types import View
 import pyradiance as pr
-from frads.types import ViewType
 
 window_polygon = [
     geom.Polygon([geom.Vector(0, 0, 0),
@@ -40,7 +38,7 @@ def test_view_as_sender():
         direction=(0, -1, 0),
         horiz=180,
         vert=180,
-        vtype=ViewType.angular_fisheye,
+        vtype='a',
     )
     ray_cnt = 5
     sender = matrix.view_as_sender(view, ray_cnt, 4, 4)
