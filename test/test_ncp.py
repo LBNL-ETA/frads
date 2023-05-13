@@ -3,7 +3,6 @@ import sys
 sys.path.append('.')
 
 from frads import ncp
-from frads import parsers
 from frads import geom
 
 

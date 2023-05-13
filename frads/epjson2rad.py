@@ -1,6 +1,7 @@
 """Convert an EnergyPlus epJSON file into Radiance model[s]."""
 
 from configparser import ConfigParser
+from dataclasses import dataclass
 import logging
 import math
 import json
@@ -12,20 +13,107 @@ from typing import Dict, List
 
 import pyradiance as pr
 
-from frads import geom, utils
-from frads.types import (
-    EPlusWindowGas,
-    EPlusOpaqueMaterial,
-    EPlusWindowMaterial,
-    EPlusWindowMaterialComplexShade,
-    EPlusConstruction,
-    EPlusOpaqueSurface,
-    EPlusFenestration,
-    EPlusZone,
-)
+from . import geom, utils
 
 
 logger: logging.Logger = logging.getLogger("frads.epjson2rad")
+
+
+@dataclass
+class EPlusWindowGas:
+    """EnergyPlus Window Gas material data container."""
+
+    name: str
+    thickness: float
+    type: list
+    percentage: list
+    primitive: str = ""
+
+
+@dataclass
+class EPlusOpaqueMaterial:
+    """EnergyPlus Opaque material data container."""
+
+    name: str
+    roughness: str
+    solar_absorptance: float
+    visible_absorptance: float
+    visible_reflectance: float
+    primitive: pr.Primitive
+    thickness: float = 0.0
+
+
+@dataclass
+class EPlusWindowMaterial:
+    """EnergyPlus regular window material data container."""
+
+    name: str
+    visible_transmittance: float
+    primitive: pr.Primitive
+
+
+@dataclass
+class EPlusWindowMaterialComplexShade:
+    """EnergyPlus complex window material data container."""
+
+    name: str
+    layer_type: str
+    thickness: float
+    conductivity: float
+    ir_transmittance: float
+    front_emissivity: float
+    back_emissivity: float
+    top_opening_multiplier: float
+    bottom_opening_multiplier: float
+    left_side_opening_multiplier: float
+    right_side_opening_multiplier: float
+    front_opening_multiplier: float
+
+
+@dataclass
+class EPlusConstruction:
+    """EnergyPlus construction data container."""
+
+    name: str
+    type: str
+    layers: list
+
+
+@dataclass
+class EPlusOpaqueSurface:
+    """EnergyPlus opaque surface data container."""
+
+    name: str
+    type: str
+    polygon: geom.Polygon
+    construction: str
+    boundary: str
+    sun_exposed: bool
+    zone: str
+    fenestrations: list
+
+
+@dataclass
+class EPlusFenestration:
+    """EnergyPlus fenestration data container."""
+
+    name: str
+    type: str
+    polygon: geom.Polygon
+    construction: EPlusConstruction
+    host: EPlusOpaqueSurface
+
+
+@dataclass
+class EPlusZone:
+    """EnergyPlus zone data container."""
+
+    name: str
+    wall: Dict[str, EPlusOpaqueSurface]
+    ceiling: Dict[str, EPlusOpaqueSurface]
+    roof: Dict[str, EPlusOpaqueSurface]
+    floor: Dict[str, EPlusOpaqueSurface]
+    window: Dict[str, EPlusFenestration]
 
 
 def tmit2tmis(tmit: float) -> float:

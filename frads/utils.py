@@ -12,8 +12,7 @@ from typing import Any, Dict, Optional, List, Set, Tuple, Union
 import sys
 sys.path.insert(0, ".")
 
-from frads import geom, parsers
-from frads.types import PaneRGB
+from frads import geom
 from pyradiance import Primitive, parse_primitive
 
 
@@ -43,10 +42,10 @@ def polygon2prim(polygon: geom.Polygon, modifier: str, identifier: str) -> Primi
     return Primitive(modifier, "polygon", identifier, [""], polygon.to_real())
 
 
-def unpack_idf(path: str) -> dict:
-    """Read and parse and idf files."""
-    with open(path, "r") as rdr:
-        return parsers.parse_idf(rdr.read())
+# def unpack_idf(path: str) -> dict:
+#     """Read and parse and idf files."""
+#     with open(path, "r") as rdr:
+#         return parsers.parse_idf(rdr.read())
 
 
 def frange_inc(start, stop, step):
@@ -113,7 +112,7 @@ def primitive_normal(primitive_paths: List[str]) -> Set[geom.Vector]:
     _normals: List[geom.Vector]
     for path in primitive_paths:
         _primitives.extend(unpack_primitives(path))
-    _normals = [parsers.parse_polygon(prim.fargs).normal for prim in _primitives]
+    _normals = [geom.parse_polygon(prim.fargs).normal for prim in _primitives]
     return set(_normals)
 
 
@@ -123,7 +122,7 @@ def samp_dir(primlist: list) -> geom.Vector:
     primlist = [p for p in primlist if p.ptype in ("polygon", "ring")]
     normal_area = geom.Vector()
     for prim in primlist:
-        polygon = parsers.parse_polygon(prim.fargs)
+        polygon = geom.parse_polygon(prim.fargs)
         normal_area += polygon.normal.scale(polygon.area)
     sdir = normal_area.scale(1.0 / len(primlist))
     sdir = sdir.normalize()
@@ -447,80 +446,6 @@ def gen_blinds(depth, width, height, spacing, angle, curve, movedown) -> str:
     slat_cmd += "| xform -rz -90 -rx -90 -t "
     slat_cmd += f"{-width/2} {-height/2} {-movedown}\n"
     return slat_cmd
-
-
-def get_glazing_primitive(panes: List[PaneRGB]) -> Primitive:
-    """Generate a BRTDfunc to represent a glazing system."""
-    if len(panes) > 2:
-        raise ValueError("Only double pane supported")
-    name = "+".join([pane.measured_data.name for pane in panes])
-    if len(panes) == 1:
-        str_arg = [
-            "sr_clear_r",
-            "sr_clear_g",
-            "sr_clear_b",
-            "st_clear_r",
-            "st_clear_g",
-            "st_clear_b",
-            "0",
-            "0",
-            "0",
-            "glaze1.cal",
-        ]
-        coated_real = 1 if panes[0].measured_data.coated_side == "front" else -1
-        real_arg = [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            coated_real,
-            *[round(i, 3) for i in panes[0].glass_rgb],
-            *[round(i, 3) for i in panes[0].coated_rgb],
-            *[round(i, 3) for i in panes[0].trans_rgb],
-        ]
-    else:
-        s12t_r, s12t_g, s12t_b = panes[0].trans_rgb
-        s34t_r, s34t_g, s34t_b = panes[1].trans_rgb
-        if panes[0].measured_data.coated_side == "back":
-            s2r_r, s2r_g, s2r_b = panes[0].coated_rgb
-            s1r_r, s1r_g, s1r_b = panes[0].glass_rgb
-        else:  # front or neither side coated
-            s2r_r, s2r_g, s2r_b = panes[0].glass_rgb
-            s1r_r, s1r_g, s1r_b = panes[0].coated_rgb
-        if panes[1].measured_data.coated_side == "back":
-            s4r_r, s4r_g, s4r_b = panes[1].coated_rgb
-            s3r_r, s3r_g, s3r_b = panes[1].glass_rgb
-        else:  # front or neither side coated
-            s4r_r, s4r_g, s4r_b = panes[1].glass_rgb
-            s3r_r, s3r_g, s3r_b = panes[1].coated_rgb
-        str_arg = [
-            (
-                f"if(Rdot,cr(fr({s4r_r:.3f}),ft({s34t_r:.3f}),fr({s2r_r:.3f})),"
-                f"cr(fr({s1r_r:.3f}),ft({s12t_r:.3f}),fr({s3r_r:.3f})))"
-            ),
-            (
-                f"if(Rdot,cr(fr({s4r_g:.3f}),ft({s34t_g:.3f}),fr({s2r_g:.3f})),"
-                f"cr(fr({s1r_g:.3f}),ft({s12t_g:.3f}),fr({s3r_g:.3f})))"
-            ),
-            (
-                f"if(Rdot,cr(fr({s4r_b:.3f}),ft({s34t_b:.3f}),fr({s2r_b:.3f})),"
-                f"cr(fr({s1r_b:.3f}),ft({s12t_b:.3f}),fr({s3r_b:.3f})))"
-            ),
-            f"ft({s34t_r:.3f})*ft({s12t_r:.3f})",
-            f"ft({s34t_g:.3f})*ft({s12t_g:.3f})",
-            f"ft({s34t_b:.3f})*ft({s12t_b:.3f})",
-            "0",
-            "0",
-            "0",
-            "glaze2.cal",
-        ]
-        real_arg = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-    return Primitive("void", "BRTDfunc", name, str_arg, real_arg)
 
 
 def batch_process(

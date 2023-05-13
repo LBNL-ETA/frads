@@ -7,10 +7,10 @@ name = "frads"
 dynamic = ["version"]
 description = "Wrapper for Radiance related simulation workflows"
 dependencies = [
-    "pyradiance >= 0.0.7a1",
+    "pyradiance == 0.0.10a1",
     "numpy",
     "matplotlib",
-    "pywincalc >= 3.0.0", 
+    "pywincalc >= 3.1.0", 
 ]
 
 [tool.setuptools.dynamic]

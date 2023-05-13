@@ -5,7 +5,6 @@ sys.path.append(".")
 
 from frads import geom
 import pyradiance as pr
-from frads import parsers
 from frads import sky
 from frads import utils
 from frads.sky import WeaData
@@ -126,3 +125,20 @@ def test_filter_data_by_direct_sun():
     ]
     for res, ans in zip(filtered, answer):
         assert res == ans
+
+def test_parser_epw():
+    with open(epw_path) as rdr:
+        wea_metadata, wea_data = sky.parse_epw(rdr.read())
+    assert wea_data[0].time.month == 1
+    assert wea_data[-1].time.month == 12
+    assert wea_data[-1].time.day == 31
+    assert wea_metadata.latitude == 37.72
+
+def test_parser_wea():
+    with open(wea_path) as rdr:
+        wea_metadata, wea_data = sky.parse_wea(rdr.read())
+    assert wea_data[0].time.month == 1
+    assert wea_data[-1].time.month == 12
+    assert wea_data[-1].time.day == 31
+    assert wea_data[-1].dni == 0
+    assert wea_metadata.latitude == 37.72

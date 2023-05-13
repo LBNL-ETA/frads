@@ -67,33 +67,23 @@ from .matrix import (
     sky_as_receiver,
 )
 
-from .parsers import (
-    parse_epw,
-    parse_wea,
-    parse_polygon,
-    parse_mrad_config,
-)
-
 from .methods import assemble_model, three_phase
 
 from .sky import (
     basis_glow,
     gen_perez_sky,
     genskymtx,
+    parse_epw,
+    parse_wea,
     WeaData,
     WeaMetaData,
 )
-
-from .types import (
-    View,
-)
-
 
 from .utils import gen_grid, unpack_primitives
 
 from .window import GlazingSystem, AIR, ARGON, KRYPTON, XENON
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -132,9 +122,7 @@ __all__ = [
     "load_matrix",
     "multiply_rgb",
     "parse_epw",
-    "parse_mrad_config",
     "parse_wea",
-    "parse_polygon",
     "points_as_sender",
     "rfluxmtx",
     "sky_as_receiver",
@@ -143,7 +131,6 @@ __all__ = [
     "surface_as_sender",
     "three_phase",
     "unpack_primitives",
-    "View",
     "view_as_sender",
     "WeaData",
     "WeaMetaData",

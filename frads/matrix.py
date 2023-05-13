@@ -8,16 +8,40 @@ from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
-import subprocess as sp
+import re
 import tempfile as tf
 from typing import List, Optional, Union, Sequence
 
-from frads import geom, parsers, sky, utils
+from frads import geom, sky, utils
 import numpy as np
 import pyradiance as pr
 
 
 logger: logging.Logger = logging.getLogger("frads.matrix")
+
+
+def parse_rad_header(header_str: str) -> tuple:
+    """Parse a Radiance matrix file header.
+
+    Args:
+        header_str(str): header as string
+    Returns:
+        A tuple contain nrow, ncol, ncomp, datatype
+    Raises:
+        ValueError if any of NROWs NCOLS NCOMP FORMAT is not found.
+        (This is problematic as it can happen)
+    """
+    compiled = re.compile(
+        r" NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ", flags=re.X
+    )
+    matches = compiled.findall(header_str)
+    if len(matches) != 4:
+        raise ValueError("Can't find one of the header entries.")
+    nrow = int([mat[0] for mat in matches if mat[0] != ""][0])
+    ncol = int([mat[1] for mat in matches if mat[1] != ""][0])
+    ncomp = int([mat[2] for mat in matches if mat[2] != ""][0])
+    dtype = [mat[3] for mat in matches if mat[3] != ""][0].strip()
+    return nrow, ncol, ncomp, dtype
 
 
 @dataclass(frozen=True)
@@ -100,15 +124,6 @@ def view_as_sender(view, ray_cnt: int, xres: int, yres: int) -> Sender:
     new_xres, new_yres = int(res_eval[1]), int(res_eval[3])
     if (new_xres != xres) and (new_yres != yres):
         logger.info("Changed resolution to %s %s", new_xres, new_yres)
-    # vwrays_cmd = ["vwrays", "-ff", "-x", str(new_xres), "-y", str(new_yres)]
-    vwrays_cmd = ["vwrays", "-ff"]
-    if ray_cnt > 1:
-        vwrays_cmd.extend(["-c", str(ray_cnt), "-pj", "0.7"])
-    logger.debug("Ray count is %s", ray_cnt)
-    vwrays_cmd += view.args()
-    vwrays_cmd += ["-x", str(new_xres), "-y", str(new_yres)]
-    logger.info("Generate view rays with: \n%s", " ".join(vwrays_cmd))
-    vwrays_proc = sp.run(vwrays_cmd, check=True, stdout=sp.PIPE)
     vwrays_proc = pr.vwrays(
         view=view.args(),
         outform="f",
@@ -118,26 +133,16 @@ def view_as_sender(view, ray_cnt: int, xres: int, yres: int) -> Sender:
         pixel_jitter=0.7,
     )
     if view.vtype == "a":
-        flush_cmd = [
-            "rcalc",
-            "-if6",
-            "-of",
-            "-e",
-            f"DIM:{xres};CNT:{ray_cnt}",
-            "-e",
-            "pn=(recno-1)/CNT+.5",
-            "-e",
-            "frac(x):x-floor(x)",
-            "-e",
-            "xpos=frac(pn/DIM);ypos=pn/(DIM*DIM)",
-            "-e",
-            "incir=if(.25-(xpos-.5)*(xpos-.5)-(ypos-.5)*(ypos-.5),1,0)",
-            "-e",
-            "$1=$1;$2=$2;$3=$3;$4=$4*incir;$5=$5*incir;$6=$6*incir",
-        ]
-        logger.info("Flushing -vta corner rays: \n%s", " ".join(flush_cmd))
-        flush_proc = sp.run(flush_cmd, check=True, input=vwrays_proc, stdout=sp.PIPE)
-        vrays = flush_proc.stdout
+        ray_flush_exp = (
+            f"DIM:{xres};CNT:{ray_cnt};"
+            "pn=(recno-1)/CNT+.5;"
+            "frac(x):x-floor(x);"
+            "xpos=frac(pn/DIM);ypos=pn/(DIM*DIM);"
+            "incir=if(.25-(xpos-.5)*(xpos-.5)-(ypos-.5)*(ypos-.5),1,0);"
+            "$1=$1;$2=$2;$3=$3;$4=$4*incir;$5=$5*incir;$6=$6*incir;"
+        )
+        flushed_rays = pr.rcalc(vwrays_proc, inform='f', incount=6, outform="f", expr=ray_flush_exp)
+        vrays = flushed_rays
     else:
         vrays = vwrays_proc
     logger.debug("View sender:\n%s", vrays)
@@ -156,7 +161,7 @@ def load_matrix(file: Union[bytes, str, Path], dtype: str = "float"):
     """
     npdtype = np.double if dtype.startswith("d") else np.single
     mtx = pr.rmtxop(file, outform=dtype[0].lower())
-    nrows, ncols, ncomp, _ = parsers.parse_rad_header(pr.getinfo(mtx).decode())
+    nrows, ncols, ncomp, _ = parse_rad_header(pr.getinfo(mtx).decode())
     return np.frombuffer(pr.getinfo(mtx, strip_header=True), dtype=npdtype).reshape(
         nrows, ncols, ncomp
     )
@@ -331,7 +336,7 @@ def prepare_surface(*, prims, basis, left, offset, source, out) -> str:
             _identifier = prim.identifier
         _modifier = src_mod
         if offset is not None:
-            poly = parsers.parse_polygon(prim.fargs)
+            poly = geom.parse_polygon(prim.fargs)
             offset_vec = poly.normal.scale(offset)
             moved_pts = [pt + offset_vec for pt in poly.vertices]
             _real_args = geom.Polygon(moved_pts).to_real()
@@ -402,10 +407,11 @@ def rcvr_oct(receiver, env, oct_path: Union[str, Path]) -> None:
         receiver_path = os.path.join(tempd, "rcvr_path")
         with open(receiver_path, "w", encoding="utf-8") as wtr:
             wtr.write(receiver.receiver)
-        ocmd = ["oconv", "-f", *map(str, env), receiver_path]
-        logger.info("Generate octree with:\n%s", " ".join(ocmd))
+        # ocmd = ["oconv", "-f", *map(str, env), receiver_path]
+        # logger.info("Generate octree with:\n%s", " ".join(ocmd))
         with open(oct_path, "wb") as wtr:
-            sp.run(ocmd, check=True, stdout=wtr)
+            # sp.run(ocmd, check=True, stdout=wtr)
+            wtr.write(pr.oconv(*map(str, env), receiver_path, frozen=True))
 
 
 def rcontrib(
