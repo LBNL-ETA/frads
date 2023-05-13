@@ -9,9 +9,12 @@ import random
 import string
 import subprocess as sp
 from typing import Any, Dict, Optional, List, Set, Tuple, Union
+import sys
+sys.path.insert(0, ".")
 
 from frads import geom, parsers
-from frads.types import PaneRGB, Primitive
+from frads.types import PaneRGB
+from pyradiance import Primitive, parse_primitive
 
 
 logger: logging.Logger = logging.getLogger("frads.utils")
@@ -37,7 +40,7 @@ TREG_BASE = [
 
 def polygon2prim(polygon: geom.Polygon, modifier: str, identifier: str) -> Primitive:
     """Generate a primitive from a polygon."""
-    return Primitive(modifier, "polygon", identifier, ["0"], polygon.to_real())
+    return Primitive(modifier, "polygon", identifier, [""], polygon.to_real())
 
 
 def unpack_idf(path: str) -> dict:
@@ -97,11 +100,11 @@ def id_generator(size: int = 3, chars: Optional[str] = None) -> str:
 def unpack_primitives(file: Union[str, Path, TextIOWrapper]) -> List[Primitive]:
     """Open a file a to parse primitive."""
     if isinstance(file, TextIOWrapper):
-        lines = file.readlines()
+        lines = file.read()
     else:
         with open(file, "r", encoding="ascii") as rdr:
-            lines = rdr.readlines()
-    return parsers.parse_primitive(lines)
+            lines = rdr.read()
+    return parse_primitive(lines)
 
 
 def primitive_normal(primitive_paths: List[str]) -> Set[geom.Vector]:
@@ -110,7 +113,7 @@ def primitive_normal(primitive_paths: List[str]) -> Set[geom.Vector]:
     _normals: List[geom.Vector]
     for path in primitive_paths:
         _primitives.extend(unpack_primitives(path))
-    _normals = [parsers.parse_polygon(prim.real_arg).normal for prim in _primitives]
+    _normals = [parsers.parse_polygon(prim.fargs).normal for prim in _primitives]
     return set(_normals)
 
 
@@ -120,7 +123,7 @@ def samp_dir(primlist: list) -> geom.Vector:
     primlist = [p for p in primlist if p.ptype in ("polygon", "ring")]
     normal_area = geom.Vector()
     for prim in primlist:
-        polygon = parsers.parse_polygon(prim.real_arg)
+        polygon = parsers.parse_polygon(prim.fargs)
         normal_area += polygon.normal.scale(polygon.area)
     sdir = normal_area.scale(1.0 / len(primlist))
     sdir = sdir.normalize()
@@ -137,13 +140,11 @@ def up_vector(primitives: list) -> geom.Vector:
         returns a str as x,y,z
 
     """
-    xaxis = geom.Vector(1, 0, 0)
-    yaxis = geom.Vector(0, 1, 0)
     norm_dir = samp_dir(primitives)
-    if norm_dir not in (xaxis, xaxis.scale(-1)):
-        upvect = xaxis.cross(norm_dir)
+    if norm_dir != geom.Vector(0, 0, 1):
+        upvect = norm_dir.cross(geom.Vector(0, 0, 1).cross(norm_dir)).normalize()
     else:
-        upvect = yaxis.cross(norm_dir)
+        upvect = geom.Vector(0, 1, 0)
     return upvect
 
 
@@ -163,8 +164,8 @@ def neutral_plastic_prim(
     """
     err_msg = "reflectance, speculariy, and roughness have to be 0-1"
     assert all(0 <= i <= 1 for i in [spec, refl, rough]), err_msg
-    real_args = [5, refl, refl, refl, spec, rough]
-    return Primitive(mod, "plastic", ident, ["0"], real_args)
+    real_args = [refl, refl, refl, spec, rough]
+    return Primitive(mod, "plastic", ident, [], real_args)
 
 
 def neutral_trans_prim(
@@ -186,8 +187,8 @@ def neutral_trans_prim(
     tspec = 0
     err_msg = "reflectance, speculariy, and roughness have to be 0-1"
     assert all(0 <= i <= 1 for i in [spec, refl, rough]), err_msg
-    real_args = [7, color, color, color, spec, rough, t_diff, tspec]
-    return Primitive(mod, "trans", ident, ["0"], real_args)
+    real_args = [color, color, color, spec, rough, t_diff, tspec]
+    return Primitive(mod, "trans", ident, [], real_args)
 
 
 def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough) -> Primitive:
@@ -212,8 +213,8 @@ def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough) -> Prim
     matr = round(red / weighted * refl, 3)
     matg = round(green / weighted * refl, 3)
     matb = round(blue / weighted * refl, 3)
-    real_args = [5, matr, matg, matb, specu, rough]
-    return Primitive(mod, "plastic", ident, "0", real_args)
+    real_args = [matr, matg, matb, specu, rough]
+    return Primitive(mod, "plastic", ident, [], real_args)
 
 
 def glass_prim(
@@ -230,11 +231,11 @@ def glass_prim(
         material primtive (dict)
 
     """
-    tmsv_red = tmit2tmis(tr)
-    tmsv_green = tmit2tmis(tg)
-    tmsv_blue = tmit2tmis(tb)
-    real_args = [4, tmsv_red, tmsv_green, tmsv_blue, refrac]
-    return Primitive(mod, "glass", ident, ["0"], real_args)
+    tmsv_red = tr * 1.08981 
+    tmsv_green = tg * 1.08981
+    tmsv_blue = tb * 1.08981
+    real_args = [tmsv_red, tmsv_green, tmsv_blue, refrac]
+    return Primitive(mod, "glass", ident, [], real_args)
 
 
 def bsdf_prim(
@@ -245,7 +246,7 @@ def bsdf_prim(
     pe: bool = False,
     thickness: float = 0.0,
     xform=None,
-    real_args: str = "0",
+    real_args: list = [""],
 ) -> Primitive:
     """Create a BSDF primtive."""
     str_args = [xmlpath, str(upvec)]
@@ -261,7 +262,6 @@ def bsdf_prim(
         str_args.extend(*xform.split())
     else:
         str_args.append(".")
-    str_args = [str(str_args_count), *str_args]
     return Primitive(mod, _type, ident, str_args, real_args)
 
 
@@ -424,7 +424,7 @@ def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> list:
 
 def material_lib() -> Dict[str, Any]:
     """Generate a list of generic material primitives."""
-    tmis = tmit2tmis(0.6)
+    tmis = 0.6 * 1.08981
     return {
         "neutral_lambertian_0.2": neutral_plastic_prim(
             "void", "neutral_lambertian_0.2", 0.2, 0, 0
@@ -456,7 +456,6 @@ def get_glazing_primitive(panes: List[PaneRGB]) -> Primitive:
     name = "+".join([pane.measured_data.name for pane in panes])
     if len(panes) == 1:
         str_arg = [
-            "10",
             "sr_clear_r",
             "sr_clear_g",
             "sr_clear_b",
@@ -470,7 +469,6 @@ def get_glazing_primitive(panes: List[PaneRGB]) -> Primitive:
         ]
         coated_real = 1 if panes[0].measured_data.coated_side == "front" else -1
         real_arg = [
-            19,
             0,
             0,
             0,
@@ -501,7 +499,6 @@ def get_glazing_primitive(panes: List[PaneRGB]) -> Primitive:
             s4r_r, s4r_g, s4r_b = panes[1].glass_rgb
             s3r_r, s3r_g, s3r_b = panes[1].coated_rgb
         str_arg = [
-            "10",
             (
                 f"if(Rdot,cr(fr({s4r_r:.3f}),ft({s34t_r:.3f}),fr({s2r_r:.3f})),"
                 f"cr(fr({s1r_r:.3f}),ft({s12t_r:.3f}),fr({s3r_r:.3f})))"
@@ -522,7 +519,7 @@ def get_glazing_primitive(panes: List[PaneRGB]) -> Primitive:
             "0",
             "glaze2.cal",
         ]
-        real_arg = [9, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        real_arg = [0, 0, 0, 0, 0, 0, 0, 0, 0]
     return Primitive("void", "BRTDfunc", name, str_arg, real_arg)
 
 
@@ -576,9 +573,3 @@ def batch_process(
                     proc.stdin.write(sin)
             for proc in processes:
                 proc.wait()
-
-
-def run_write(command, out, stdin=None) -> None:
-    """Run command and write stdout to file."""
-    with open(out, "wb") as wtr:
-        sp.run(command, check=True, input=stdin, stdout=wtr)

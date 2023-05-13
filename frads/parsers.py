@@ -6,17 +6,14 @@ import configparser
 from datetime import datetime
 from pathlib import Path
 import re
-import subprocess as sp
 from typing import Tuple, Any
 from typing import Dict
 from typing import Generator
 from typing import List
-from typing import Optional
 from typing import Sequence
 from typing import Union
 
 from frads import geom
-from frads.types import Primitive
 from frads.types import PaneProperty
 from frads.types import View
 from frads.sky import WeaMetaData
@@ -44,14 +41,11 @@ def parse_mrad_config(cfg_path: Path) -> configparser.ConfigParser:
 
 
 def parse_epw(epw_str: str) -> tuple:
-    """Parse epw string and return wea header and data.
-    Assumption:
-        - epw file is in hourly format
-    """
+    """Parse epw file and return wea header and data."""
     raw = epw_str.splitlines()
     epw_header = raw[0].split(",")
     content = raw[8:]
-    data: List[WeaData] = []
+    data = []
     for li in content:
         line = li.split(",")
         year = int(line[0])
@@ -278,63 +272,10 @@ def parse_polygon(real_args: Sequence[Union[int, float]]) -> geom.Polygon:
     Returns:
         modified primitive
     """
-    coords = real_args[1:]
-    arg_cnt = int(real_args[0])
+    coords = real_args
+    arg_cnt = len(real_args)
     vertices = [geom.Vector(*coords[i : i + 3]) for i in range(0, arg_cnt, 3)]
     return geom.Polygon(vertices)
-
-
-def parse_primitive(lines: list) -> List[Primitive]:
-    """Parse Radiance primitives inside a file path into a list of dictionary.
-    Args:
-        lines: list of lines as strings
-
-    Returns:
-        list of primitives as dictionaries
-
-    Notes:
-        Dropping support for alias type
-    """
-    # Expand in-line commands
-    cmd_lines = [(idx, line) for idx, line in enumerate(lines) if line.startswith("!")]
-    cmd_results = []
-    for cmd in cmd_lines:
-        cmd_results.append(
-            sp.run(cmd[1][1:], check=True, stdout=sp.PIPE).stdout.decode().splitlines()
-        )
-    counter = 0
-    for idx, item in enumerate(cmd_lines):
-        counter += item[0]
-        lines[counter : counter + 1] = cmd_results[idx]
-        counter += len(cmd_results[idx]) - 1 - item[0]
-
-    content = " ".join(
-        [i.strip() for i in lines if i.strip() != "" and i[0] != "#"]
-    ).split()
-    primitives: List[Primitive] = []
-    idx = 0
-    while idx < len(content):
-        _modifier = content[idx]
-        _type = content[idx + 1]
-        if _type == "alias":
-            # _name_to = content[idx + 2]
-            # _name_from = content[idx + 3]
-            # primitives.append(
-            # Alias(_modifier, _name_to, _name_from)
-            # )
-            idx += 4
-            continue
-        _identifier = content[idx + 2]
-        str_arg_cnt = int(content[idx + 3])
-        _str_args = content[idx + 3 : idx + 4 + str_arg_cnt]
-        idx += 5 + str_arg_cnt
-        real_arg_cnt = int(content[idx])
-        _real_args = [float(i) for i in content[idx : idx + 1 + real_arg_cnt]]
-        idx += real_arg_cnt + 1
-        primitives.append(
-            Primitive(_modifier, _type, _identifier, _str_args, _real_args)
-        )
-    return primitives
 
 
 def parse_rad_header(header_str: str) -> tuple:
@@ -361,7 +302,7 @@ def parse_rad_header(header_str: str) -> tuple:
     return nrow, ncol, ncomp, dtype
 
 
-def parse_vu(vu_str: str) -> Optional[View]:
+def parse_vu(vu_str: str) -> View:
     """Parse view string into a View object.
 
     Args:

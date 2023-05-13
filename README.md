@@ -1,6 +1,6 @@
 ![Install + Test](https://github.com/LBNL-ETA/frads/actions/workflows/main.yml/badge.svg)
-![CodeQL](https://github.com/LBNL-ETA/frads/actions/workflows/codeql-analysis.yml/badge.svg)
 [![Upload Python Package](https://github.com/LBNL-ETA/frads/actions/workflows/python-publish.yml/badge.svg)](https://github.com/LBNL-ETA/frads/actions/workflows/python-publish.yml)
+![Downloads](https://img.shields.io/pypi/dm/frads.svg)
 # _frads_: Framework for Radiance simulation control
 
 This is the repository for _frads_ development. Radiance is a free and open-source, raytracing-based lighting engine that is used extensively by engineering firms for innovative solar control, lighting, and daylighting design to improve the energy efficiency of buildings. With matrix algebraic methods, climate-based annual simulations can now be conducted in less than two minutes. _frads_ automates setup of these simulations by providing end users with an open-source, high-level abstraction of the Radiance command-line workflow (Unix toolbox model), helping to reduce the steep learning curve and associated user errors. _frads_ also provides the necessary infrastructure needed for seamless integration of Radiance and other modeling tools, such as EnergyPlus.
@@ -58,21 +58,18 @@ To verify that `frads` can be seen by Python, type `python` from your shell. The
 
 ### Optional external library
 
-`Frads` uses Python standard library for all of its functionalities. However, it will take advantage of [Numpy](https://numpy.org) if you have it installed. It will greatly accelerate the matrix multiplication process, especially for progressive simulation workflow.
-
-The [gencolorsky](other_cli.md#gencolorsky) command line tool in `frads` also relies on [libRadTran](http://www.libradtran.org/) a radiative transfer library for computing the spectrally-resolved radiation data. You'd need to install it first to use [gencolorsky](other_cli.md#gencolorsky).
-
 _frads_ runs from the terminal prompt (command line) on Windows, Mac, and Linux OS. Radiance must be [installed](https://www.radiance-online.org/download-install/radiance-source-code/latest-release) prior to use of _frads_.  You can then install _frads_ by entering the following command in your terminal/cmd/powershell:
 
 ```
 pip install frads
 ```
 
-You can also install _frads_ from this Github repository using this command:
+You can also install latest _frads_ from this Github repository using this command:
 
 ```
-pip install git+https://github.com/LBNL-ETA/frads.git
+pip install git+https://github.com/LBNL-ETA/frads@develop
 ```
+
 
 ## Reference
 

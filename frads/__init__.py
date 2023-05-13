@@ -68,7 +68,6 @@ from .matrix import (
 )
 
 from .parsers import (
-    parse_primitive,
     parse_epw,
     parse_wea,
     parse_polygon,
@@ -86,7 +85,6 @@ from .sky import (
 )
 
 from .types import (
-    Primitive,
     View,
 )
 
@@ -95,7 +93,7 @@ from .utils import gen_grid, unpack_primitives
 
 from .window import GlazingSystem, AIR, ARGON, KRYPTON, XENON
 
-__version__ = "0.2.8"
+__version__ = "0.3.0"
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -133,11 +131,10 @@ __all__ = [
     "load_epmodel",
     "load_matrix",
     "multiply_rgb",
-    "parse_primitive",
     "parse_epw",
-    "parse_mrad_config" "parse_wea",
+    "parse_mrad_config",
+    "parse_wea",
     "parse_polygon",
-    "Primitive",
     "points_as_sender",
     "rfluxmtx",
     "sky_as_receiver",

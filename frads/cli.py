@@ -24,7 +24,7 @@ from frads import room
 from frads import utils
 from frads.types import NcpModel
 from frads.types import PaneRGB
-from frads.types import Receiver
+from frads.matrix import Receiver
 
 
 logger: logging.Logger = logging.getLogger("frads")
@@ -231,9 +231,10 @@ def glaze(args) -> None:
                 raise fnfe
             panes.append(parsers.parse_igsdb_json(json_obj))
     pane_rgb = []
-    coeffs = color.get_conversion_matrix(args.cspace)
+    coeffs = color_data.XYZ2RGB_RAD
+    # coeffs = color.get_conversion_matrix(args.cspace)
     for pane in panes:
-        wvls = sorted(set(color_data.CIE_XYZ_2).intersections(pane.wavelength))
+        wvls = sorted(set(color_data.CIE_XYZ_2).intersection(pane.wavelength))
         wvl_range = wvls[-1] - wvls[0]
         cie_xyz = color.get_interpolated_cie_xyz(wvls, args.observer)
         trans = [pane.transmittance[pane.wavelength.index(wvl)] for wvl in wvls]
@@ -306,9 +307,9 @@ def genmtx_pts_sky(args) -> None:
 def genmtx_vu_sky(args) -> None:
     """Generate a view to sky matrix."""
     with open(args.vu, "r", encoding="ascii") as rdr:
-        vudict = parsers.parse_vu(rdr.readlines()[-1])  # use the last view
+        view = parsers.parse_vu(rdr.readlines()[-1])  # use the last view
     sender = matrix.view_as_sender(
-        vu_dict=vudict,
+        view,
         ray_cnt=1,
         xres=args.resolu[0],
         yres=args.resolu[1],
@@ -356,7 +357,7 @@ def genmtx_pts_srf(args) -> None:
                 prim_list=_receiver,
                 basis=args.basis,
                 offset=args.offset,
-                left=None,
+                left=False,
                 source="glow",
                 out=outpath,
             )
@@ -367,12 +368,13 @@ def genmtx_pts_srf(args) -> None:
 def genmtx_vu_srf(args) -> None:
     """Generate a view to surface matrix."""
     with open(args.vu, "r", encoding="ascii") as rdr:
-        sender = matrix.view_as_sender(
-            vu_dict=parsers.parse_vu(rdr.readlines()[-1]),
-            ray_cnt=1,
-            xres=args.resolu[0],
-            yres=args.resolu[1],
-        )
+        view = parsers.parse_vu(rdr.readlines()[-1])
+    sender = matrix.view_as_sender(
+        view,
+        ray_cnt=1,
+        xres=args.resolu[0],
+        yres=args.resolu[1],
+    )
     rprims = utils.unpack_primitives(args.srf)
     modifiers = {prim.modifier for prim in rprims if prim.ptype in ("polygon", "ring")}
     receiver = Receiver(receiver="", basis=args.basis, modifier="")
@@ -384,17 +386,17 @@ def genmtx_vu_srf(args) -> None:
             if prim.modifier == mod and prim.ptype in ("polygon", "ring")
         ]
         if _receiver != []:
-            outpath = Path(f"{args.pts.name}_{args.srf.name}")
+            outpath = Path(f"{args.vu.stem}_{args.srf.stem}")
             outpath.mkdir()
             receiver += matrix.surface_as_receiver(
                 prim_list=_receiver,
                 basis=args.basis,
                 offset=args.offset,
-                left=None,
+                left=False,
                 source="glow",
                 out=outpath / "%04d.hdr",
             )
-    del args.pts, args.srf, args.sys, args.basis, args.offset, args.resolu, args.verbose
+    del args.vu, args.srf, args.sys, args.basis, args.offset, args.resolu, args.verbose
     matrix.rfluxmtx(sender, receiver, sys_paths, utils.opt2list(vars(args)))
 
 
@@ -446,7 +448,7 @@ def genmtx_pts_sun(args) -> None:
     sun_oct = f"sun_{utils.id_generator()}"
     sys_paths = args.sys
     matrix.rcvr_oct(receiver, sys_paths, sun_oct)
-    del args.pts, args.basis, args.sys_paths, args.verbose
+    del args.pts, args.basis, args.sys, args.verbose
     matrix.rcontrib(
         sender=sender,
         modifier=receiver.modifier,
@@ -460,8 +462,9 @@ def genmtx_pts_sun(args) -> None:
 def genmtx_vu_sun(args) -> None:
     """Generate a view to sun matrix."""
     with open(args.vu, "r", encoding="ascii") as rdr:
+        view = parsers.parse_vu(rdr.readlines()[-1])
         sender = matrix.view_as_sender(
-            vu_dict=parsers.parse_vu(rdr.readlines()[-1]),
+            view,
             ray_cnt=1,
             xres=args.resolu[0],
             yres=args.resolu[1],

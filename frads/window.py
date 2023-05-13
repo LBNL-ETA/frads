@@ -1,6 +1,8 @@
+import tempfile
 from pathlib import Path
-from typing import Tuple
+from typing import List, Tuple
 
+import pyradiance as pr
 import pywincalc as pwc
 
 AIR = pwc.PredefinedGasType.AIR
@@ -22,13 +24,13 @@ def create_gap(*gases_ratios: Tuple[pwc.PredefinedGasType, float], thickness):
 
 
 class GlazingSystem:
-    # default_air_gap = pwc.Gap(AIR, 0.0127)
     default_air_gap = (AIR, 1), 0.0127
 
     def __init__(self):
         self._name = ""
         self._gaps = []
         self.layers = []
+        self._thickness = 0
         self.glzsys = None
         self.photopic_results = None
         self.solar_results = None
@@ -52,9 +54,11 @@ class GlazingSystem:
         return self._gaps
 
     @gaps.setter
-    def gaps(self, value: Tuple[Tuple[pwc.PredefinedGasType, float], float]):
+    def gaps(self, value: List[Tuple[Tuple[pwc.PredefinedGasType, float], float]]):
         """Set the gaps."""
         self._gaps = value
+        self._thickness -= len(value) * self.default_air_gap[-1]
+        self._thickness += sum([g[-1] for g in value])
         self.updated = True
 
     def add_glazing_layer(self, inp):
@@ -74,8 +78,10 @@ class GlazingSystem:
         data.product_name = data.product_name or product_name or str(inp)[:6]
         self.layers.append(data)
 
+        self._thickness += data.thickness / 1000.0 or 0  # mm to m
         if len(self.layers) > 1:
-            self.gaps.append(self.default_air_gap)
+            self._gaps.append(self.default_air_gap)
+            self._thickness += self.default_air_gap[-1]
         self.updated = True
 
     def add_shading_layer(self, inp):
@@ -88,8 +94,10 @@ class GlazingSystem:
         else:
             data = pwc.parse_bsdf_xml_string(inp)
         self.layers.append(data)
+        self._thickness += data.thickness / 1e3 or 0
         if len(self.layers) > 1:
-            self.gaps.append(self.default_air_gap)
+            self._gaps.append(self.default_air_gap)
+            self._thickness += self.default_air_gap[-1]
         self.updated = True
 
     def build(self):
@@ -98,16 +106,8 @@ class GlazingSystem:
             raise ValueError("Number of gaps must be one less than number of layers.")
 
         self.glzsys = pwc.GlazingSystem(
-            optical_standard=pwc.load_standard(
-                str(
-                    Path(__file__).parent
-                    / "data"
-                    / "optical_standards"
-                    / "W5_NFRC_2003.std"
-                )
-            ),
             solid_layers=self.layers,
-            gap_layers=[create_gap(*g[:-1], thickness=g[-1]) for g in self.gaps],
+            gap_layers=[create_gap(*g[:-1], thickness=g[-1]) for g in self._gaps],
             width_meters=1,
             height_meters=1,
             environment=pwc.nfrc_shgc_environments(),
@@ -122,3 +122,84 @@ class GlazingSystem:
             self.solar_results = self.glzsys.optical_method_results("SOLAR")
             self.photopic_results = self.glzsys.optical_method_results("PHOTOPIC")
             self.updated = False
+
+    def to_xml(self, out):
+        """Save the glazing system to a file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _tbv = Path(tmpdir) / "tbv"
+            _tfv = Path(tmpdir) / "tfv"
+            _rfv = Path(tmpdir) / "rfv"
+            _rbv = Path(tmpdir) / "rbv"
+            _tbs = Path(tmpdir) / "tbs"
+            _tfs = Path(tmpdir) / "tfs"
+            _rfs = Path(tmpdir) / "rfs"
+            _rbs = Path(tmpdir) / "rbs"
+            with open(_tbv, "w") as f:
+                f.write(
+                    "\n".join(
+                        " ".join(str(n) for n in row)
+                        for row in self.photopic_results.system_results.front.transmittance.matrix
+                    )
+                )
+            with open(_tfv, "w") as f:
+                f.write(
+                    "\n".join(
+                        " ".join(str(n) for n in row)
+                        for row in self.photopic_results.system_results.back.transmittance.matrix
+                    )
+                )
+            with open(_rfv, "w") as f:
+                f.write(
+                    "\n".join(
+                        " ".join(str(n) for n in row)
+                        for row in self.photopic_results.system_results.front.reflectance.matrix
+                    )
+                )
+            with open(_rbv, "w") as f:
+                f.write(
+                    "\n".join(
+                        " ".join(str(n) for n in row)
+                        for row in self.photopic_results.system_results.back.reflectance.matrix
+                    )
+                )
+            with open(_tbs, "w") as f:
+                f.write(
+                    "\n".join(
+                        " ".join(str(n) for n in row)
+                        for row in self.solar_results.system_results.front.transmittance.matrix
+                    )
+                )
+            with open(_tfs, "w") as f:
+                f.write(
+                    "\n".join(
+                        " ".join(str(n) for n in row)
+                        for row in self.solar_results.system_results.back.transmittance.matrix
+                    )
+                )
+            with open(_rfs, "w") as f:
+                f.write(
+                    "\n".join(
+                        " ".join(str(n) for n in row)
+                        for row in self.solar_results.system_results.front.reflectance.matrix
+                    )
+                )
+            with open(_rbs, "w") as f:
+                f.write(
+                    "\n".join(
+                        " ".join(str(n) for n in row)
+                        for row in self.solar_results.system_results.back.reflectance.matrix
+                    )
+                )
+            _vi = pr.WrapBSDFInput("Visible", _tbv, _tfv, _rfv, _rbv)
+            _si = pr.WrapBSDFInput("Solar", _tbs, _tfs, _rfs, _rbs)
+            with open(out, "wb") as f:
+                f.write(
+                    pr.wrapbsdf(
+                        enforce_window=True,
+                        basis="kf",
+                        inp=[_vi, _si],
+                        n=self.name,
+                        m="",
+                        t=str(self._thickness),
+                    )
+                )

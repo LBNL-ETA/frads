@@ -2,223 +2,12 @@
 Class and functions for accessing EnergyPlus Python API
 """
 
-import calendar
-import datetime
+from datetime import datetime, timedelta
 import json
 from pathlib import Path
 from typing import Optional
 
 from frads import sky
-
-
-def ep_datetime_parser(inp):
-    date, time = inp.strip().split()
-    month, day = [int(i) for i in date.split("/")]
-    hr, mi, sc = [int(i) for i in time.split(":")]
-    if hr == 24 and mi == 0 and sc == 0:
-        return datetime.datetime(1900, month, day, 0, mi, sc) + datetime.timedelta(
-            days=1
-        )
-    else:
-        return datetime.datetime(1900, month, day, hr, mi, sc)
-
-
-def load_epmodel(fpath: Path, api) -> dict:
-    """Load and parse input file into a JSON object.
-    If the input file is in .idf format, use command-line
-    energyplus program to convert it to epJSON format
-    Args:
-        fpath: input file path
-    Returns:
-        epjs: JSON object as a Python dictionary
-    """
-    epjson_path: Path
-    if fpath.suffix == ".idf":
-        state = api.state_manager.new_state()
-        api.runtime.set_console_output_status(state, False)
-        api.runtime.run_energyplus(
-            state, ["--convert-only", "-d", "Outputs", str(fpath)]
-        )
-        api.state_manager.delete_state(state)
-        epjson_path = Path("Outputs").joinpath(fpath.with_suffix(".epJSON").name)
-        if not epjson_path.is_file():
-            raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
-    elif fpath.suffix == ".epJSON":
-        epjson_path = fpath
-    else:
-        raise Exception(f"Unknown file type {fpath}")
-    with open(epjson_path) as rdr:
-        epjs = json.load(rdr)
-
-    return EPModel(epjs)
-
-
-class Handles:
-    def __init__(self):
-        self.variable = {}
-        self.actuator = {}
-        self.construction = {}
-
-
-class EnergyPlusSetup:
-    def __init__(self, api, epjs):
-        self.api = api
-        self.epjs = epjs
-        self.state = self.api.state_manager.new_state()
-        self.handles = Handles()
-
-        loc = list(self.epjs["Site:Location"].values())[0]
-        self.wea_meta = sky.WeaMetaData(
-            city=list(self.epjs["Site:Location"].keys())[0],
-            country="",
-            elevation=loc["elevation"],
-            latitude=loc["latitude"],
-            longitude=0 - loc["longitude"],
-            timezone=(0 - loc["time_zone"]) * 15,
-        )
-
-        self.api.runtime.callback_begin_new_environment(self.state, self.get_handles())
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        self.api.state_manager.delete_state(self.state)
-
-    def actuate(self, name: str, key: str, value):
-        if key not in self.handles.actuator:
-            raise ValueError("Actuator not found", actuator_key)
-        self.api.exchange.set_actuator_value(
-            self.state, self.handles.actuator[key][name], value
-        )
-
-    def request_actuator(self, state, component_type: str, name: str, key: str):
-        if (key, name) in self.handles.actuator.items():
-            pass
-        else:
-            handle = self.api.exchange.get_actuator_handle(
-                state, component_type, name, key
-            )
-            if handle == -1:
-                raise ValueError(
-                    f"Actuator {component_type} {name} {key} not found", key
-                )
-            # check key exists
-            if key not in self.handles.actuator:
-                self.handles.actuator[key] = {}
-            self.handles.actuator[key][name] = handle
-
-    def get_variable_value(self, name: str, key: str):
-        return self.api.exchange.get_variable_value(
-            self.state, self.handles.variable[key][name]
-        )
-
-    def request_variable(self, name: str, key: str):
-        if (key, name) in self.handles.actuator.items():
-            pass
-        else:
-            self.api.exchange.request_variable(self.state, name, key)
-            # check key exists
-            if key not in self.handles.variable:
-                self.handles.variable[key] = {}
-            self.handles.variable[key][name] = None
-
-    def get_handles(self):
-        def callback_function(state):
-            for key in self.handles.variable:
-                try:
-                    for name in self.handles.variable[key]:
-                        handle = self.api.exchange.get_variable_handle(state, name, key)
-                        if handle == -1:
-                            raise ValueError("Variable handle not found", name, key)
-                        self.handles.variable[key][name] = handle
-                except TypeError:
-                    print("No variables requested for", self.handles.variable, key)
-
-            if "Construction:ComplexFenestrationState" in self.epjs:
-                for cfs in self.epjs["Construction:ComplexFenestrationState"]:
-                    handle = self.api.api.getConstructionHandle(state, cfs.encode())
-                    if handle == -1:
-                        raise ValueError("Construction handle not found", cfs)
-                    self.handles.construction[cfs] = handle
-
-            if "FenestrationSurface:Detailed" in self.epjs:
-                for window in self.epjs["FenestrationSurface:Detailed"]:
-                    self.request_actuator(
-                        state, "Surface", "Construction State", window
-                    )
-
-            for light in self.epjs.get("Lights", []):
-                self.request_actuator(state, "Lights", "Electricity Rate", light)
-
-                self.request_variable("Lights Electricity Energy", light)
-                var_handle = self.api.exchange.get_variable_handle(
-                    state, "Lights Electricity Energy", light
-                )
-                if var_handle == -1:
-                    raise ValueError("Light variable not found", light)
-                self.handles.variable[light]["Lights Electricity Energy"] = var_handle
-
-        return callback_function
-
-    def get_datetime(self):
-        year = self.api.exchange.year(self.state)
-        month = self.api.exchange.month(self.state)
-        day = self.api.exchange.day_of_month(self.state)
-        hour = self.api.exchange.hour(self.state)
-        minute = self.api.exchange.minutes(self.state)
-
-        if minute == 60:
-            minute = 0
-            hour += 1
-        if hour == 24:
-            hour = 0
-            day += 1
-        if day == 31 and month in [4, 6, 9, 11]:
-            day = 1
-            month += 1
-        elif day == 32 and month in [1, 3, 5, 7, 8, 10, 12]:
-            day = 1
-            month += 1
-        # Assuming EPW never has Feb 29th
-        elif day == 29 and month == 2:
-            day = 1
-            month += 1
-        if month == 13:
-            month = 1
-            year += 1
-
-        dt = datetime.datetime(year, month, day, hour, minute)
-
-        return dt
-
-    def run(
-        self,
-        weather_file: Optional[str] = None,
-        output_directory: Optional[str] = None,
-        output_prefix: Optional[str] = "eplus",
-    ):
-        options = {"-w": weather_file, "-d": output_directory, "-p": output_prefix}
-        # check if any of options are None, if so, dont pass them to run_energyplus
-        options = {k: v for k, v in options.items() if v is not None}
-        opt = [item for sublist in options.items() for item in sublist]
-
-        with open(f"{output_prefix}.json", "w") as wtr:
-            json.dump(self.epjs, wtr)
-
-        self.api.runtime.run_energyplus(
-            self.state, [*opt, "-r", f"{output_prefix}.json"]
-        )
-
-    def set_callback(self, method_name: str, func):
-        try:
-            method = getattr(self.api.runtime, method_name)
-        except AttributeError:
-            raise AttributeError(
-                f"Method {method_name} not found in EnergyPlus runtime API"
-            )
-        # method(self.state, partial(func, self))
-        method(self.state, func)
 
 
 class EPModel:
@@ -589,22 +378,197 @@ class EPModel:
             }
 
 
-# def shade_controller(ep: EnergyPlusSetup, state) -> None:
-#     """
-#     This is a user implemented controller, which gets called at EnergyPlus runtime.
-#     Args:
-#         ep: EnergyPlusSetup object
-#         state: EnergyPlus state
-#     Returns:
-#         None
-#     """
-#     drybulb = ep.get_variable_value(ep.handles.outdoor_drybulb_temperature)
-#     dni = ep.get_variable_value(ep.handles.direct_normal_irradiance)
-#     dhi = ep.get_variable_value(ep.handles.diffuse_horizontal_irradiance)
-#     if dni > 800:
-#         ep.actuate(ep.handles.window_actuators['Window1'], ep.handles.complex_fenestration_state['Window1'])
-#
-#
-# with EnergyPlusSetup(api, epjs) as ep:
-#     ep.set_callback("callback_begin_new_environment", shade_controller)
-#     ep.run()
+def ep_datetime_parser(inp):
+    date, time = inp.strip().split()
+    month, day = [int(i) for i in date.split("/")]
+    hr, mi, sc = [int(i) for i in time.split(":")]
+    if hr == 24 and mi == 0 and sc == 0:
+        return datetime(1900, month, day, 0, mi, sc) + timedelta(days=1)
+    else:
+        return datetime(1900, month, day, hr, mi, sc)
+
+
+def load_epmodel(fpath: Path, api) -> EPModel:
+    """Load and parse input file into a JSON object.
+    If the input file is in .idf format, use command-line
+    energyplus program to convert it to epJSON format
+    Args:
+        fpath: input file path
+    Returns:
+        epjs: JSON object as a Python dictionary
+    """
+    epjson_path: Path
+    if fpath.suffix == ".idf":
+        state = api.state_manager.new_state()
+        api.runtime.set_console_output_status(state, False)
+        api.runtime.run_energyplus(state, ["--convert-only", str(fpath)])
+        api.state_manager.delete_state(state)
+        epjson_path = Path(fpath.with_suffix(".epJSON").name)
+        if not epjson_path.is_file():
+            raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
+    elif fpath.suffix == ".epJSON":
+        epjson_path = fpath
+    else:
+        raise Exception(f"Unknown file type {fpath}")
+    with open(epjson_path) as rdr:
+        epjs = json.load(rdr)
+
+    return EPModel(epjs)
+
+
+class Handles:
+    def __init__(self):
+        self.variable = {}
+        self.actuator = {}
+        self.construction = {}
+
+
+class EnergyPlusSetup:
+    def __init__(self, api, epjs):
+        self.api = api
+        self.epjs = epjs
+        self.state = self.api.state_manager.new_state()
+        self.handles = Handles()
+
+        loc = list(self.epjs["Site:Location"].values())[0]
+        self.wea_meta = sky.WeaMetaData(
+            city=list(self.epjs["Site:Location"].keys())[0],
+            country="",
+            elevation=loc["elevation"],
+            latitude=loc["latitude"],
+            longitude=0 - loc["longitude"],
+            timezone=(0 - loc["time_zone"]) * 15,
+        )
+
+        self.api.runtime.callback_begin_new_environment(self.state, self.get_handles())
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        self.api.state_manager.delete_state(self.state)
+
+    def actuate(self, name: str, key: str, value):
+        if key not in self.handles.actuator:
+            raise ValueError("Actuator not found", name, key)
+        self.api.exchange.set_actuator_value(
+            self.state, self.handles.actuator[key][name], value
+        )
+
+    def request_actuator(self, state, component_type: str, name: str, key: str):
+        if (key, name) in self.handles.actuator.items():
+            pass
+        else:
+            handle = self.api.exchange.get_actuator_handle(
+                state, component_type, name, key
+            )
+            if handle == -1:
+                raise ValueError(
+                    f"Actuator {component_type} {name} {key} not found", key
+                )
+            # check key exists
+            if key not in self.handles.actuator:
+                self.handles.actuator[key] = {}
+            self.handles.actuator[key][name] = handle
+
+    def get_variable_value(self, name: str, key: str):
+        return self.api.exchange.get_variable_value(
+            self.state, self.handles.variable[key][name]
+        )
+
+    def request_variable(self, name: str, key: str):
+        if (key, name) in self.handles.actuator.items():
+            pass
+        else:
+            self.api.exchange.request_variable(self.state, name, key)
+            # check key exists
+            if key not in self.handles.variable:
+                self.handles.variable[key] = {}
+            self.handles.variable[key][name] = None
+
+    def get_handles(self):
+        def callback_function(state):
+            for key in self.handles.variable:
+                try:
+                    for name in self.handles.variable[key]:
+                        handle = self.api.exchange.get_variable_handle(state, name, key)
+                        if handle == -1:
+                            raise ValueError("Variable handle not found", name, key)
+                        self.handles.variable[key][name] = handle
+                except TypeError:
+                    print("No variables requested for", self.handles.variable, key)
+
+            if "Construction:ComplexFenestrationState" in self.epjs:
+                for cfs in self.epjs["Construction:ComplexFenestrationState"]:
+                    handle = self.api.api.getConstructionHandle(state, cfs.encode())
+                    if handle == -1:
+                        raise ValueError("Construction handle not found", cfs)
+                    self.handles.construction[cfs] = handle
+
+            if "FenestrationSurface:Detailed" in self.epjs:
+                for window in self.epjs["FenestrationSurface:Detailed"]:
+                    self.request_actuator(
+                        state, "Surface", "Construction State", window
+                    )
+
+            for light in self.epjs.get("Lights", []):
+                self.request_actuator(state, "Lights", "Electricity Rate", light)
+
+                self.request_variable("Lights Electricity Energy", light)
+                var_handle = self.api.exchange.get_variable_handle(
+                    state, "Lights Electricity Energy", light
+                )
+                if var_handle == -1:
+                    raise ValueError("Light variable not found", light)
+                self.handles.variable[light]["Lights Electricity Energy"] = var_handle
+
+        return callback_function
+
+    def get_datetime(self):
+        year = self.api.exchange.year(self.state)
+        month = self.api.exchange.month(self.state)
+        day = self.api.exchange.day_of_month(self.state)
+        hour = self.api.exchange.hour(self.state)
+        minute = self.api.exchange.minutes(self.state)
+
+        date = datetime(year, month, day)
+
+        if minute == 60:
+            minute = 0
+            hour += 1
+
+        if hour == 24:
+            hour = 0
+            date += timedelta(days=1)
+
+        dt = date + timedelta(hours=hour, minutes=minute)
+
+        return dt
+
+    def run(
+        self,
+        weather_file: Optional[str] = None,
+        output_directory: Optional[str] = None,
+        output_prefix: Optional[str] = "eplus",
+    ):
+        options = {"-w": weather_file, "-d": output_directory, "-p": output_prefix}
+        # check if any of options are None, if so, dont pass them to run_energyplus
+        options = {k: v for k, v in options.items() if v is not None}
+        opt = [item for sublist in options.items() for item in sublist]
+
+        with open(f"{output_prefix}.json", "w") as wtr:
+            json.dump(self.epjs, wtr)
+
+        self.api.runtime.run_energyplus(
+            self.state, [*opt, "-r", f"{output_prefix}.json"]
+        )
+
+    def set_callback(self, method_name: str, func):
+        try:
+            method = getattr(self.api.runtime, method_name)
+        except AttributeError:
+            raise AttributeError(
+                f"Method {method_name} not found in EnergyPlus runtime API"
+            )
+        # method(self.state, partial(func, self))
+        method(self.state, func)

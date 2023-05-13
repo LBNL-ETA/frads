@@ -31,8 +31,6 @@ def get_interpolated_cie_xyz(
         cie_xyz = color_data.CIE_XYZ_2
     elif observer.startswith("10"):
         cie_xyz = color_data.CIE_XYZ_10
-    else:
-        raise ValueError(f"Invalid observer: {observer}")
     common_wvl = sorted(set(cie_xyz).intersection(inp_wvl))
     return [cie_xyz[wvl] for wvl in common_wvl]
 

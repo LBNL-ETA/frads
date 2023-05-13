@@ -49,7 +49,7 @@ objview Objects/*aroom.mat Objects/*aroom.rad
 ```
 And we can see that it is what we'd expect.
 
-![image](assets/model.png){: style="height:343px;width:321px"}
+![image](../../assets/model.png){: style="height:343px;width:321px"}
 
 
 ## Generate an octree file

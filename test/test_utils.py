@@ -8,7 +8,7 @@ from frads import geom
 from frads import utils
 from frads.types import PaneProperty
 from frads.types import PaneRGB
-from frads.types import Primitive
+from pyradiance import Primitive
 
 
 test_dir_path = Path(os.path.dirname(__file__))

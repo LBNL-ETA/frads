@@ -10,33 +10,18 @@ from pathlib import Path
 import shutil
 import subprocess as sp
 import tempfile as tf
-from typing import Dict, List, Generator, Optional, Sequence, Tuple
+from typing import Dict, List, Generator, Sequence, Tuple
 
 from frads import geom, sky, matrix
 from frads import mtxmult, parsers, utils
-
-# from frads import raycall
-from frads.types import (Options, Primitive, Receiver, Sender, MradModel, MradPath, View)
+from frads.matrix import Sender, Receiver
+from frads.types import MradModel, MradPath, View
 from frads.sky import WeaMetaData, WeaData
 
 import pyradiance as pr
 
 
 logger: logging.Logger = logging.getLogger("frads.methods")
-
-
-# def get_rpict_command(
-#     view: View,
-#     options: Optional[Options] = None,
-#     octree: Optional[Path] = None,
-# ) -> List[str]:
-#     command = ["rpict"]
-#     command.extend(view.args())
-#     if options is not None:
-#         command.extend(options.args())
-#     if octree:
-#         command.append(str(octree))
-#     return command
 
 
 def get_window_group(wpaths: List[Path]) -> Tuple[dict, list]:
@@ -54,7 +39,7 @@ def get_window_group(wpaths: List[Path]) -> Tuple[dict, list]:
         prims = utils.unpack_primitives(wpath)
         window_groups[wpath.stem] = prims
         # Taking normal from the first polygon
-        _normal = parsers.parse_polygon(prims[0].real_arg).normal
+        _normal = parsers.parse_polygon(prims[0].fargs).normal
         if _normal not in window_normals:
             window_normals.append(_normal)
     return window_groups, window_normals
@@ -91,26 +76,34 @@ def get_wea_data(config: ConfigParser) -> Tuple[WeaMetaData, List[WeaData], str]
 def get_sender_grid(config: ConfigParser) -> Dict[str, Sender]:
     """Get point grid as ray senders."""
     sender_grid: Dict[str, Sender] = {}
-    if (grid_paths := config["RaySender"].getpaths("grid_surface")) is None:
-        return sender_grid
-    for gpath in grid_paths:
-        name: str = gpath.stem
-        # Take the first polygon primitive
-        gprimitives = utils.unpack_primitives(gpath)
-        surface_polygon = None
-        for prim in gprimitives:
-            if prim.ptype == "polygon":
-                surface_polygon = parsers.parse_polygon(prim.real_arg)
-        if surface_polygon is None:
-            raise ValueError(f"No polygon found in {gpath}")
-        sensor_pts = utils.gen_grid(
-            surface_polygon,
-            config["RaySender"].getfloat("grid_height"),
-            config["RaySender"].getfloat("grid_spacing"),
-        )
-        sender_grid[name] = matrix.points_as_sender(
-            pts_list=sensor_pts, ray_cnt=config["SimControl"].getint("ray_count")
-        )
+    if (grid_files := config["RaySender"].getpaths("grid_points")) is not None:
+        for gfile in grid_files:
+            name = gfile.stem
+            with open(gfile) as f:
+                sensor_pts = [[float(v) for v in l.split()] for l in f.readlines()]
+            sender_grid[name] = matrix.points_as_sender(
+                pts_list=sensor_pts, ray_cnt=config["SimControl"].getint("ray_count")
+            )
+    elif (grid_paths := config["RaySender"].getpaths("grid_surface")) is not None:
+        for gpath in grid_paths:
+            name: str = gpath.stem
+            # Take the first polygon primitive
+            gprimitives = utils.unpack_primitives(gpath)
+            surface_polygon = None
+            for prim in gprimitives:
+                if prim.ptype == "polygon":
+                    surface_polygon = parsers.parse_polygon(prim.fargs)
+                    break
+            if surface_polygon is None:
+                raise ValueError(f"No polygon found in {gpath}")
+            sensor_pts = utils.gen_grid(
+                surface_polygon,
+                config["RaySender"].getfloat("grid_height"),
+                config["RaySender"].getfloat("grid_spacing"),
+            )
+            sender_grid[name] = matrix.points_as_sender(
+                pts_list=sensor_pts, ray_cnt=config["SimControl"].getint("ray_count")
+            )
     return sender_grid
 
 
@@ -123,9 +116,6 @@ def get_sender_view(config: ConfigParser) -> Tuple[dict, dict]:
     if (view := config["RaySender"].getview("view")) is None:
         return sender_view, view_dicts
     view_name = "view_00"
-    # if "vf" in vdict:
-    # with open(vdict["vf"], "r", encoding="ascii") as rdr:
-    # vdict.update(parsers.parse_vu(rdr.read()))
     view_dicts[view_name] = view
     sender_view[view_name] = matrix.view_as_sender(
         view=view,
@@ -151,10 +141,10 @@ def assemble_model(config: ConfigParser) -> Generator:
         for prim in utils.unpack_primitives(path):
             material_primitives.append(prim)
     material_primitives.append(
-        Primitive("void", "plastic", "black", ["0"], [5, 0, 0, 0, 0, 0])
+        pr.Primitive("void", "plastic", "black", ["0"], [0, 0, 0, 0, 0])
     )
     material_primitives.append(
-        Primitive("void", "glow", "glowing", ["0"], [4, 1, 1, 1, 0])
+        pr.Primitive("void", "glow", "glowing", ["0"], [1, 1, 1, 0])
     )
     material_path = Path(f"all_material_{utils.id_generator()}.rad")
     with open(material_path, "w", encoding="ascii") as wtr:
@@ -273,7 +263,7 @@ def view_matrix_pt(
                 prim_list=window_prim,
                 basis=config["SimControl"]["vmx_basis"],
                 offset=None,
-                left=None,
+                left=False,
                 source="glow",
                 out=out,
             )
@@ -376,21 +366,21 @@ def blacken_env(model: MradModel, config: ConfigParser) -> Tuple[str, str]:
     for _, windows in model.window_groups.items():
         for window in windows:
             blackened_window.append(
-                Primitive(
+                pr.Primitive(
                     "black",
                     window.ptype,
                     window.identifier,
-                    window.str_arg,
-                    window.real_arg,
+                    window.sargs,
+                    window.fargs,
                 )
             )
             glowing_window.append(
-                Primitive(
+                pr.Primitive(
                     "glowing",
                     window.ptype,
                     window.identifier,
-                    window.str_arg,
-                    window.real_arg,
+                    window.sargs,
+                    window.fargs,
                 )
             )
     with open(bwindow_path, "w", encoding="ascii") as wtr:
@@ -449,9 +439,11 @@ def direct_sun_matrix_pt(
     """
 
     logger.info("Direct sun matrix for sensor grid")
+    cdsenv = [model.material_path, model.black_env_path, *model.cfs_paths]
+    _cfs_name = "".join([Path(cfs).stem for cfs in model.cfs_paths])
     for grid_name, sender_grid in model.sender_grid.items():
         mpath.pcdsmx[grid_name] = Path(
-            "Matrices", f"pcdsmx_{model.name}_{grid_name}.mtx"
+            "Matrices", f"pcdsmx_{model.name}_{grid_name}_{_cfs_name}.mtx"
         )
         if regen(mpath.pcdsmx[grid_name], config):
             logger.info("Generating using rcontrib...")
@@ -463,7 +455,6 @@ def direct_sun_matrix_pt(
             )
             cdsmx_opt = config["SimControl"].getoptions("cdsmx_opt")
             cdsmx_opt["n"] = config["SimControl"].getint("nprocess")
-            cdsenv = [model.material_path, model.black_env_path, *model.cfs_paths]
             sun_oct = Path(f"sun_{utils.id_generator()}.oct")
             matrix.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
             matrix.rcontrib(
@@ -496,6 +487,7 @@ def direct_sun_matrix_vu(
     mod_names = [f"{int(line[3:]):04d}" for line in rcvr_sun.modifier.splitlines()]
     sun_oct = Path(f"sun_{utils.id_generator()}.oct")
     cdsenv = [model.material_path, model.black_env_path, *model.cfs_paths]
+    _cfs_name = "".join([Path(cfs).stem for cfs in model.cfs_paths])
     matrix.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
     cdsmx_opt = config["SimControl"].getoptions("cdsmx_opt")
     cdsmx_opt["n"] = config["SimControl"].getint("nprocess")
@@ -507,21 +499,16 @@ def direct_sun_matrix_vu(
         rpict_opt.ps = 1
         rpict_opt.ab = 0
         rpict_opt.av = (0.31831, 0.31831, 0.31831)
-        # cmd = raycall.get_rpict_command(model.views[view], rpict_opt, octree=vmap_oct)
-        # _pic = pr.rpict(modle.views[view], rpict_opt, octree=vmap_oct)
         with open(mpath.vmap[view], "wb") as wtr:
-            wtr.write(pr.rpict(model.views[view], vmap_oct, params=rpict_opt.args()))
-        # logger.info("Generating view matrix material map with: \n %s", " ".join(cmd))
-        # utils.run_write(cmd, mpath.vmap[view])
-        # cmd[-1] = cdmap_oct
-        # logger.info(
-        # "Generating direct-sun matrix material map with: \n %s", " ".join(cmd)
-        # )
-        # utils.run_write(cmd, mpath.cdmap[view])
+            wtr.write(
+                pr.rpict(model.views[view].args(), vmap_oct, params=rpict_opt.args())
+            )
         with open(mpath.cdmap[view], "wb") as wtr:
-            wtr.write(pr.rpict(model.views[view], cdmap_oct, params=rpict_opt.args()))
-        mpath.vcdfmx[view] = Path("Matrices", f"vcdfmx_{model.name}_{view}")
-        mpath.vcdrmx[view] = Path("Matrices", f"vcdrmx_{model.name}_{view}")
+            wtr.write(
+                pr.rpict(model.views[view].args(), cdmap_oct, params=rpict_opt.args())
+            )
+        mpath.vcdfmx[view] = Path("Matrices", f"vcdfmx_{model.name}_{view}_{_cfs_name}")
+        mpath.vcdrmx[view] = Path("Matrices", f"vcdrmx_{model.name}_{view}_{_cfs_name}")
         tempf = Path("Matrices", "vcdfmx")
         tempr = Path("Matrices", "vcdrmx")
         if regen(mpath.vcdfmx[view], config):
