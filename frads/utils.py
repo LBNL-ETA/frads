@@ -19,24 +19,6 @@ from pyradiance import Primitive, parse_primitive
 logger: logging.Logger = logging.getLogger("frads.utils")
 
 
-GEOM_TYPE = ["polygon", "ring", "tube", "cone"]
-
-MATERIAL_TYPE = ["plastic", "glass", "trans", "dielectric", "BSDF"]
-
-
-TREG_BASE = [
-    (90.0, 0),
-    (78.0, 30),
-    (66.0, 30),
-    (54.0, 24),
-    (42.0, 24),
-    (30.0, 18),
-    (18.0, 12),
-    (6.0, 6),
-    (0.0, 1),
-]
-
-
 def polygon2prim(polygon: geom.Polygon, modifier: str, identifier: str) -> Primitive:
     """Generate a primitive from a polygon."""
     return Primitive(modifier, "polygon", identifier, [""], polygon.to_real())
@@ -54,39 +36,6 @@ def frange_inc(start, stop, step):
     while r < stop:
         yield r
         r += step
-
-
-def square2disk(in_square_a: float, in_square_b: float) -> tuple:
-    """Shirley-Chiu square to disk mapping.
-    Args:
-        in_square_a: [-1, 1]
-        in_square_b: [-1, 1]
-    """
-    if in_square_a + in_square_b > 0:
-        if in_square_a > in_square_b:
-            in_square_rgn = 0
-        else:
-            in_square_rgn = 1
-    else:
-        if in_square_b > in_square_a:
-            in_square_rgn = 2
-        else:
-            in_square_rgn = 3
-    out_disk_r = [in_square_a, in_square_b, -in_square_a, -in_square_b][in_square_rgn]
-    if in_square_b * in_square_b > 0:
-        phi_select_4 = 6 - in_square_a / in_square_b
-    else:
-        phi_select_4 = 0
-    phi_select = [
-        in_square_b / in_square_a,
-        2 - in_square_a / in_square_b,
-        4 + in_square_b / in_square_a,
-        phi_select_4,
-    ]
-    out_disk_phi = math.pi / 4 * phi_select[in_square_rgn]
-    out_disk_x = out_disk_r * math.cos(out_disk_phi)
-    out_disk_y = out_disk_r * math.sin(out_disk_phi)
-    return out_disk_x, out_disk_y, out_disk_r, out_disk_phi
 
 
 def id_generator(size: int = 3, chars: Optional[str] = None) -> str:
