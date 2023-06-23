@@ -366,6 +366,8 @@ class EPModel:
 
     def request_output(self, opt_name: str):
         i = 1
+        if "Output:Variable" not in self.epjs:
+            self.epjs["Output:Variable"] = {}
         for output in self.epjs["Output:Variable"].values():
             i += 1
             if output["variable_name"] == opt_name:
