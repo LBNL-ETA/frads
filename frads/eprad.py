@@ -383,9 +383,7 @@ def ep_datetime_parser(inp):
     month, day = [int(i) for i in date.split("/")]
     hr, mi, sc = [int(i) for i in time.split(":")]
     if hr == 24 and mi == 0 and sc == 0:
-        return datetime(1900, month, day, 0, mi, sc) + timedelta(
-            days=1
-        )
+        return datetime(1900, month, day, 0, mi, sc) + timedelta(days=1)
     else:
         return datetime(1900, month, day, hr, mi, sc)
 
@@ -539,7 +537,6 @@ class EnergyPlusSetup:
         output_directory: Optional[str] = None,
         output_prefix: Optional[str] = "eplus",
     ):
-
         options = {"-w": weather_file, "-d": output_directory, "-p": output_prefix}
         # check if any of options are None, if so, dont pass them to run_energyplus
         options = {k: v for k, v in options.items() if v is not None}
