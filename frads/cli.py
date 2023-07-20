@@ -286,8 +286,16 @@ def glaze(args) -> None:
     pane_rgb = []
     photopic_wvl = range(380, 781, 10)
     for pane in panes:
-        hemi = {d.wavelength * 1e3 : (d.direct_component.transmittance_front, d.direct_component.transmittance_back, d.direct_component.reflectance_front, d.direct_component.reflectance_back) 
-                for d in pane.measurements}
+        hemi = {
+            d.wavelength
+            * 1e3: (
+                d.direct_component.transmittance_front,
+                d.direct_component.transmittance_back,
+                d.direct_component.reflectance_front,
+                d.direct_component.reflectance_back,
+            )
+            for d in pane.measurements
+        }
         tvf = [hemi[w][0] for w in photopic_wvl]
         rvf = [hemi[w][2] for w in photopic_wvl]
         rvb = [hemi[w][3] for w in photopic_wvl]
