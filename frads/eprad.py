@@ -308,13 +308,13 @@ class EPModel:
         for key, obj in mappings.items():
             self._add(key, obj)
 
-            # Set the all fenestration surface constructions to complex fenestration state
-            # pick the first cfs
-            cfs = list(self.epjs["Construction:ComplexFenestrationState"].keys())[0]
-            for window_name in self.epjs["FenestrationSurface:Detailed"]:
-                self.epjs["FenestrationSurface:Detailed"][window_name][
-                    "construction_name"
-                ] = cfs
+        # Set the all fenestration surface constructions to complex fenestration state
+        # pick the first cfs
+        cfs = list(self.epjs["Construction:ComplexFenestrationState"].keys())[0]
+        for window_name in self.epjs["FenestrationSurface:Detailed"]:
+            self.epjs["FenestrationSurface:Detailed"][window_name][
+                "construction_name"
+            ] = cfs
 
     def add_lighting(self):
         """Add lighting objects to the epjs dictionary."""
@@ -366,6 +366,8 @@ class EPModel:
 
     def request_output(self, opt_name: str):
         i = 1
+        if "Output:Variable" not in self.epjs:
+            self.epjs["Output:Variable"] = {}
         for output in self.epjs["Output:Variable"].values():
             i += 1
             if output["variable_name"] == opt_name:
@@ -448,10 +450,28 @@ class EnergyPlusSetup:
     def __exit__(self, exc_type, exc_value, exc_tb):
         self.api.state_manager.delete_state(self.state)
 
-    def actuate(self, actuator_key, value):
+    def actuate(self, name: str, key: str, value):
+        if key not in self.handles.actuator:
+            raise ValueError("Actuator not found", name, key)
         self.api.exchange.set_actuator_value(
-            self.state, self.handles.actuator[actuator_key], value
+            self.state, self.handles.actuator[key][name], value
         )
+
+    def request_actuator(self, state, component_type: str, name: str, key: str):
+        if (key, name) in self.handles.actuator.items():
+            pass
+        else:
+            handle = self.api.exchange.get_actuator_handle(
+                state, component_type, name, key
+            )
+            if handle == -1:
+                raise ValueError(
+                    f"Actuator {component_type} {name} {key} not found", key
+                )
+            # check key exists
+            if key not in self.handles.actuator:
+                self.handles.actuator[key] = {}
+            self.handles.actuator[key][name] = handle
 
     def get_variable_value(self, name: str, key: str):
         return self.api.exchange.get_variable_value(
@@ -459,11 +479,14 @@ class EnergyPlusSetup:
         )
 
     def request_variable(self, name: str, key: str):
-        self.api.exchange.request_variable(self.state, name, key)
-        # check key exists
-        if key not in self.handles.variable:
-            self.handles.variable[key] = {}
-        self.handles.variable[key][name] = None
+        if (key, name) in self.handles.actuator.items():
+            pass
+        else:
+            self.api.exchange.request_variable(self.state, name, key)
+            # check key exists
+            if key not in self.handles.variable:
+                self.handles.variable[key] = {}
+            self.handles.variable[key][name] = None
 
     def get_handles(self):
         def callback_function(state):
@@ -477,30 +500,23 @@ class EnergyPlusSetup:
                 except TypeError:
                     print("No variables requested for", self.handles.variable, key)
 
-            for cfs in self.epjs["Construction:ComplexFenestrationState"]:
-                handle = self.api.api.getConstructionHandle(state, cfs.encode())
-                if handle == -1:
-                    raise ValueError("Construction handle not found", cfs)
-                self.handles.construction[cfs] = handle
+            if "Construction:ComplexFenestrationState" in self.epjs:
+                for cfs in self.epjs["Construction:ComplexFenestrationState"]:
+                    handle = self.api.api.getConstructionHandle(state, cfs.encode())
+                    if handle == -1:
+                        raise ValueError("Construction handle not found", cfs)
+                    self.handles.construction[cfs] = handle
 
-            for window in self.epjs["FenestrationSurface:Detailed"]:
-                handle = self.api.exchange.get_actuator_handle(
-                    state, "Surface", "Construction State", window
-                )
-                if handle == -1:
-                    raise ValueError("Window actuator not found", window)
-                self.handles.actuator[window] = handle
+            if "FenestrationSurface:Detailed" in self.epjs:
+                for window in self.epjs["FenestrationSurface:Detailed"]:
+                    self.request_actuator(
+                        state, "Surface", "Construction State", window
+                    )
 
             for light in self.epjs.get("Lights", []):
-                act_handle = self.api.exchange.get_actuator_handle(
-                    state, "Lights", "Electricity Rate", light
-                )
-                if act_handle == -1:
-                    raise ValueError("Light actuator not found", light)
-                self.handles.actuator[light] = act_handle
+                self.request_actuator(state, "Lights", "Electricity Rate", light)
 
                 self.request_variable("Lights Electricity Energy", light)
-
                 var_handle = self.api.exchange.get_variable_handle(
                     state, "Lights Electricity Energy", light
                 )
