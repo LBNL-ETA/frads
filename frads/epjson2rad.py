@@ -1,19 +1,17 @@
 """Convert an EnergyPlus epJSON file into Radiance model[s]."""
 
-from configparser import ConfigParser
 from dataclasses import dataclass
 import logging
 import math
-import json
 import os
 from pathlib import Path
 import sys
-import subprocess as sp
 from typing import Dict, List
 
-import pyradiance as pr
 
-from . import geom, utils
+import numpy as np
+import pyradiance as pr
+from frads import geom, utils
 
 
 logger: logging.Logger = logging.getLogger("frads.epjson2rad")
@@ -130,14 +128,14 @@ def thicken(
     surface: geom.Polygon, windows: List[geom.Polygon], thickness: float
 ) -> list:
     """Thicken window-wall."""
-    direction = surface.normal.scale(thickness)
+    direction = surface.normal * thickness
     facade = surface.extrude(direction)[:2]
     for window in windows:
         facade.extend(window.extrude(direction)[2:])
     uniq = facade.copy()
     for idx, val in enumerate(facade):
         for rep in facade[:idx] + facade[idx + 1 :]:
-            if set(val.to_list()) == set(rep.to_list()):
+            if set(map(tuple, val.vertices)) == set(map(tuple, rep.vertices)):
                 uniq.remove(rep)
     return uniq
 
@@ -152,10 +150,10 @@ def get_construction_thickness(
     return sum(layer_thickness)
 
 
-def check_outward(polygon: geom.Polygon, zone_center: geom.Vector) -> bool:
+def check_outward(polygon: geom.Polygon, zone_center: np.ndarray) -> bool:
     """Check whether a surface is facing outside."""
     outward = True
-    angle2center = polygon.normal.angle_from(zone_center - polygon.centroid)
+    angle2center = geom.angle_between(polygon.normal, zone_center - polygon.centroid)
     if angle2center < math.pi / 4:
         outward = False
     return outward
@@ -169,16 +167,17 @@ def eplus_surface2primitive(
     for _, surface in surfaces.items():
         name = surface.name
         surface_primitives[name] = {}
-        surface_primitives[name]["window"] = []
+        surface_primitives[name]["window"] = {}
         surface_primitives[name]["xml"] = []
         surface_polygon = surface.polygon
         if not check_outward(surface_polygon, zone_center):
             surface_polygon = surface_polygon.flip()
         window_polygons = []
         for fen in surface.fenestrations:
+            _fen = {}
             if constructions[fen.construction].type == "cfs":
                 window_material = "void"
-                surface_primitives[name]["xml"].append(fen.construction + ".xml")
+                _fen["cfs"] = fen.construction
             else:
                 # Get the last construction layer
                 window_material = (
@@ -188,9 +187,11 @@ def eplus_surface2primitive(
             if check_outward(fen.polygon, zone_center):
                 window_polygon = window_polygon.flip()
             window_polygons.append(window_polygon)
-            surface_primitives[name]["window"].append(
-                utils.polygon2prim(window_polygon, window_material, fen.name)
-            )
+            # surface_primitives[name]["window"].append(
+            #     utils.polygon2prim(window_polygon, window_material, fen.name)
+            # )
+            _fen["data"] = utils.polygon2prim(window_polygon, window_material, fen.name)
+            surface_primitives[name]["window"][fen.name] = _fen
         surface_primitives[name]["surface"] = []
         surface_construction_layers = constructions[surface.construction].layers
         # Second to the last of construction layers
@@ -428,14 +429,22 @@ def parse_construction_complexfenestrationstate(epjs):
             # "rsf": val["solar_optical_complex_front_reflectance_matrix_name"],
             "rsb": val["solar_optical_complex_back_reflectance_matrix_name"],
         }
-        bsdf = {key: [v["value"] for v in epjs["Matrix:TwoDimension"][name]['values']]
-                for key, name in names.items()}
-        ncs = {key: epjs["Matrix:TwoDimension"][name]["number_of_columns"]
-                for key, name in names.items()}
-        nrs = {key: epjs["Matrix:TwoDimension"][name]["number_of_rows"]
-                for key, name in names.items()}
-        matrices[key] = {key: {"ncolumns": ncs[key], "nrows": nrs[key], "values": bsdf[key]} 
-                         for key in names}
+        bsdf = {
+            key: [v["value"] for v in epjs["Matrix:TwoDimension"][name]["values"]]
+            for key, name in names.items()
+        }
+        ncs = {
+            key: epjs["Matrix:TwoDimension"][name]["number_of_columns"]
+            for key, name in names.items()
+        }
+        nrs = {
+            key: epjs["Matrix:TwoDimension"][name]["number_of_rows"]
+            for key, name in names.items()
+        }
+        matrices[key] = {
+            key: {"ncolumns": ncs[key], "nrows": nrs[key], "values": bsdf[key]}
+            for key in names
+        }
         cfs[key] = EPlusConstruction(key, "cfs", [])
     return cfs, matrices
 
@@ -457,7 +466,7 @@ def parse_opaque_surface(surfaces: dict, fenestrations: dict) -> dict:
         fenes = [fen for fen in fenestrations.values() if fen.host == name]
         ptype = surface["surface_type"]
         polygon = geom.Polygon(
-            [geom.Vector(*vertice.values()) for vertice in surface["vertices"]]
+            [np.array(list(vertice.values())) for vertice in surface["vertices"]]
         )
         for fen in fenes:
             polygon -= fen.polygon
@@ -482,11 +491,11 @@ def parse_epjson_fenestration(fenes: dict) -> Dict[str, EPlusFenestration]:
             vertices = []
             for i in range(1, fen["number_of_vertices"] + 1):
                 vertices.append(
-                    geom.Vector(
+                    np.array((
                         fen[f"vertex_{i}_x_coordinate"],
                         fen[f"vertex_{i}_y_coordinate"],
                         fen[f"vertex_{i}_z_coordinate"],
-                    )
+                    ))
                 )
             polygon = geom.Polygon(vertices)
             construction = fen["construction_name"]
@@ -521,6 +530,13 @@ def parse_epjson(epjs: dict) -> tuple:
 
     # parse each construction
     constructions = parse_construction(epjs["Construction"])
+
+    if "Construction:WindowDataFile" in epjs:
+        raise NotImplementedError("Construction:WindowDataFile is not supported yet.")
+    if "Construction:WindowEquivalentLayer" in epjs:
+        raise NotImplementedError(
+            "Construction:WindowEquivalentLayer is not supported yet."
+        )
 
     cfs, matrices = parse_construction_complexfenestrationstate(epjs)
     constructions.update(cfs)
@@ -567,7 +583,7 @@ def parse_epjson(epjs: dict) -> tuple:
     return site, zones, constructions, materials, matrices
 
 
-def epjson2rad(epjs: dict, epw=None) -> None:
+def epjson2rad(epjs: dict, epw=None) -> dict:
     """Command-line program to convert a energyplus model into a Radiance model."""
     # Setup file structure
     objdir = Path("Objects")
@@ -593,105 +609,95 @@ def epjson2rad(epjs: dict, epw=None) -> None:
                 with open(_mtxpath, "w") as fp:
                     fp.write(" ".join(str(v) for v in _val["values"]))
                 if _key[1] == "v":
-                    _vis.__setattr__(_key[0]+_key[-1], _mtxpath)
+                    _vis.__setattr__(_key[0] + _key[-1], _mtxpath)
                 elif _key[1] == "s":
-                    _sol.__setattr__(_key[0]+_key[-1], _mtxpath)
-            basis = [i.name for i in pr.ABASELIST if i.nangles == val['tvf']['ncolumns']].pop()
-            abr_basis = "".join(i[0].lower() for i in basis.decode().lstrip("LBNL/").split())
+                    _sol.__setattr__(_key[0] + _key[-1], _mtxpath)
+            basis = [
+                i.name for i in pr.ABASELIST if i.nangles == val["tvf"]["ncolumns"]
+            ].pop()
+            abr_basis = "".join(
+                i[0].lower() for i in basis.decode().lstrip("LBNL/").split()
+            )
             with open(opath, "wb") as wtr:
                 wtr.write(
                     pr.wrapbsdf(basis=abr_basis, inp=[_vis, _sol], unlink=True, n=key)
                 )
             xml_paths[key] = str(opath)
 
-    # Write material file
-    material_path = os.path.join("Objects", f"materials{building_name}.mat")
-    with open(material_path, "w", encoding="ascii") as wtr:
-        for material in materials.values():
-            wtr.write(str(material.primitive))
-
+    rad_models = {}
     # For each zone write primitves to files and create a config file
     for name, zone in zones.items():
-        mrad_config = ConfigParser(allow_no_value=False)
-        mrad_config["SimControl"] = {
-            "vmx_basis": "kf",
-            "vmx_opt": "-ab 5 -ad 65536 -lw 1e-5",
-            "fmx_basis": "kf",
-            "smx_basis": "r4",
-            "dmx_opt": "-ab 2 -ad 128 -c 5000",
-            "dsmx_opt": "-ab 7 -ad 16384 -lw 5e-5",
-            "cdsmx_opt": "-ab 1",
-            "cdsmx_basis": "r6",
-            "ray_count": "1",
-            "nprocess": "1",
-            "separate_direct": "False",
-            "overwrite": "False",
-            "method": "",
-        }
-        mrad_config["Site"] = {
-            "epw_path": epw,
-            "latitude": site["latitude"],
-            "longitude": site["longitude"],
-            "daylight_hours_only": "True",
-        }
+        radcfg = {}
+        settings = {}
+        model = {}
+        # default to using three-phase method
+        settings["method"] = "3"
+        settings["sky_basis"] = "r1"
         if epw is not None:
-            mrad_config["Site"]["epw_path"] = epw
-        primitives = epluszone2rad(zone, constructions, materials)
-        scene = []
-        windows = []
-        window_xmls = []
-        floors = []
-        for primitive in primitives:
-            write_primitives(primitive, "Objects")
-            for _name, item in primitive.items():
-                if item["surface"] != []:
-                    scene.append(os.path.join("Objects", _name + ".rad"))
-                if item["window"] != []:
-                    windows.append(os.path.join("Objects", _name + "_window.rad"))
-                if item["xml"] != []:
-                    window_xmls.extend(
-                        [os.path.join("Resources", xml) for xml in item["xml"]]
-                    )
-        # Get floors
-        for primitive in primitives[-1]:
-            floors.append(os.path.join("Objects", primitive + ".rad"))
-
-        mrad_config["Model"] = {
-            "material": material_path,
-            "scene": "\n".join(scene),
-            "windows": " ".join(windows),
-            "window_xml": " ".join(window_xmls),
-            "ncp_shade": "",
+            settings["epw_file"] = epw
+        else:
+            settings["latitude"] = site["latitude"]
+            settings["longitude"] = site["longitude"]
+            settings["time_zone"] = ""
+            settings["site_elevation"] = ""
+        scene_data = []
+        window_data = {}
+        walls, ceilings, roofs, floors = epluszone2rad(zone, constructions, materials)
+        for wall in walls.values():
+            for srf in wall["surface"]:
+                scene_data.append(str(srf))
+            if wall["window"] != {}:
+                for key, val in wall["window"].items():
+                    window_data[key] = {"data": str(val["data"])}
+                    if "cfs" in val:
+                        mtx = matrices[val["cfs"]]["tvb"]
+                        nested = []
+                        for i in range(0, len(mtx["values"]), mtx["nrows"]):
+                            nested.append(mtx["values"][i : i + mtx["ncolumns"]])
+                        window_data[key]["matrix_data"] = [
+                            [[ele, ele, ele] for ele in row] for row in nested
+                        ]
+        for ceiling in ceilings.values():
+            for srf in ceiling["surface"]:
+                scene_data.append(str(srf))
+            if ceiling["window"] != {}:
+                for key, val in ceiling["window"].items():
+                    window_data[key] = {"data": str(val["data"])}
+                    if "cfs" in val:
+                        mtx = matrices[val["cfs"]]["tvb"]
+                        nested = []
+                        for i in range(0, len(mtx["values"]), mtx["nrows"]):
+                            nested.append(mtx["values"][i : i + mtx["ncolumns"]])
+                        window_data[key]["matrix_data"] = [nested, nested, nested]
+        for roof in roofs.values():
+            for srf in roof["surface"]:
+                scene_data.append(str(srf))
+            if roof["window"] != {}:
+                for key, val in roof["window"].items():
+                    window_data[key] = {"data": str(val["data"])}
+                    if "cfs" in val:
+                        mtx = matrices[val["cfs"]]["tvb"]
+                        nested = []
+                        for i in range(0, len(mtx["values"]), mtx["nrows"]):
+                            nested.append(mtx["values"][i : i + mtx["ncolumns"]])
+                        window_data[key]["matrix_data"] = [nested, nested, nested]
+        model["sensors"] = {}
+        for floor in floors.values():
+            for srf in floor["surface"]:
+                scene_data.append(str(srf))
+                _name = f"{name}_{srf.identifier}"
+                polygon = utils.parse_polygon(srf)
+                grid = utils.gen_grid(polygon, 0.76, 0.61)
+                model["sensors"][_name] = {"data": grid}
+        model["scene"] = {}
+        model["views"] = {}
+        model["scene"] = {"data": " ".join(scene_data)}
+        model["windows"] = window_data
+        model["materials"] = {
+            "data": " ".join(str(m.primitive) for m in materials.values())
         }
-        mrad_config["RaySender"] = {
-            "grid_surface": " ".join(floors),
-            "grid_spacing": "1",
-            "grid_height": "0.75",
-        }
-        with open(f"{name}.cfg", "w", encoding="utf-8") as wtr:
-            mrad_config.write(wtr)
+        radcfg["settings"] = settings
+        radcfg["model"] = model
+        rad_models[name] = radcfg
 
-
-def read_ep_input(fpath: Path) -> dict:
-    """Load and parse input file into a JSON object.
-    If the input file is in .idf fomart, use command-line
-    energyplus program to convert it to epJSON format
-    Args:
-        fpath: input file path
-    Returns:
-        epjs: JSON object as a Python dictionary
-    """
-    epjson_path: Path
-    if fpath.suffix == ".idf":
-        cmd = ["energyplus", "--convert-only", str(fpath)]
-        sp.run(cmd, check=True)
-        epjson_path = Path(fpath.with_suffix(".epJSON").name)
-        if not epjson_path.is_file():
-            raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
-    elif fpath.suffix == ".epJSON":
-        epjson_path = fpath
-    else:
-        raise Exception(f"Unknown file type {fpath}")
-    with open(epjson_path) as rdr:
-        epjs = json.load(rdr)
-    return epjs
+    return rad_models
