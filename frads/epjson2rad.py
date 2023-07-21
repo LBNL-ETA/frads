@@ -66,6 +66,7 @@ class EPlusWindowMaterialComplexShade:
     left_side_opening_multiplier: float
     right_side_opening_multiplier: float
     front_opening_multiplier: float
+    primitive: str = ""
 
 
 @dataclass
@@ -491,11 +492,13 @@ def parse_epjson_fenestration(fenes: dict) -> Dict[str, EPlusFenestration]:
             vertices = []
             for i in range(1, fen["number_of_vertices"] + 1):
                 vertices.append(
-                    np.array((
-                        fen[f"vertex_{i}_x_coordinate"],
-                        fen[f"vertex_{i}_y_coordinate"],
-                        fen[f"vertex_{i}_z_coordinate"],
-                    ))
+                    np.array(
+                        (
+                            fen[f"vertex_{i}_x_coordinate"],
+                            fen[f"vertex_{i}_y_coordinate"],
+                            fen[f"vertex_{i}_z_coordinate"],
+                        )
+                    )
                 )
             polygon = geom.Polygon(vertices)
             construction = fen["construction_name"]
