@@ -77,13 +77,15 @@ class EPModel:
         """
         name = glazing_system.name
         if (
-            glazing_system.solar_results is not None
-            and glazing_system.photopic_results is not None
+            glazing_system.solar_results is None
+            and glazing_system.photopic_results is None
         ):
+            glazing_system.compute_solar_photopic_results()
             solar_results = glazing_system.solar_results
             photopic_results = glazing_system.photopic_results
         else:
-            raise ValueError("Solar and photopic results must be computed first.")
+            solar_results = glazing_system.solar_results
+            photopic_results = glazing_system.photopic_results
 
         # Initialize Contruction:ComplexFenestrationState dictionary with system and outer layer names
 
