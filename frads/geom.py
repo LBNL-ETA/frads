@@ -329,30 +329,39 @@ def angle_between(vec1: np.ndarray, vec2: np.ndarray) -> float:
     return angle
 
 
-def rotate_3d(self, vector, theta):
+def rotate_3d(point: np.ndarray, center: np.ndarray, axis: np.ndarray, angle:float) -> np.ndarray:
+    """
+    Rotate a point around a center and axis
+    Args:
+        point: the point to rotate
+        center: the rotation center
+        axis: the rotation axis
+        angle: the rotation angle in randians
+    Returns:
+        the rotated point
+    """
 
     # Input vectors
-    vector = np.array(vector)
-    point = np.array(self)
-
+    translated_point = point - center
     # Rotation matrix
-    ct = np.cos(theta)
-    st = np.sin(theta)
-    rx = np.array([
-        [vector[0]**2 + (1 - vector[0]**2)*ct, 
-         vector[0]*vector[1]*(1 - ct) - vector[2]*st,
-         vector[0]*vector[2]*(1 - ct) + vector[1]*st],
-        [vector[0]*vector[1]*(1 - ct) + vector[2]*st,
-         vector[1]**2 + (1 - vector[1]**2)*ct,
-         vector[1]*vector[2]*(1 - ct) - vector[0]*st], 
-        [vector[0]*vector[2]*(1 - ct) - vector[1]*st,
-         vector[1]*vector[2]*(1 - ct) + vector[0]*st,
-         vector[2]**2 + (1 - vector[2]**2)*ct]])
+    ct = np.cos(angle)
+    st = np.sin(angle)
+    axisx, axisy, axisz = axis
+    rotation_matrix = np.array([
+        [axisx**2 + (1 - axisx**2)*ct, 
+         axisx*axisy*(1 - ct) - axisz*st,
+         axisx*axisz*(1 - ct) + axisy*st],
+        [axisx*axisy*(1 - ct) + axisz*st,
+         axisy**2 + (1 - axisy**2)*ct,
+         axisy*axisz*(1 - ct) - axisx*st], 
+        [axisx*axisz*(1 - ct) - axisy*st,
+         axisy*axisz*(1 - ct) + axisx*st,
+         axisz**2 + (1 - axisz**2)*ct]])
 
     # Rotate point
-    rotated = rx @ point
+    rotated = np.dot(rotation_matrix, translated_point)
 
-    return rotated
+    return rotated + center
 
 
 class Polygon:
@@ -469,9 +478,9 @@ class Polygon:
         zmax = self.vertices[:,2].max()
         return xmin, xmax, ymin, ymax, zmin, zmax
 
-    def rotate(self, vector, angle) -> "Polygon":
+    def rotate(self, center, vector, angle) -> "Polygon":
         """."""
-        ro_pts = [rotate_3d(v, vector, angle) for v in self._vertices]
+        ro_pts = [rotate_3d(v, center, vector, angle) for v in self._vertices]
         return Polygon(ro_pts)
 
     def move(self, vector) -> "Polygon":
