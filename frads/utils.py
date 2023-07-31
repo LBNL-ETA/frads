@@ -169,6 +169,36 @@ def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough) -> Prim
     return Primitive(mod, "plastic", ident, [], real_args)
 
 
+def add_manikin(manikin_file: str, zone: dict, position: np.ndarray, rotation: float = 0) -> dict:
+    """Add a manikin to the scene.i
+    Args:
+        manikin: manikin primitives as a .rad file
+        zone: zone as a dictionary, must have 'model' key, we assume all scene
+        data is inside the data key, and not files.
+        position: position of the manikin (x, y), where x and y are 0-1
+        rotation: rotation of the manikin in degree (0-360)
+    Returns:
+        A zone with added manikin
+    """
+    zone_primitives = parse_primitive(zone['model']['scene']['data'].decode())
+    zone_polygons = [parse_polygon(p) for p in zone_primitives]
+    xmin, xmax, ymin, ymax, zmin, _ = geom.get_polygon_limits(zone_polygons)
+    target = np.array([xmin + (xmax - xmin) * position[0], ymin + (ymax - ymin) * position[1], zmin])
+    with open(manikin_file) as f:
+        manikin_primitives = parse_primitive(f.read())
+    manikin_polygons = [parse_polygon(p) for p in manikin_primitives]
+    xminm, xmaxm, yminm, ymaxm, zminm, _ = geom.get_polygon_limits(manikin_polygons)
+    manikin_base_center = np.array([(xmaxm-xminm)/2, (ymaxm-yminm)/2, zminm])
+    if rotation != 0:
+        manikin_polygons = [p.rotate(manikin_base_center, np.array([0, 0, 1]), np.radians(rotation)) for p in manikin_polygons]
+    move_vector = manikin_base_center - target
+    moved_manikin = [polygon2prim(polygon.move(move_vector), primitive.modifier, primitive.identifier) 
+                     for polygon, primitive in zip(manikin_polygons, manikin_primitives)]
+    zone['model']['scene']['bytes'] += b" "
+    for primitive in moved_manikin:
+        zone['model']['scene']['bytes'] += primitive.bytes
+    return zone
+
 def glass_prim(
     mod, ident, tr: float, tg: float, tb: float, refrac: float = 1.52
 ) -> Primitive:
