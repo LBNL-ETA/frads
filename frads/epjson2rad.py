@@ -25,7 +25,7 @@ class EPlusWindowGas:
     thickness: float
     type: list
     percentage: list
-    primitive: str = ""
+    # primitive: str = ""
 
 
 @dataclass
@@ -187,9 +187,6 @@ def eplus_surface2primitive(
             if check_outward(fen.polygon, zone_center):
                 window_polygon = window_polygon.flip()
             window_polygons.append(window_polygon)
-            # surface_primitives[name]["window"].append(
-            #     utils.polygon2prim(window_polygon, window_material, fen.name)
-            # )
             _fen["data"] = utils.polygon2prim(window_polygon, window_material, fen.name)
             surface_primitives[name]["window"][fen.name] = _fen
         surface_primitives[name]["surface"] = []
@@ -491,11 +488,13 @@ def parse_epjson_fenestration(fenes: dict) -> Dict[str, EPlusFenestration]:
             vertices = []
             for i in range(1, fen["number_of_vertices"] + 1):
                 vertices.append(
-                    np.array((
-                        fen[f"vertex_{i}_x_coordinate"],
-                        fen[f"vertex_{i}_y_coordinate"],
-                        fen[f"vertex_{i}_z_coordinate"],
-                    ))
+                    np.array(
+                        (
+                            fen[f"vertex_{i}_x_coordinate"],
+                            fen[f"vertex_{i}_y_coordinate"],
+                            fen[f"vertex_{i}_z_coordinate"],
+                        )
+                    )
                 )
             polygon = geom.Polygon(vertices)
             construction = fen["construction_name"]
@@ -586,10 +585,10 @@ def parse_epjson(epjs: dict) -> tuple:
 def epjson2rad(epjs: dict, epw=None) -> dict:
     """Command-line program to convert a energyplus model into a Radiance model."""
     # Setup file structure
-    objdir = Path("Objects")
-    objdir.mkdir(exist_ok=True)
-    mtxdir = Path("Matrices")
-    mtxdir.mkdir(exist_ok=True)
+    # objdir = Path("Objects")
+    # objdir.mkdir(exist_ok=True)
+    # mtxdir = Path("Matrices")
+    # mtxdir.mkdir(exist_ok=True)
 
     site, zones, constructions, materials, matrices = parse_epjson(epjs)
     # building_name = epjs["Building"].popitem()[0].replace(" ", "_")
@@ -645,10 +644,10 @@ def epjson2rad(epjs: dict, epw=None) -> dict:
         walls, ceilings, roofs, floors = epluszone2rad(zone, constructions, materials)
         for wall in walls.values():
             for srf in wall["surface"]:
-                scene_data.append(str(srf))
+                scene_data.append(srf.bytes)
             if wall["window"] != {}:
                 for key, val in wall["window"].items():
-                    window_data[key] = {"data": str(val["data"])}
+                    window_data[key] = {"bytes": val["data"].bytes}
                     if "cfs" in val:
                         mtx = matrices[val["cfs"]]["tvb"]
                         nested = []
@@ -659,10 +658,10 @@ def epjson2rad(epjs: dict, epw=None) -> dict:
                         ]
         for ceiling in ceilings.values():
             for srf in ceiling["surface"]:
-                scene_data.append(str(srf))
+                scene_data.append(srf.bytes)
             if ceiling["window"] != {}:
                 for key, val in ceiling["window"].items():
-                    window_data[key] = {"data": str(val["data"])}
+                    window_data[key] = {"data": val["data"].bytes}
                     if "cfs" in val:
                         mtx = matrices[val["cfs"]]["tvb"]
                         nested = []
@@ -671,10 +670,10 @@ def epjson2rad(epjs: dict, epw=None) -> dict:
                         window_data[key]["matrix_data"] = [nested, nested, nested]
         for roof in roofs.values():
             for srf in roof["surface"]:
-                scene_data.append(str(srf))
+                scene_data.append(srf.bytes)
             if roof["window"] != {}:
                 for key, val in roof["window"].items():
-                    window_data[key] = {"data": str(val["data"])}
+                    window_data[key] = {"data": val["data"].bytes}
                     if "cfs" in val:
                         mtx = matrices[val["cfs"]]["tvb"]
                         nested = []
@@ -684,18 +683,20 @@ def epjson2rad(epjs: dict, epw=None) -> dict:
         model["sensors"] = {}
         for floor in floors.values():
             for srf in floor["surface"]:
-                scene_data.append(str(srf))
+                scene_data.append(srf.bytes)
                 _name = f"{name}_{srf.identifier}"
                 polygon = utils.parse_polygon(srf)
                 grid = utils.gen_grid(polygon, 0.76, 0.61)
                 model["sensors"][_name] = {"data": grid}
         model["scene"] = {}
         model["views"] = {}
-        model["scene"] = {"data": " ".join(scene_data)}
+        model["scene"] = {"bytes": b" ".join(scene_data)}
         model["windows"] = window_data
-        model["materials"] = {
-            "data": " ".join(str(m.primitive) for m in materials.values())
-        }
+        material_bytes = []
+        for material in materials.values():
+            if "primitive" in dir(material):
+                material_bytes.append(material.primitive.bytes)
+        model["materials"] = {"bytes": b" ".join(material_bytes)}
         radcfg["settings"] = settings
         radcfg["model"] = model
         rad_models[name] = radcfg
