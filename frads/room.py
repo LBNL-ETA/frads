@@ -5,6 +5,7 @@ from typing import Optional
 import pyradiance as pr
 from frads import geom
 from frads import utils
+import numpy as np
 
 
 class Surface:
@@ -53,14 +54,14 @@ class Surface:
                     "polygon",
                     f"{self.identifier}_{idx:02d}",
                     [],
-                    polygon.to_real(),
+                    polygon.coordinates,
                 )
             )
         return self._primitives
 
     def make_window_wwr(self, wwr: float) -> None:
         """Make a window based on window-to-wall ratio."""
-        window_polygon = self.base.scale(geom.Vector(*[wwr] * 3), self.base.centroid)
+        window_polygon = self.base.scale(np.array((wwr, wwr, wwr)), self.base.centroid)
         self.base = self.base - window_polygon
         self.windows.append(Surface(window_polygon))
 
@@ -81,26 +82,26 @@ class Surface:
 
     def thicken(self, thickness: float) -> None:
         """Thicken the surface."""
-        direction = self.base.normal.scale(thickness)
+        direction = self.base.normal * thickness
         polygons = self.base.extrude(direction)
         counts = [polygons.count(plg) for plg in polygons]
         self.polygons = [plg for plg, cnt in zip(polygons, counts) if cnt == 1]
 
     def move_window(self, distance: float) -> None:
         """Move windows in its normal direction."""
-        direction = self.base.normal.scale(distance)
+        direction = self.base.normal * distance
         self.windows = [Surface(window.base.move(direction)) for window in self.windows]
 
     def rotate(self, deg):
         """Rotate the surface counter clock-wise."""
         polygons = []
         for plg in self.polygons:
-            polygons.append(plg.rotate(deg, geom.Vector(0, 0, 1)))
+            polygons.append(plg.rotate(deg, np.array((0, 0, 1))))
         self.polygons = polygons
         for window in self.windows:
             wpolygons = []
             for plg in window.polygons:
-                wpolygons.append(plg.rotate(deg, geom.Vector(0, 0, 1)))
+                wpolygons.append(plg.rotate(deg, np.array((0, 0, 1))))
 
 
 class Room:
@@ -123,17 +124,17 @@ class Room:
         depth: float,
         floor_floor: float,
         floor_ceiling: float,
-        origin: Optional[geom.Vector] = None,
+        origin: Optional[np.ndarray] = None,
     ) -> "Room":
         """Generate a room from width, depth, and height."""
-        pt1 = geom.Vector(0, 0, 0) if origin is None else origin
-        pt2 = pt1 + geom.Vector(width, 0, 0)
-        pt3 = pt2 + geom.Vector(0, depth, 0)
+        pt1 = np.array((0, 0, 0)) if origin is None else origin
+        pt2 = pt1 + np.array((width, 0, 0))
+        pt3 = pt2 + np.array((0, depth, 0))
         floor = geom.Polygon.rectangle3pts(pt1, pt2, pt3)
         _, ceiling, swall, ewall, nwall, wwall = floor.extrude(
-            geom.Vector(0, 0, floor_floor)
+            np.array((0, 0, floor_floor))
         )
-        ceiling = ceiling.move(geom.Vector(0, 0, floor_ceiling - floor_floor))
+        ceiling = ceiling.move(np.array((0, 0, floor_ceiling - floor_floor)))
         return cls(
             Surface(floor),
             Surface(ceiling),

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, ByteString, Dict, List, Union
 from shutil import rmtree
 
 from frads.matrix import (
@@ -24,6 +24,7 @@ from frads.matrix import (
 )
 from frads.sky import (
     WeaData,
+    WeaMetaData,
     gen_perez_sky,
     parse_epw,
     parse_wea,
@@ -44,24 +45,31 @@ logger: logging.Logger = logging.getLogger("frads.methods")
 
 @dataclass
 class SceneConfig:
+    """
+    SceneConfig is a dataclass that holds the information needed to generate
+    a Radiance scene. It can be initialized with either a raw data string or a list
+    of files. If a list of files is provided, they will be concatenated in
+    the order they are provided.
+    """
+
     files: List[Path] = field(default_factory=list)
-    data: str = ""
+    bytes: ByteString = b""
 
 
 @dataclass
 class MaterialConfig:
     files: List[Path] = field(default_factory=list)
-    data: str = ""
+    bytes: ByteString = b""
 
 
 @dataclass
 class WindowConfig:
     file: Path = Path()
-    data: str = ""
+    bytes: ByteString = b""
     matrix_file: str = ""
     matrix_data: List[List[float]] = field(default_factory=list)
     shading_geometry_file: Path = Path()
-    shading_geometry_data: str = ""
+    shading_geometry_bytes: ByteString = b""
     tensor_tree_file: Path = Path()
 
     def __post_init__(self):
@@ -71,9 +79,9 @@ class WindowConfig:
             self.shading_geometry_file = Path(self.shading_geometry_file)
         if not isinstance(self.tensor_tree_file, Path):
             self.tensor_tree_file = Path(self.tensor_tree_file)
-        if self.data == "":
-            with open(self.file) as f:
-                self.data = f.read()
+        if self.bytes == b"":
+            with open(self.file, "rb") as f:
+                self.bytes = f.read()
 
 
 @dataclass
@@ -85,7 +93,9 @@ class SensorConfig:
         if len(self.data) == 0:
             if self.file != "":
                 with open(self.file) as f:
-                    self.data = [[float(i) for i in l.split()] for l in f.readlines()]
+                    self.data = [
+                        [float(i) for i in line.split()] for line in f.readlines()
+                    ]
             else:
                 raise ValueError("SensorConfig must have either file or data")
 
@@ -115,8 +125,12 @@ class Settings:
     longitude: int = field(default=122)
     time_zone: int = field(default=120)
     site_elevation: int = field(default=100)
-    sensor_sky_matrix: List[str] = field(default_factory=list)
-    view_sky_matrix: List[str] = field(default_factory=list)
+    sensor_sky_matrix: List[str] = field(
+        default_factory=lambda: ["-ab", "6", "-ad", "8192", "-lw", "5e-5"]
+    )
+    view_sky_matrix: List[str] = field(
+        default_factory=lambda: ["-ab", "6", "-ad", "8192", "-lw", "5e-5"]
+    )
     daylight_matrix: List[str] = field(
         default_factory=lambda: ["-ab", "2", "-c", "5000"]
     )
@@ -172,8 +186,22 @@ class WorkflowConfig:
 
 
 class PhaseMethod:
+    """
+    Base class for phase methods.
+    This class is not meant to be used directly.
+    """
+
     def __init__(self, config):
+        """
+        Initialize a phase method.
+
+        Args:
+            config: A WorkflowConfig object.
+
+        """
         self.config = config
+
+        # Setup the view and sensor senders
         self.view_senders = {}
         self.sensor_senders = {}
         for name, sensors in self.config.model.sensors.items():
@@ -182,17 +210,20 @@ class PhaseMethod:
             self.view_senders[name] = ViewSender(
                 pr.load_views(view.file)[0], xres=view.xres, yres=view.yres
             )
+
+        # Setup the sky receiver object
         self.sky_receiver = SkyReceiver(self.config.settings.sky_basis)
-        self.wea_metadata, self.wea_data, self.wea_str = None, None, None
+
+        # Figure out the weather related stuff
         if self.config.settings.epw_file != "":
             with open(self.config.settings.epw_file) as f:
-                wea_metadata, self.wea_data = parse_epw(f.read())
-            self.wea_header = wea_metadata.wea_header()
+                self.wea_metadata, self.wea_data = parse_epw(f.read())
+            self.wea_header = self.wea_metadata.wea_header()
             self.wea_str = self.wea_header + "\n".join(str(d) for d in self.wea_data)
         elif self.config.settings.wea_file != "":
             with open(self.config.settings.wea_file) as f:
-                wea_metadata, self.wea_data = parse_wea(f.read())
-            self.wea_header = wea_metadata.wea_header()
+                self.wea_metadata, self.wea_data = parse_wea(f.read())
+            self.wea_header = self.wea_metadata.wea_header()
             self.wea_str = self.wea_header + "\n".join(str(d) for d in self.wea_data)
         else:
             if (
@@ -203,34 +234,45 @@ class PhaseMethod:
                     "Latitude and longitude must be specified if no weather file is given"
                 )
             self.wea_header = (
-                f"place {'_'.join(str(i) for i in [self.config.settings.latitude, self.config.settings.longitude])}\n"
+                f"place {self.config.settings.latitude}_{self.config.settings.longitude}\n"
                 f"latitude {self.config.settings.latitude}\n"
                 f"longitude {self.config.settings.longitude}\n"
                 f"time_zone {self.config.settings.time_zone}\n"
                 f"site_elevation {self.config.settings.site_elevation}\n"
                 f"weather_data_file_units 1\n"
             )
+            self.wea_metadata = WeaMetaData(
+                "city",
+                "country",
+                self.config.settings.latitude,
+                self.config.settings.longitude,
+                self.config.settings.time_zone,
+                self.config.settings.site_elevation,
+            )
+
+        # Setup Temp and Octrees directory
         self.tmpdir = Path("Temp")
         self.tmpdir.mkdir(exist_ok=True)
         self.octdir = Path("Octrees")
         self.octdir.mkdir(exist_ok=True)
+
+        # Generate a base octree
         self.octree = self.octdir / f"{random_string(5)}.oct"
-        with open(self.octree, "wb") as f:
-            f.write(
-                pr.oconv(
-                    *config.model.materials.files,
-                    *config.model.scene.files,
-                    # *config.model.windows,  # need to include windows only in two phase
-                    stdin=(
-                        config.model.materials.data + config.model.scene.data
-                    ).encode(),
-                )
-            )
 
     def __enter__(self):
+        """
+        Context manager enter method. This method is called when
+        the class is used as a context manager. Anything happens
+        after the with statement is run.
+        """
         return self
 
     def __exit__(self, exc_type, exc_value, exc_tb):
+        """
+        Context manager exit method. This method is called when
+        the class is used as a context manager. Cleans up the
+        Temp and Octrees directory.
+        """
         rmtree("Octrees")
         rmtree("Temp")
 
@@ -298,8 +340,23 @@ class PhaseMethod:
 
 
 class TwoPhaseMethod(PhaseMethod):
+    """
+    Implements two phase method
+    """
+
     def __init__(self, config):
         super().__init__(config)
+        oct_stdin = config.model.materials.bytes + config.model.scene.bytes
+        for window in config.model.windows.values():
+            oct_stdin += window.bytes
+        with open(self.octree, "wb") as f:
+            f.write(
+                pr.oconv(
+                    *config.model.materials.files,
+                    *config.model.scene.files,
+                    stdin=oct_stdin,
+                )
+            )
         self.view_sky_matrices = {}
         self.sensor_sky_matrices = {}
         for vs in self.view_senders:
@@ -379,12 +436,20 @@ class TwoPhaseMethod(PhaseMethod):
 class ThreePhaseMethod(PhaseMethod):
     def __init__(self, config):
         super().__init__(config)
+        with open(self.octree, "wb") as f:
+            f.write(
+                pr.oconv(
+                    *config.model.materials.files,
+                    *config.model.scene.files,
+                    stdin=config.model.materials.bytes + config.model.scene.bytes,
+                )
+            )
         self.window_senders = {}
         self.window_receivers = {}
         self.window_bsdfs = {}
         self.daylight_matrices = {}
         for _name, window in self.config.model.windows.items():
-            _prims = pr.parse_primitive(window.data)
+            _prims = pr.parse_primitive(window.bytes.decode())
             if window.matrix_file != "":
                 self.window_bsdfs[_name] = load_matrix(window.matrix_file)
                 window_basis = [
@@ -426,9 +491,15 @@ class ThreePhaseMethod(PhaseMethod):
                 sender, list(self.window_receivers.values()), self.octree
             )
 
-    def generate_matrices(self):
-        for _, mtx in self.view_window_matrices.items():
-            mtx.generate(self.config.settings.view_window_matrix)
+    def generate_matrices(self, view_matrices=True):
+        """
+        view_matrices: Toggle to generate view matrices. Toggle it off can be useful for
+        not needing the view matrices but still need the view data for things like
+        edgps calculation.
+        """
+        if view_matrices:
+            for _, mtx in self.view_window_matrices.items():
+                mtx.generate(self.config.settings.view_window_matrix)
         for _, mtx in self.sensor_window_matrices.items():
             mtx.generate(self.config.settings.sensor_window_matrix)
         for _, mtx in self.daylight_matrices.items():
@@ -462,7 +533,7 @@ class ThreePhaseMethod(PhaseMethod):
     def calculate_sensor(
         self,
         sensor: str,
-        bsdf: np.ndarray,
+        bsdf: Union[np.ndarray, List[np.ndarray]],
         time: datetime,
         dni: float,
         dhi: float,
@@ -530,7 +601,7 @@ class ThreePhaseMethod(PhaseMethod):
         sky_matrix = self.get_sky_matrix_from_wea(
             int(self.config.settings.sky_basis[-1])
         )
-        res = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1], 3))
+        res = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
         for idx, _name in enumerate(self.config.model.windows):
             res += matrix_multiply_rgb(
                 self.sensor_window_matrices[sensor].array[idx],
@@ -542,20 +613,59 @@ class ThreePhaseMethod(PhaseMethod):
         return res
 
     def calculate_edgps(
-        self, view: str, shades: List[pr.Primitive], bsdf, date_time, dni, dhi
+        self,
+        view: str,
+        shades: Union[List[pr.Primitive], List[str]],
+        bsdf,
+        date_time,
+        dni,
+        dhi,
+        ambient_bounce=1,
     ):
+        """
+        Calculate enhanced simplified daylight glare probability (EDGPs) for a view.
+        Args:
+            view: view name, must be in config.model.views
+            shades: list of shades, either primitves or file paths. This is used
+            for high resolution direct sun calculation.
+            bsdf: bsdf matrix, either a single matrix or a list of matrices depending
+            on the number of windows This is used to calculate the vertical illuminance.
+            date_time: datetime object
+            dni: direct normal irradiance
+            dhi: diffuse horizontal irradiance
+            ambient_bounce: ambient bounce, default to 1. Could be set to zero for
+            macroscopic non-scattering systems.
+        Returns:
+            EDGPs
+        """
         # generate octree with bsdf
-        sky = gen_perez_sky(date_time, dni, dhi)
+        stdin = b""
+        stdin += gen_perez_sky(
+            date_time,
+            self.wea_metadata.latitude,
+            self.wea_metadata.longitude,
+            self.wea_metadata.timezone,
+            dni,
+            dhi,
+        )
+        if isinstance(shades[0], pr.Primitive):
+            for shade in shades:
+                stdin += shade.bytes
+        elif isinstance(shades[0], (str, Path)):
+            _shades = shades
+        else:
+            _shades = []
         octree = "test.oct"
         with open(octree, "wb") as f:
-            f.write(pr.oconv(*shades, stdin=sky, octree=self.octree))
+            f.write(pr.oconv(*shades, stdin=stdin, octree=self.octree))
         # render image with -ab 1
-        params = ["-ab", "1"]
+        params = ["-ab", f"{ambient_bounce}"]
         hdr = pr.rpict(
-            self.view_senders[view].view,
+            self.view_senders[view].view.args(),
             octree,
-            xres=self.view_senders[view].xres,
-            yres=self.view_senders[view].yres,
+            # fix resolution. Evalglare would complain if resolution too small
+            xres=800,
+            yres=800,
             params=params,
         )
         ev = self.calculate_sensor(
@@ -565,8 +675,9 @@ class ThreePhaseMethod(PhaseMethod):
             dni,
             dhi,
         )
-        dgp = pr.evalglare(hdr, ev)
-        return dgp
+        res = pr.evalglare(hdr, ev=float(ev))
+        edgps = float(res.split(b":")[1].split()[0])
+        return edgps
 
     def save_matrices(self, file):
         matrices = {}
@@ -582,6 +693,16 @@ class ThreePhaseMethod(PhaseMethod):
 class FivePhaseMethod(PhaseMethod):
     def __init__(self, config):
         super().__init__(config)
+        with open(self.octree, "wb") as f:
+            f.write(
+                pr.oconv(
+                    *config.model.materials.files,
+                    *config.model.scene.files,
+                    stdin=(
+                        config.model.materials.data + config.model.scene.data
+                    ).encode(),
+                )
+            )
         self.blacked_out_octree = self.octdir / f"{random_string(5)}.oct"
         self.vmap_oct = self.octdir / f"vmap_{random_string(5)}.oct"
         self.cdmap_oct = self.octdir / f"cdmap_{random_string(5)}.oct"
