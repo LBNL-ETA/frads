@@ -67,7 +67,7 @@ from .matrix import (
     # sky_as_receiver,
 )
 
-# from .methods import assemble_model, three_phase
+from .methods import WorkflowConfig, ThreePhaseMethod
 
 from .sky import (
     # basis_glow,
@@ -130,9 +130,11 @@ __all__ = [
     # "sun_as_receiver",
     # "surface_as_sender",
     # "three_phase",
+    "ThreePhaseMethod",
     "unpack_primitives",
     # "view_as_sender",
     "WeaData",
     "WeaMetaData",
+    "WorkflowConfig",
     "XENON",
 ]
