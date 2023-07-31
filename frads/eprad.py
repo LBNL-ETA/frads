@@ -367,10 +367,6 @@ class EPModel:
             "zone_or_zonelist_or_space_or_spacelist_name": zone,
         }
 
-        # Add lighting output to the epjs dictionary
-
-        self.request_output("Lights Electricity Rate")
-
         mappings = {
             "ScheduleTypeLimits": schedule_type_limit,
             "Schedule:Constant": lighting_schedule,
@@ -380,7 +376,7 @@ class EPModel:
         for key, obj in mappings.items():
             self._add(key, obj)
 
-    def request_output(self, opt_name: str):
+    def request_ep_output_variable(self, opt_name: str):
         i = 1
         if "Output:Variable" not in self.epjs:
             self.epjs["Output:Variable"] = {}
@@ -393,6 +389,20 @@ class EPModel:
                 "key_value": "*",
                 "reporting_frequency": "Timestep",
                 "variable_name": opt_name,
+            }
+
+    def request_ep_output_meter(self, opt_name: str):
+        i = 1
+        if "Output:Meter" not in self.epjs:
+            self.epjs["Output:Meter"] = {}
+        for output in self.epjs["Output:Meter"].values():
+            i += 1
+            if output["key_name"] == opt_name:
+                break
+        else:
+            self.epjs["Output:Meter"][f"Output:Meter {i}"] = {
+                "key_name": opt_name,
+                "reporting_frequency": "Timestep",
             }
 
 
