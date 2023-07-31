@@ -560,7 +560,7 @@ def solar_minute(data: WeaData) -> int:
 #     Perez All-Weather sky model. If window normal supplied,
 #     eliminate entries not seen by window. Window field of view
 #     is 176 deg with 2 deg tolerance on each side.
-# 
+#
 #     Args:
 #         data: Sequence[WeaData],
 #         meta: WeaMetaData,
@@ -609,7 +609,7 @@ def solar_minute(data: WeaData) -> int:
 # ) -> Tuple[Sequence[WeaData], List[Any]]:
 #     """
 #     Obtain and prepare weather file data.
-# 
+#
 #     Args:
 #         wea_data(List[WeaData]): A list of WeaData.
 #         meta_data(WeaMetaData): A instance of WeaMetaData object.

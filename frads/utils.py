@@ -253,7 +253,9 @@ def pt_inclusion(pt: np.ndarray, polygon_pts: List[np.ndarray]) -> int:
 
     def isLeft(pt0, pt1, pt2):
         """Test whether a point is left to a line."""
-        return (pt1[0] - pt0[0]) * (pt2[1] - pt0[1]) - (pt2[0] - pt0[0]) * (pt1[1] - pt0[1])
+        return (pt1[0] - pt0[0]) * (pt2[1] - pt0[1]) - (pt2[0] - pt0[0]) * (
+            pt1[1] - pt0[1]
+        )
 
     # Close the polygon for looping
     # polygon_pts.append(polygon_pts[0])
