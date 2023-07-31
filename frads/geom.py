@@ -62,14 +62,15 @@ class Polygon:
         pt1 = self._vertices[0]
         distances1 = np.linalg.norm(other.vertices - pt1, axis=1)
         idx_min = np.argmin(distances1)
-        new_other_vert = np.concatenate((other.vertices[idx_min:], other.vertices[:idx_min]))
+        new_other_vert = np.concatenate(
+            (other.vertices[idx_min:], other.vertices[:idx_min])
+        )
         results = [pt1]
         results.append(new_other_vert[0])
         results.extend(reversed(new_other_vert[1:]))
         results.append(new_other_vert[0])
         results.extend(self.vertices)
         return Polygon(results)
-
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Polygon):
@@ -97,15 +98,15 @@ class Polygon:
 
     def scale(self, scale_vect: np.ndarray, center: np.ndarray):
         """Scale the polygon.
-        
-        Parameters: 
-        scale_vect (numpy array): scale along x, y, z; 
+
+        Parameters:
+        scale_vect (numpy array): scale along x, y, z;
         center (numpy array): center of scaling
-        
+
         Returns:
         Scaled polygon (Polygon)
         """
-        
+
         new_vertices = []
         for vert in self._vertices:
             sx = center[0] + (vert[0] - center[0]) * scale_vect[0]
@@ -119,12 +120,12 @@ class Polygon:
         """
         Return the extreme values of the polygon.
         """
-        xmin = self.vertices[:,0].min()
-        xmax = self.vertices[:,0].max()
-        ymin = self.vertices[:,1].min()
-        ymax = self.vertices[:,1].max()
-        zmin = self.vertices[:,2].min() 
-        zmax = self.vertices[:,2].max()
+        xmin = self.vertices[:, 0].min()
+        xmax = self.vertices[:, 0].max()
+        ymin = self.vertices[:, 1].min()
+        ymax = self.vertices[:, 1].max()
+        zmin = self.vertices[:, 2].min()
+        zmax = self.vertices[:, 2].max()
         return xmin, xmax, ymin, ymax, zmin, zmax
 
     def rotate(self, center, vector, angle) -> "Polygon":
@@ -206,7 +207,9 @@ def angle_between(vec1: np.ndarray, vec2: np.ndarray) -> float:
     return angle
 
 
-def rotate_3d(point: np.ndarray, center: np.ndarray, axis: np.ndarray, angle:float) -> np.ndarray:
+def rotate_3d(
+    point: np.ndarray, center: np.ndarray, axis: np.ndarray, angle: float
+) -> np.ndarray:
     """
     Rotate a point around a center and axis
     Args:
@@ -221,16 +224,25 @@ def rotate_3d(point: np.ndarray, center: np.ndarray, axis: np.ndarray, angle:flo
     ct = np.cos(angle)
     st = np.sin(angle)
     axisx, axisy, axisz = axis
-    rotation_matrix = np.array([
-        [axisx**2 + (1 - axisx**2)*ct, 
-         axisx*axisy*(1 - ct) - axisz*st,
-         axisx*axisz*(1 - ct) + axisy*st],
-        [axisx*axisy*(1 - ct) + axisz*st,
-         axisy**2 + (1 - axisy**2)*ct,
-         axisy*axisz*(1 - ct) - axisx*st], 
-        [axisx*axisz*(1 - ct) - axisy*st,
-         axisy*axisz*(1 - ct) + axisx*st,
-         axisz**2 + (1 - axisz**2)*ct]])
+    rotation_matrix = np.array(
+        [
+            [
+                axisx**2 + (1 - axisx**2) * ct,
+                axisx * axisy * (1 - ct) - axisz * st,
+                axisx * axisz * (1 - ct) + axisy * st,
+            ],
+            [
+                axisx * axisy * (1 - ct) + axisz * st,
+                axisy**2 + (1 - axisy**2) * ct,
+                axisy * axisz * (1 - ct) - axisx * st,
+            ],
+            [
+                axisx * axisz * (1 - ct) - axisy * st,
+                axisy * axisz * (1 - ct) + axisx * st,
+                axisz**2 + (1 - axisz**2) * ct,
+            ],
+        ]
+    )
     rotated = np.dot(rotation_matrix, translated_point)
     return rotated + center
 
