@@ -190,7 +190,11 @@ def add_manikin(manikin_file: str, manikin_name: str, zone: dict, position: List
     Notes:
         Zone dictionary is modified in place.
     """
+    zone['model']['scene']['bytes'] += b" "
     zone_primitives = parse_primitive(zone['model']['scene']['bytes'].decode())
+    non_polygon_primitives = [p for p in zone_primitives if p.ptype != 'polygon']
+    for primitive in non_polygon_primitives:
+        zone['model']['scene']['bytes'] += primitive.bytes
     zone_polygons = [parse_polygon(p) for p in zone_primitives if p.ptype == 'polygon']
     xmin, xmax, ymin, ymax, zmin, _ = geom.get_polygon_limits(zone_polygons)
     target = np.array([xmin + (xmax - xmin) * position[0], ymin + (ymax - ymin) * position[1], zmin])
@@ -205,7 +209,6 @@ def add_manikin(manikin_file: str, manikin_name: str, zone: dict, position: List
     moved_manikin_polygons = [polygon.move(move_vector) for polygon in manikin_polygons]
     moved_manikin = [polygon2prim(polygon, primitive.modifier, primitive.identifier) 
                      for polygon, primitive in zip(moved_manikin_polygons, manikin_primitives)]
-    zone['model']['scene']['bytes'] += b" "
     for primitive in moved_manikin:
         zone['model']['scene']['bytes'] += primitive.bytes
     manikin_rays = []
