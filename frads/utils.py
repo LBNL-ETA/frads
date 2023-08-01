@@ -190,7 +190,7 @@ def add_manikin(manikin_file: str, manikin_name: str, zone: dict, position: List
     Notes:
         Zone dictionary is modified in place.
     """
-    zone_primitives = parse_primitive(zone['model']['scene']['data'].decode())
+    zone_primitives = parse_primitive(zone['model']['scene']['bytes'].decode())
     zone_polygons = [parse_polygon(p) for p in zone_primitives]
     xmin, xmax, ymin, ymax, zmin, _ = geom.get_polygon_limits(zone_polygons)
     target = np.array([xmin + (xmax - xmin) * position[0], ymin + (ymax - ymin) * position[1], zmin])
