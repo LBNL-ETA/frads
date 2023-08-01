@@ -66,6 +66,7 @@ class EPlusWindowMaterialComplexShade:
     left_side_opening_multiplier: float
     right_side_opening_multiplier: float
     front_opening_multiplier: float
+    primitive: str = ""
 
 
 @dataclass

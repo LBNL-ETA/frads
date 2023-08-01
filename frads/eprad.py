@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from frads import sky
+import copy
 
 
 class EPModel:
@@ -318,8 +319,25 @@ class EPModel:
                 "construction_name"
             ] = cfs
 
-    def add_lighting(self):
+    def add_lighting(self, zone, replace=False) -> None:
         """Add lighting objects to the epjs dictionary."""
+
+        dict2 = copy.deepcopy(self.epjs["Lights"])
+
+        if self.epjs["Lights"] is not None:
+            for l in dict2:
+                if (
+                    self.epjs["Lights"][l][
+                        "zone_or_zonelist_or_space_or_spacelist_name"
+                    ]
+                    == zone
+                ):
+                    if replace == True:
+                        del self.epjs["Lights"][l]
+                    else:
+                        raise ValueError(
+                            "Lighting already exists in this zone. If want to replace, set replace=True."
+                        )
 
         # Initialize lighting schedule type limit dictionary
         schedule_type_limit = {}
@@ -340,22 +358,16 @@ class EPModel:
         # Initialize lights dictionary with a constant-off schedule for each zone
 
         lights = {}
-        for zone in self.epjs["Zone"]:
-            _name = f"Light_{zone}"
-            lights[_name] = {
-                "design_level_calculation_method": "LightingLevel",
-                "fraction_radiant": 0,
-                "fraction_replaceable": 1,
-                "fraction_visible": 1,
-                "lighting_level": 0,
-                "return_air_fraction": 0,
-                "schedule_name": "constant_off",
-                "zone_or_zonelist_or_space_or_spacelist_name": zone,
-            }
-
-        # Add lighting output to the epjs dictionary
-
-        self.request_output("Lights Electricity Rate")
+        lights[f"Light_{zone}"] = {
+            "design_level_calculation_method": "LightingLevel",
+            "fraction_radiant": 0,
+            "fraction_replaceable": 1,
+            "fraction_visible": 1,
+            "lighting_level": 0,
+            "return_air_fraction": 0,
+            "schedule_name": "constant_off",
+            "zone_or_zonelist_or_space_or_spacelist_name": zone,
+        }
 
         mappings = {
             "ScheduleTypeLimits": schedule_type_limit,
@@ -366,7 +378,7 @@ class EPModel:
         for key, obj in mappings.items():
             self._add(key, obj)
 
-    def request_output(self, opt_name: str):
+    def request_ep_output_variable(self, opt_name: str):
         i = 1
         if "Output:Variable" not in self.epjs:
             self.epjs["Output:Variable"] = {}
@@ -379,6 +391,20 @@ class EPModel:
                 "key_value": "*",
                 "reporting_frequency": "Timestep",
                 "variable_name": opt_name,
+            }
+
+    def request_ep_output_meter(self, opt_name: str):
+        i = 1
+        if "Output:Meter" not in self.epjs:
+            self.epjs["Output:Meter"] = {}
+        for output in self.epjs["Output:Meter"].values():
+            i += 1
+            if output["key_name"] == opt_name:
+                break
+        else:
+            self.epjs["Output:Meter"][f"Output:Meter {i}"] = {
+                "key_name": opt_name,
+                "reporting_frequency": "Timestep",
             }
 
 
@@ -453,6 +479,12 @@ class EnergyPlusSetup:
         self.api.state_manager.delete_state(self.state)
 
     def actuate(self, name: str, key: str, value):
+        """
+        :param component_type: The actuator category, e.g. "Weather Data"
+        :param name: The name of the actuator to retrieve, e.g. "Outdoor Dew Point"
+        :param key: The instance of the variable to retrieve, e.g. "Environment"
+
+        """
         if key not in self.handles.actuator:
             raise ValueError("Actuator not found", name, key)
         self.api.exchange.set_actuator_value(
@@ -460,6 +492,12 @@ class EnergyPlusSetup:
         )
 
     def request_actuator(self, state, component_type: str, name: str, key: str):
+        """
+        :param component_type: The actuator category, e.g. "Weather Data"
+        :param name: The name of the actuator to retrieve, e.g. "Outdoor Dew Point"
+        :param key: The instance of the variable to retrieve, e.g. "Environment"
+
+        """
         if (key, name) in self.handles.actuator.items():
             pass
         else:
@@ -512,11 +550,16 @@ class EnergyPlusSetup:
             if "FenestrationSurface:Detailed" in self.epjs:
                 for window in self.epjs["FenestrationSurface:Detailed"]:
                     self.request_actuator(
-                        state, "Surface", "Construction State", window
+                        state,
+                        component_type="Surface",
+                        name="Construction State",
+                        key=window,
                     )
 
             for light in self.epjs.get("Lights", []):
-                self.request_actuator(state, "Lights", "Electricity Rate", light)
+                self.request_actuator(
+                    state, component_type="Lights", name="Electricity Rate", key=light
+                )
 
                 self.request_variable("Lights Electricity Energy", light)
                 var_handle = self.api.exchange.get_variable_handle(
