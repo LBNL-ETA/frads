@@ -177,7 +177,7 @@ def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough) -> Prim
 
 
 
-def add_manikin(manikin_file: str, manikin_name: str, zone: dict, position: np.ndarray, rotation: float = 0) -> None:
+def add_manikin(manikin_file: str, manikin_name: str, zone: dict, position: List[float], rotation: float = 0) -> None:
     """Add a manikin to the scene.i
     Args:
         manikin: manikin primitives as a .rad file
