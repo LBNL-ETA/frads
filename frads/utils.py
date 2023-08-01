@@ -169,7 +169,15 @@ def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough) -> Prim
     return Primitive(mod, "plastic", ident, [], real_args)
 
 
-def add_manikin(manikin_file: str, zone: dict, position: np.ndarray, rotation: float = 0) -> dict:
+# Generate a Manikin polygon from a file
+# Move the polygon to the correct place
+# Rotate the polygon
+
+# Generate the rays from the polygons
+
+
+
+def add_manikin(manikin_file: str, manikin_name: str, zone: dict, position: np.ndarray, rotation: float = 0) -> None:
     """Add a manikin to the scene.i
     Args:
         manikin: manikin primitives as a .rad file
@@ -179,6 +187,8 @@ def add_manikin(manikin_file: str, zone: dict, position: np.ndarray, rotation: f
         rotation: rotation of the manikin in degree (0-360)
     Returns:
         A zone with added manikin
+    Notes:
+        Zone dictionary is modified in place.
     """
     zone_primitives = parse_primitive(zone['model']['scene']['data'].decode())
     zone_polygons = [parse_polygon(p) for p in zone_primitives]
@@ -192,12 +202,17 @@ def add_manikin(manikin_file: str, zone: dict, position: np.ndarray, rotation: f
     if rotation != 0:
         manikin_polygons = [p.rotate(manikin_base_center, np.array([0, 0, 1]), np.radians(rotation)) for p in manikin_polygons]
     move_vector = manikin_base_center - target
-    moved_manikin = [polygon2prim(polygon.move(move_vector), primitive.modifier, primitive.identifier) 
-                     for polygon, primitive in zip(manikin_polygons, manikin_primitives)]
+    moved_manikin_polygons = [polygon.move(move_vector) for polygon in manikin_polygons]
+    moved_manikin = [polygon2prim(polygon, primitive.modifier, primitive.identifier) 
+                     for polygon, primitive in zip(moved_manikin_polygons, manikin_primitives)]
     zone['model']['scene']['bytes'] += b" "
     for primitive in moved_manikin:
         zone['model']['scene']['bytes'] += primitive.bytes
-    return zone
+    manikin_rays = []
+    for polygon in moved_manikin_polygons:
+        manikin_rays.append([*polygon.centroid.tolist(), *polygon.normal.tolist()])
+    zone['model']['sensors'][manikin_name] = {'data': manikin_rays}
+
 
 def glass_prim(
     mod, ident, tr: float, tg: float, tb: float, refrac: float = 1.52
