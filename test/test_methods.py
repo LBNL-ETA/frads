@@ -89,6 +89,7 @@ def test_three_phase():
         dni, 
         dhi,
     )
+    res = workflow.calculate_sensor_from_wea('wpi')
 
 
 # def test_assemble_model():
