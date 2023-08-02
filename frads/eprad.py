@@ -14,14 +14,11 @@ from pyenergyplus.api import EnergyPlusAPI
 
 class EPModel:
     def __init__(self, fpath: Path):
-        # self.epjs = epjs
         """Load and parse input file into a JSON object.
         If the input file is in .idf format, use command-line
         energyplus program to convert it to epJSON format
         Args:
             fpath: input file path
-        Returns:
-            epjs: JSON object as a Python dictionary
         """
         self.api = EnergyPlusAPI()
         epjson_path: Path
@@ -39,8 +36,6 @@ class EPModel:
             raise Exception(f"Unknown file type {fpath}")
         with open(epjson_path) as rdr:
             self.epjs = json.load(rdr)
-
-        # return EPModel(epjs)
 
     @property
     def cfs(self):
@@ -630,12 +625,15 @@ class EnergyPlusSetup:
         options = {k: v for k, v in options.items() if v is not None}
         opt = [item for sublist in options.items() for item in sublist]
 
+        if "OutputControl:Files" not in self.epjs:
+            self.epjs["OutputControl:Files"] = {
+                "OutputControl:Files 1": {"output_csv": "Yes"}
+            }
+
         with open(f"{output_prefix}.json", "w") as wtr:
             json.dump(self.epjs, wtr)
 
-        self.api.runtime.run_energyplus(
-            self.state, [*opt, "-r", f"{output_prefix}.json"]
-        )
+        self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
 
     def set_callback(self, method_name: str, func):
         try:
