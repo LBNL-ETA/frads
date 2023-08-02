@@ -9,11 +9,38 @@ from typing import Optional
 
 from frads import sky
 import copy
+from pyenergyplus.api import EnergyPlusAPI
 
 
 class EPModel:
-    def __init__(self, epjs):
-        self.epjs = epjs
+    def __init__(self, fpath: Path):
+        # self.epjs = epjs
+        """Load and parse input file into a JSON object.
+        If the input file is in .idf format, use command-line
+        energyplus program to convert it to epJSON format
+        Args:
+            fpath: input file path
+        Returns:
+            epjs: JSON object as a Python dictionary
+        """
+        self.api = EnergyPlusAPI()
+        epjson_path: Path
+        if fpath.suffix == ".idf":
+            state = self.api.state_manager.new_state()
+            self.api.runtime.set_console_output_status(state, False)
+            self.api.runtime.run_energyplus(state, ["--convert-only", str(fpath)])
+            self.api.state_manager.delete_state(state)
+            epjson_path = Path(fpath.with_suffix(".epJSON").name)
+            if not epjson_path.is_file():
+                raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
+        elif fpath.suffix == ".epJSON":
+            epjson_path = fpath
+        else:
+            raise Exception(f"Unknown file type {fpath}")
+        with open(epjson_path) as rdr:
+            self.epjs = json.load(rdr)
+
+        # return EPModel(epjs)
 
     @property
     def cfs(self):
@@ -454,9 +481,9 @@ class Handles:
 
 
 class EnergyPlusSetup:
-    def __init__(self, api, epjs):
-        self.api = api
-        self.epjs = epjs
+    def __init__(self, epmodel):
+        self.api = epmodel.api
+        self.epjs = epmodel.epjs
         self.state = self.api.state_manager.new_state()
         self.handles = Handles()
 

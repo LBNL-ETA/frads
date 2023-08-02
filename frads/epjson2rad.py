@@ -583,7 +583,7 @@ def parse_epjson(epjs: dict) -> tuple:
     return site, zones, constructions, materials, matrices
 
 
-def epjson2rad(epjs: dict, epw=None) -> dict:
+def epjson2rad(epmodel, epw=None) -> dict:
     """Command-line program to convert a energyplus model into a Radiance model."""
     # Setup file structure
     # objdir = Path("Objects")
@@ -591,9 +591,9 @@ def epjson2rad(epjs: dict, epw=None) -> dict:
     # mtxdir = Path("Matrices")
     # mtxdir.mkdir(exist_ok=True)
 
-    site, zones, constructions, materials, matrices = parse_epjson(epjs)
+    site, zones, constructions, materials, matrices = parse_epjson(epmodel.epjs)
     # building_name = epjs["Building"].popitem()[0].replace(" ", "_")
-    building_name = list(epjs["Building"].keys())[0].replace(" ", "_")
+    building_name = list(epmodel.epjs["Building"].keys())[0].replace(" ", "_")
 
     if len(matrices) > 0:
         rsodir = Path("Resources")
