@@ -53,7 +53,7 @@ import shutil
 
 from .epjson2rad import epjson2rad
 
-from .eprad import load_epmodel, EnergyPlusSetup, ep_datetime_parser
+from .eprad import EPModel, EnergyPlusSetup, ep_datetime_parser
 
 from .matrix import (
     load_matrix,
@@ -118,7 +118,7 @@ __all__ = [
     "gen_grid",
     "genskymtx",
     "KRYPTON",
-    "load_epmodel",
+    "EPModel",
     "load_matrix",
     "matrix_multiply_rgb",
     "parse_epw",
