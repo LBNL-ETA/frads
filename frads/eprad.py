@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import json
 from pathlib import Path
 from typing import Optional
+import os
+import sys
 
 from frads import sky
 import copy
@@ -36,6 +38,7 @@ class EPModel:
             raise Exception(f"Unknown file type {fpath}")
         with open(epjson_path) as rdr:
             self.epjs = json.load(rdr)
+        self.actuators_list = None
 
     @property
     def cfs(self):
@@ -428,6 +431,27 @@ class EPModel:
                 "key_name": opt_name,
                 "reporting_frequency": "Timestep",
             }
+
+    def actuator_func(self, state):
+        actuators_list = []
+        if self.actuators_list is None:
+            list = self.api.api.listAllAPIDataCSV(state).decode("utf-8")
+            for line in list.split("\n"):
+                if line.startswith("Actuator"):
+                    actuators_list.append(line.split(",", 1)[1])
+            self.actuators_list = actuators_list
+        else:
+            self.api.api.stopSimulation(state)
+
+    def gen_list_of_actuators(self):
+        with EnergyPlusSetup(self) as ep:
+            ep.set_callback(
+                "callback_begin_system_timestep_before_predictor", self.actuator_func
+            )
+            ep.run(
+                weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
+                output_prefix="test1",
+            )
 
 
 def ep_datetime_parser(inp):
