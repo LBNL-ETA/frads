@@ -49,7 +49,6 @@ or on a time-step basis.
 """
 
 import logging
-import shutil
 
 from .epjson2rad import epjson2rad
 
@@ -58,19 +57,17 @@ from .eprad import EPModel, EnergyPlusSetup, ep_datetime_parser
 from .matrix import (
     load_matrix,
     matrix_multiply_rgb,
-    # rfluxmtx,
-    # surface_as_sender,
-    # points_as_sender,
-    # view_as_sender,
-    # surface_as_receiver,
-    # sun_as_receiver,
-    # sky_as_receiver,
+    SensorSender,
+    SurfaceSender,
+    SkyReceiver,
+    SurfaceReceiver,
+    ViewSender,
+    SunReceiver,
 )
 
-from .methods import WorkflowConfig, ThreePhaseMethod
+from .methods import WorkflowConfig, TwoPhaseMethod, ThreePhaseMethod, FivePhaseMethod
 
 from .sky import (
-    # basis_glow,
     gen_perez_sky,
     genskymtx,
     parse_epw,
@@ -87,54 +84,35 @@ __version__ = "0.3.1"
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# Check if Radiance is installed more or less
-rad_progs = [
-    "rfluxmtx",
-    "total",
-    "getinfo",
-    "pcomb",
-    "dctimestep",
-    "rmtxop",
-    "gendaymtx",
-    "rtrace",
-]
-
-for prog in rad_progs:
-    ppath = shutil.which(prog)
-    if ppath is None:
-        logger.info("%s not found; check Radiance installation", prog)
-
 
 __all__ = [
     "AIR",
     "ARGON",
-    # "assemble_model",
-    # "basis_glow",
-    "EnergyPlusSetup",
-    "ep_datetime_parser",
-    "epjson2rad",
-    "GlazingSystem",
-    "gen_perez_sky",
-    "gen_grid",
-    "genskymtx",
-    "KRYPTON",
     "EPModel",
-    "load_matrix",
-    "matrix_multiply_rgb",
-    "parse_epw",
-    "parse_wea",
-    # "points_as_sender",
-    # "rfluxmtx",
-    # "sky_as_receiver",
-    # "surface_as_receiver",
-    # "sun_as_receiver",
-    # "surface_as_sender",
-    # "three_phase",
+    "EnergyPlusSetup",
+    "FivePhaseMethod",
+    "GlazingSystem",
+    "KRYPTON",
+    "SensorSender",
+    "SkyReceiver",
+    "SunReceiver",
+    "SurfaceReceiver",
+    "SurfaceSender",
     "ThreePhaseMethod",
-    "unpack_primitives",
-    # "view_as_sender",
+    "TwoPhaseMethod",
+    "ViewSender",
     "WeaData",
     "WeaMetaData",
     "WorkflowConfig",
     "XENON",
+    "ep_datetime_parser",
+    "epjson2rad",
+    "gen_grid",
+    "gen_perez_sky",
+    "genskymtx",
+    "load_matrix",
+    "matrix_multiply_rgb",
+    "parse_epw",
+    "parse_wea",
+    "unpack_primitives",
 ]
