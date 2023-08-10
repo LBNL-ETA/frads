@@ -114,9 +114,19 @@ def test_multilayer_glazing_shading():
         6,
     )
 
+    assert gs.photopic_results is None
+    assert gs.solar_results is None
 
-def test_window():
-    # Create a window
+
+def test_compute_results():
+    """
+    Test the computation of the solar and photopic results.
+
+    Check the results are not None.
+    """
     gs = GlazingSystem()
-    gs.add_glazing_layer(test_dir / "Resources" / "igsdb_product_7968.json")
+    gs.add_glazing_layer(glass_path)
     gs.compute_solar_photopic_results()
+
+    assert gs.photopic_results is not None
+    assert gs.solar_results is not None
