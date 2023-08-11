@@ -1,11 +1,17 @@
 ![Install + Test](https://github.com/LBNL-ETA/frads/actions/workflows/main.yml/badge.svg)
 [![Upload Python Package](https://github.com/LBNL-ETA/frads/actions/workflows/python-publish.yml/badge.svg)](https://github.com/LBNL-ETA/frads/actions/workflows/python-publish.yml)
 ![Downloads](https://img.shields.io/pypi/dm/frads.svg)
-# _frads_: Framework for Radiance simulation control
+# _frads_: Framework for lighting and energy simulation
 
-This is the repository for _frads_ development. Radiance is a free and open-source, raytracing-based lighting engine that is used extensively by engineering firms for innovative solar control, lighting, and daylighting design to improve the energy efficiency of buildings. With matrix algebraic methods, climate-based annual simulations can now be conducted in less than two minutes. _frads_ automates setup of these simulations by providing end users with an open-source, high-level abstraction of the Radiance command-line workflow (Unix toolbox model), helping to reduce the steep learning curve and associated user errors. _frads_ also provides the necessary infrastructure needed for seamless integration of Radiance and other modeling tools, such as EnergyPlus.
+This is the repository for _frads_ development. _frads_ faciliates lighting and energy simulation by calling Radiance and EnergyPlus
+within the Python environment. Radiance is a free and open-source, raytracing-based lighting engine that is used extensively 
+by engineering firms for innovative solar control, lighting, and daylighting design to improve the energy efficiency of buildings. 
+With matrix algebraic methods, climate-based annual simulations can now be conducted in less than two minutes. _frads_ automates setup 
+of these simulations by providing end users with an open-source, high-level abstraction of the Radiance command-line workflow (Unix toolbox model), 
+helping to reduce the steep learning curve and associated user errors. _frads_ also provides the necessary infrastructure needed for seamless 
+integration of Radiance and other modeling tools, such as EnergyPlus.
 
-[Documentation](https://lbnl-eta.github.io/frads/)
+## [Documentation](https://lbnl-eta.github.io/frads/)
 
 ## Contact/ Support
 We welcome beta users of _frads_. Feel free to post questions and suggestions in the Discussion section of this GitHub site or contact the principal author at taoningwang@lbl.gov.
@@ -44,31 +50,13 @@ After you have Python installed, you should have `pip` command available in your
 
 	$ python -m pip install frads
 
-Alternatively, more recent version of `frads` can be installed directly from github as well. Watch for the passing/failed tag on github to check if the current version passed the tests.:
-
-	$ python -m pip install git+https://github.com/LBNL-ETA/frads
-
 ### Verifying
 
 To verify that `frads` can be seen by Python, type `python` from your shell. Then at the Python prompt, try to import `frads`
 
 	>>> import frads
 	>>> print(frads.__version__)
-	0.2.7
-
-### Optional external library
-
-_frads_ runs from the terminal prompt (command line) on Windows, Mac, and Linux OS. Radiance must be [installed](https://www.radiance-online.org/download-install/radiance-source-code/latest-release) prior to use of _frads_.  You can then install _frads_ by entering the following command in your terminal/cmd/powershell:
-
-```
-pip install frads
-```
-
-You can also install latest _frads_ from this Github repository using this command:
-
-```
-pip install git+https://github.com/LBNL-ETA/frads@develop
-```
+	1.0.0
 
 
 ## Reference
