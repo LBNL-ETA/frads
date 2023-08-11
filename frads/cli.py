@@ -8,16 +8,45 @@ import logging
 import os
 from pathlib import Path
 import sys
-import tempfile as tf
-from typing import List, Optional
+from typing import Dict, List, Optional
 
+import numpy as np
 import pyradiance as pr
-from pyradiance import lib
+from pyradiance import SamplingParameters, lib
 from pyradiance import param as rparam
 from pyradiance import model as rmodel
 import pywincalc as pwc
-from frads import epjson2rad, matrix, methods, mtxmult, ncp, geom, room, utils, window
-from frads.matrix import Receiver
+
+from frads import ncp
+from frads.eprad import EPModel
+from frads.epjson2rad import epjson2rad
+from frads.room import make_room
+from frads.window import PaneRGB, get_glazing_primitive
+from frads.matrix import (
+    load_matrix,
+    Matrix,
+    SensorSender,
+    SkyReceiver,
+    SurfaceSender,
+    SurfaceReceiver,
+    SunMatrix,
+    SunReceiver,
+    ViewSender,
+)
+from frads.methods import (
+    TwoPhaseMethod,
+    ThreePhaseMethod,
+    FivePhaseMethod,
+    WorkflowConfig,
+)
+from frads.utils import (
+    gen_grid,
+    parse_polygon,
+    primitive_normal,
+    unpack_primitives,
+    write_hdrs,
+    write_ep_rad_model,
+)
 
 
 logger: logging.Logger = logging.getLogger("frads")
@@ -66,8 +95,15 @@ def parse_vu(vu_str: str) -> Optional[rmodel.View]:
     return view
 
 
-def parse_mrad_config(cfg_path: Path) -> configparser.ConfigParser:
-    """Parse mrad configuration file."""
+def parse_mrad_config(cfg_path: Path) -> Dict[str, dict]:
+    """
+    Parse mrad configuration file.
+    Args:
+        cfg_path: path to the configuration file
+    Returns:
+        A dictionary of configuration in a format
+        that can be used by methods.WorkflowConfig
+    """
     if not cfg_path.is_file():
         raise FileNotFoundError(cfg_path)
     config = configparser.ConfigParser(
@@ -77,6 +113,7 @@ def parse_mrad_config(cfg_path: Path) -> configparser.ConfigParser:
         converters={
             "path": lambda x: Path(x.strip()),
             "paths": lambda x: [Path(i) for i in x.split()],
+            "spaths": lambda x: x.split(),
             # "options": parse_opt,
             "options": rparam.parse_rtrace_args,
             "view": parse_vu,
@@ -84,7 +121,79 @@ def parse_mrad_config(cfg_path: Path) -> configparser.ConfigParser:
     )
     config.read(Path(__file__).parent / "data" / "mrad_default.cfg")
     config.read(cfg_path)
-    return config
+    # Convert config to dict
+    config_dict = {}
+    for section in config.sections():
+        config_dict[section] = {}
+        for key, val in config.items(section):
+            config_dict[section][key] = val
+    config_dict["settings"] = {**config_dict["SimControl"], **config_dict["Site"]}
+    for k, v in config_dict["settings"].items():
+        # Convert sampling parameters string to list
+        if k.endswith("_matrix"):
+            config_dict["settings"][k] = v.split()
+    config_dict["settings"]["separate_direct"] = config["SimControl"].getboolean(
+        "separate_direct"
+    )
+    config_dict["settings"]["overwrite"] = config["SimControl"].getboolean("overwrite", False)
+    config_dict["settings"]["save_matrices"] = config["SimControl"].getboolean("save_matrices", True)
+    config_dict["model"] = {
+        "scene": {},
+        "materials": {},
+        "windows": {},
+        "views": {},
+        "sensors": {},
+    }
+    config_dict["model"]["scene"]["files"] = config["Model"].getspaths("scene")
+    config_dict["model"]["materials"]["files"] = config["Model"].getspaths("material")
+    for wpath, xpath in zip(
+        config["Model"].getpaths("windows"), config["Model"].getpaths("window_xmls")
+    ):
+        config_dict["model"]["windows"][wpath.stem] = {
+            "file": str(wpath),
+            "matrix_file": str(xpath),
+        }
+    if (grid_files := config["RaySender"].getspaths("grid_points")) is not None:
+        for gfile in grid_files:
+            name = gfile.stem
+            with open(gfile) as f:
+                config_dict["model"]["sensors"][name] = {
+                    "data": [[float(v) for v in l.split()] for l in f.readlines()]
+                }
+    elif (grid_paths := config["RaySender"].getpaths("grid_surface")) is not None:
+        for gpath in grid_paths:
+            name: str = gpath.stem
+            # Take the first polygon primitive
+            gprimitives = unpack_primitives(gpath)
+            surface_polygon = None
+            for prim in gprimitives:
+                if prim.ptype == "polygon":
+                    surface_polygon = parse_polygon(prim)
+                    break
+            if surface_polygon is None:
+                raise ValueError(f"No polygon found in {gpath}")
+            config_dict["model"]["sensors"][name] = {
+                "data": gen_grid(
+                    surface_polygon,
+                    config["RaySender"].getfloat("grid_height"),
+                    config["RaySender"].getfloat("grid_spacing"),
+                )
+            }
+    views = [i for i in config["RaySender"] if i.startswith("view")]
+    for vname in views:
+        if (view := config["RaySender"].getview("view")) is not None:
+            config_dict["model"]["views"][vname] = {
+                "view": " ".join(view.args()),
+                "xres": view.xres,
+                "yres": view.yres,
+            }
+    del (
+        config_dict["SimControl"],
+        config_dict["Site"],
+        config_dict["Model"],
+        config_dict["RaySender"],
+    )
+    return config_dict
 
 
 def mrad_init(args: argparse.Namespace) -> None:
@@ -154,32 +263,43 @@ def mrad_init(args: argparse.Namespace) -> None:
 
 def mrad_run(args: argparse.Namespace) -> None:
     """Call mtxmethod to carry out the actual simulation."""
-    config = parse_mrad_config(args.cfg)
-    if config["Model"].get("name") is None:
-        config["Model"]["name"] = args.cfg.stem
-    Path("Matrices").mkdir(exist_ok=True)
-    Path("Results").mkdir(exist_ok=True)
-    with methods.assemble_model(config) as model:
-        if method := config["SimControl"].get("method"):
-            if method.startswith(("2", "two")):
-                methods.two_phase(model, config)
-            elif method.startswith(("3", "three")):
-                methods.three_phase(model, config)
-            elif method.startswith(("5", "five")):
-                methods.three_phase(model, config, direct=True)
-        else:
-            # Use 3- or 5-phase methods if we have
-            # window groups and bsdf defined
-            if model.window_groups and model.bsdf_xml:
-                if config.getboolean("SimControl", "separate_direct"):
-                    logger.info("Using five-phase simulation")
-                    methods.three_phase(model, config, direct=True)
-                else:
-                    logger.info("Using three-phase simulation")
-                    methods.three_phase(model, config)
+    config_dict = parse_mrad_config(args.cfg)
+    if config_dict["settings"]["name"] == "":
+        config_dict["settings"]["name"] = args.cfg.stem
+    wconfig = WorkflowConfig.from_dict(config_dict)
+    workflow = None
+    if method := wconfig.settings.method:
+        if method.startswith(("2", "two")):
+            logger.info("Using two-phase simulation")
+            workflow = TwoPhaseMethod(wconfig)
+        elif method.startswith(("3", "three")):
+            logger.info("Using three-phase simulation")
+            workflow = ThreePhaseMethod(wconfig)
+        elif method.startswith(("5", "five")):
+            logger.info("Using five-phase simulation")
+            workflow = FivePhaseMethod(wconfig)
+    else:
+        # Use 3- or 5-phase methods if we have
+        # window groups and bsdf defined
+        if len(wconfig.model.windows) > 1:
+            if wconfig.settings.separate_direct:
+                logger.info("Using five-phase simulation")
+                workflow = FivePhaseMethod(wconfig)
             else:
-                logger.info("Using two-phase method")
-                methods.two_phase(model, config)
+                logger.info("Using three-phase simulation")
+                workflow = ThreePhaseMethod(wconfig)
+        else:
+            logger.info("Using two-phase method")
+            workflow = TwoPhaseMethod(wconfig)
+    if workflow is None:
+        raise ValueError("No simulation method found")
+    workflow.generate_matrices()
+    for vname, view in wconfig.model.views.items():
+        res = workflow.calculate_view_from_wea(vname)
+        write_hdrs(res, view.xres, view.yres, outdir=os.path.join("Results", vname))
+    for sensor in wconfig.model.sensors:
+        res = workflow.calculate_sensor_from_wea(sensor)
+        np.savetxt(os.path.join("Results", f"{sensor}.txt"), res)
 
 
 def mrad() -> None:
@@ -258,7 +378,7 @@ def mrad() -> None:
     args = parser.parse_args()
     # Setup logger
     formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s", "%y-%m-%d %H:%M:%S"
+        "%(asctime)s-%(name)s-%(levelname)s-%(message)s", "%m-%d %H:%M:%S"
     )
     console_handler = logging.StreamHandler()
     _level = args.verbose * 10
@@ -311,18 +431,18 @@ def glaze(args) -> None:
         else:
             coated_rgb = rb_rgb
             glass_rgb = rf_rgb
-        pane_rgb.append(window.PaneRGB(pane, coated_rgb, glass_rgb, tf_rgb))
-    print(window.get_glazing_primitive(pane_rgb))
+        pane_rgb.append(PaneRGB(pane, coated_rgb, glass_rgb, tf_rgb))
+    print(get_glazing_primitive(pane_rgb))
 
 
 def gengrid(args) -> None:
     """Commandline program for generating a grid of sensor points."""
-    prims = utils.unpack_primitives(args.surface)
+    prims = unpack_primitives(args.surface)
     polygon_prims = [prim for prim in prims if prim.ptype == "polygon"]
-    polygon = geom.parse_polygon(polygon_prims[0].fargs).flip()
+    polygon = parse_polygon(polygon_prims[0]).flip()
     if args.op:
         polygon = polygon.flip()
-    grid_list = utils.gen_grid(polygon, args.height, args.spacing)
+    grid_list = gen_grid(polygon, args.height, args.spacing)
     cleanedup = []
     for row in grid_list:
         new_row = []
@@ -345,64 +465,78 @@ def epjson2rad_cmd() -> None:
     parser.add_argument("fpath", type=Path)
     parser.add_argument("-run", action="store_true", default=False)
     args = parser.parse_args()
-    epjs = epjson2rad.read_ep_input(args.fpath)
-    if "FenestrationSurface:Detailed" not in epjs:
+    epmodel = EPModel(args.fpath)
+    if "FenestrationSurface:Detailed" not in epmodel.epjs:
         raise ValueError("No windows found in this model")
-    epjson2rad.epjson2rad(epjs)
+    zones = epjson2rad.epjson2rad(epmodel.epjs)
+    for zone in zones:
+        write_ep_rad_model(f"{zone}.rad", zones[zone])
 
 
 def genmtx_pts_sky(args) -> None:
     """Generate a point to sky matrix."""
     with open(args.pts, "r", encoding="ascii") as rdr:
-        pts = [line.split() for line in rdr.readlines()]
-    sender = matrix.points_as_sender(pts_list=pts, ray_cnt=1)
+        pts = [[float(i) for i in line.split()] for line in rdr.readlines()]
+    sender = SensorSender(sensors=pts)
     out = Path(f"{args.pts.stem}_{args.basis}sky.mtx")
-    receiver = matrix.sky_as_receiver(args.basis, out)
+    receiver = SkyReceiver(args.basis, out=out)
     sys_paths = args.sys
-    del args.pts, args.basis, args.sys, args.verbose
-    matrix.rfluxmtx(sender, receiver, sys_paths, utils.opt2list(vars(args)))
+    del args.pts, args.basis, args.sys, args.verbose, args.func
+    mat = Matrix(sender, [receiver], octree=None, surfaces=sys_paths)
+    sparams = SamplingParameters()
+    sparams_dict = {k:v for k,v in vars(args) if v is not None}
+    sparams.update_from_dict(sparams_dict)
+    mat.generate(params=sparams.args(), to_file=True)
 
 
 def genmtx_vu_sky(args) -> None:
     """Generate a view to sky matrix."""
     view = pr.load_views(args.vu)[0]
-    sender = matrix.view_as_sender(
+    sender = ViewSender(
         view,
-        ray_cnt=1,
+        ray_count=1,
         xres=args.resolu[0],
         yres=args.resolu[1],
     )
     out = Path(f"{args.vu.stem}_{args.basis}sky")
     out.mkdir()
-    receiver = matrix.sky_as_receiver(args.basis, out / "%04d.hdr")
+    receiver = SkyReceiver(args.basis, out=out / "%04d.hdr")
     sys_paths = args.sys
-    del args.vu, args.basis, args.sys, args.resolu, args.verbose
-    matrix.rfluxmtx(sender, receiver, sys_paths, utils.opt2list(vars(args)))
+    del args.vu, args.basis, args.sys, args.resolu, args.verbose, args.func
+    mat = Matrix(sender, [receiver], octree=None, surfaces=sys_paths)
+    sparams = SamplingParameters()
+    sparams_dict = {k:v for k,v in vars(args) if v is not None}
+    sparams.update_from_dict(sparams_dict)
+    mat.generate(params=sparams.args(), to_file=True)
 
 
 def genmtx_srf_sky(args) -> None:
     """Generate a surface to sky matrix."""
-    sender = matrix.surface_as_sender(
-        prim_list=utils.unpack_primitives(args.srf),
+    sender = SurfaceSender(
+        surfaces=unpack_primitives(args.srf),
         basis=args.basis[0],
         offset=args.offset,
     )
     out = Path(f"{args.srf.stem}_{'_'.join(args.basis)}sky.mtx")
-    receiver = matrix.sky_as_receiver(args.basis[1], out)
+    receiver = SkyReceiver(args.basis[1], out=out)
     sys_paths = args.sys
-    del args.srf, args.basis, args.sys, args.offset, args.verbose
-    matrix.rfluxmtx(sender, receiver, sys_paths, utils.opt2list(vars(args)))
+    del args.srf, args.basis, args.sys, args.offset, args.verbose, args.func
+    mat = Matrix(sender, [receiver], octree=None, surfaces=sys_paths)
+    sparams = SamplingParameters()
+    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams.update_from_dict(sparams_dict)
+    mat.generate(params=sparams.args(), to_file=True)
 
 
 def genmtx_pts_srf(args) -> None:
     """Generate a point to surface matrix."""
     with open(args.pts, "r", encoding="ascii") as rdr:
-        pts = [line.split() for line in rdr.readlines()]
-    sender = matrix.points_as_sender(pts_list=pts, ray_cnt=1)
-    rprims = utils.unpack_primitives(args.srf)
+        pts = [[float(i) for i in line.split()] for line in rdr.readlines()]
+    sender = SensorSender(sensors=pts, ray_count=1)
+    rprims = unpack_primitives(args.srf)
     modifiers = {prim.modifier for prim in rprims if prim.ptype in ("polygon", "ring")}
-    receiver = Receiver(receiver="", basis=args.basis, modifier="")
     sys_paths = args.sys
+    receivers = []
     for mod in modifiers:
         _receiver = [
             prim
@@ -411,31 +545,37 @@ def genmtx_pts_srf(args) -> None:
         ]
         if _receiver != []:
             outpath = Path(f"{args.pts.stem}_{args.srf.stem}.mtx")
-            receiver += matrix.surface_as_receiver(
-                prim_list=_receiver,
-                basis=args.basis,
-                offset=args.offset,
-                left=False,
-                source="glow",
-                out=outpath,
+            receivers.append(
+                SurfaceReceiver(
+                    surfaces=_receiver,
+                    basis=args.basis,
+                    offset=args.offset,
+                    left_hand=False,
+                    source="glow",
+                    out=outpath,
+                )
             )
-    del args.pts, args.srf, args.sys, args.basis, args.offset, args.verbose
-    matrix.rfluxmtx(sender, receiver, sys_paths, utils.opt2list(vars(args)))
+    del args.pts, args.srf, args.sys, args.basis, args.offset, args.verbose, args.func
+    mat = Matrix(sender, receivers, octree=None, surfaces=sys_paths)
+    sparams = SamplingParameters()
+    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams.update_from_dict(sparams_dict)
+    mat.generate(params=sparams.args(), to_file=True)
 
 
 def genmtx_vu_srf(args) -> None:
     """Generate a view to surface matrix."""
     view = pr.load_views(args.vu)[0]
-    sender = matrix.view_as_sender(
+    sender = ViewSender(
         view,
-        ray_cnt=1,
+        ray_count=1,
         xres=args.resolu[0],
         yres=args.resolu[1],
     )
-    rprims = utils.unpack_primitives(args.srf)
+    rprims = unpack_primitives(args.srf)
     modifiers = {prim.modifier for prim in rprims if prim.ptype in ("polygon", "ring")}
-    receiver = Receiver(receiver="", basis=args.basis, modifier="")
     sys_paths = args.sys
+    receivers = []
     for mod in modifiers:
         _receiver = [
             prim
@@ -445,29 +585,35 @@ def genmtx_vu_srf(args) -> None:
         if _receiver != []:
             outpath = Path(f"{args.vu.stem}_{args.srf.stem}")
             outpath.mkdir()
-            receiver += matrix.surface_as_receiver(
-                prim_list=_receiver,
-                basis=args.basis,
-                offset=args.offset,
-                left=False,
-                source="glow",
-                out=outpath / "%04d.hdr",
+            receivers.append(
+                SurfaceReceiver(
+                    surfaces=_receiver,
+                    basis=args.basis,
+                    offset=args.offset,
+                    left_hand=False,
+                    source="glow",
+                    out=outpath / "%04d.hdr",
+                )
             )
-    del args.vu, args.srf, args.sys, args.basis, args.offset, args.resolu, args.verbose
-    matrix.rfluxmtx(sender, receiver, sys_paths, utils.opt2list(vars(args)))
+    del args.vu, args.srf, args.sys, args.basis, args.offset, args.resolu, args.verbose, args.func
+    mat = Matrix(sender, receivers, octree=None, surfaces=sys_paths)
+    sparams = SamplingParameters()
+    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams.update_from_dict(sparams_dict)
+    mat.generate(params=sparams.args(), to_file=True)
 
 
 def genmtx_srf_srf(args) -> None:
     """Generate a surface to surface matrix."""
-    sender = matrix.surface_as_sender(
-        prim_list=utils.unpack_primitives(args.ssrf),
+    sender = SurfaceSender(
+        surfaces=unpack_primitives(args.ssrf),
         basis=args.basis[0],
         offset=args.offset[0],
     )
-    rprims = utils.unpack_primitives(args.rsrf)
+    rprims = unpack_primitives(args.rsrf)
     modifiers = {prim.modifier for prim in rprims if prim.ptype in ("polygon", "ring")}
-    receiver = Receiver(receiver="", basis=args.basis[1], modifier="")
     sys_paths = args.sys
+    receivers = []
     for mod in modifiers:
         _receiver = [
             prim
@@ -476,69 +622,77 @@ def genmtx_srf_srf(args) -> None:
         ]
         if _receiver != []:
             outpath = Path(f"{args.ssrf.stem}_{args.rsrf.stem}.mtx")
-            receiver += matrix.surface_as_receiver(
-                prim_list=_receiver,
-                basis=args.basis[1],
-                offset=args.offset[1],
-                left=False,
-                source="glow",
-                out=outpath,
+            receivers.append(
+                SurfaceReceiver(
+                    surfaces=_receiver,
+                    basis=args.basis[1],
+                    offset=args.offset[1],
+                    left_hand=False,
+                    source="glow",
+                    out=outpath,
+                )
             )
-    del args.ssrf, args.rsrf, args.sys, args.basis, args.offset, args.verbose
-    matrix.rfluxmtx(sender, receiver, sys_paths, utils.opt2list(vars(args)))
+    del args.ssrf, args.rsrf, args.sys, args.basis, args.offset, args.verbose, args.func
+    mat = Matrix(sender, receivers, octree=None, surfaces=sys_paths)
+    sparams = SamplingParameters()
+    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams.update_from_dict(sparams_dict)
+    mat.generate(params=sparams.args(), to_file=True)
 
 
 def genmtx_pts_sun(args) -> None:
     """Generate a point to sun matrix."""
     with open(args.pts, "r", encoding="ascii") as rdr:
-        sender = matrix.points_as_sender(
-            pts_list=[line.split() for line in rdr.readlines()], ray_cnt=1
+        sender = SensorSender(
+            sensors=[[float(i) for i in line.split()] for line in rdr.readlines()],
+            ray_count=1,
         )
-    full_modifier = False
-    receiver = matrix.sun_as_receiver(
+    receiver = SunReceiver(
         basis=args.basis,
-        smx_path=None,
+        sun_matrix=None,
         window_normals=None,
-        full_mod=full_modifier,
+        full_mod=True,
     )
-    outpath = Path(f"{args.pts.stem}_sun.mtx")
-    sun_oct = f"sun_{utils.id_generator()}"
     sys_paths = args.sys
-    matrix.rcvr_oct(receiver, sys_paths, sun_oct)
-    del args.pts, args.basis, args.sys, args.verbose
-    matrix.rcontrib(
-        sender=sender,
-        modifier=receiver.modifier,
-        octree=sun_oct,
-        out=outpath,
-        opt=utils.opt2list(vars(args)),
+    out = f"{args.pts.stem}_sun.mtx"
+    del args.pts, args.basis, args.sys, args.verbose, args.func
+    mat = SunMatrix(
+        sender,
+        receiver,
+        None,
+        surfaces=sys_paths,
     )
-    os.remove(sun_oct)
+    sparams = SamplingParameters()
+    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams.update_from_dict(sparams_dict)
+    with open(out, 'wb') as f:
+        f.write(mat.generate(parameters=sparams.args(), radmtx=True))
 
 
 def genmtx_vu_sun(args) -> None:
     """Generate a view to sun matrix."""
     view = pr.load_views(args.vu)[0]
-    sender = matrix.view_as_sender(
+    xres, yres = args.resolu
+    sender = ViewSender(
         view,
-        ray_cnt=1,
+        ray_count=1,
         xres=args.resolu[0],
         yres=args.resolu[1],
     )
     wnormals = None
+    sun_matrix = None
     if args.window is not None:
-        wnormals = utils.primitive_normal(args.window)
-    receiver = matrix.sun_as_receiver(
+        wnormals = list(primitive_normal(args.window))
+    if args.smx_path is not None:
+        sun_matrix = load_matrix(args.smx_path)
+    receiver = SunReceiver(
         basis=args.basis,
-        smx_path=args.smx_path,
+        sun_matrix=sun_matrix,
         window_normals=wnormals,
         full_mod=False,
     )
     outpath = Path(f"{args.vu.stem}_sun")
-    outpath.mkdir()
-    sun_oct = "sun.oct"
     sys_paths = args.sys
-    matrix.rcvr_oct(receiver, sys_paths, sun_oct)
     del (
         args.vu,
         args.basis,
@@ -547,34 +701,36 @@ def genmtx_vu_sun(args) -> None:
         args.resolu,
         args.smx_path,
         args.verbose,
+        args.func
     )
-    with tf.TemporaryDirectory(dir=os.getcwd()) as tempd:
-        mod_names = [f"{int(line[3:]):04d}" for line in receiver.modifier.splitlines()]
-        matrix.rcontrib(
-            sender=sender,
-            modifier=receiver.modifier,
-            octree=sun_oct,
-            out=tempd,
-            opt=utils.opt2list(vars(args)),
-        )
-        _files = sorted(Path(tempd).glob("*.hdr"))
-        for idx, val in enumerate(_files):
-            val.rename(outpath / (mod_names[idx] + ".hdr"))
-        os.remove(sun_oct)
+    mtx = SunMatrix(
+        sender,
+        receiver,
+        None,
+        surfaces=sys_paths,
+    )
+    sparams = SamplingParameters()
+    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams.update_from_dict(sparams_dict)
+    mtx.generate(parameters=sparams.args())
+    write_hdrs(mtx.array, xres=xres, yres=yres, outdir=str(outpath))
 
 
 def genmtx_ncp(args: argparse.Namespace) -> None:
     """Generate a matrix/BSDF for a non-coplanar shading systems."""
     sys_paths = args.sys
     wrap = args.wrap
-    wprims = utils.unpack_primitives(args.window)
-    nprims = utils.unpack_primitives(args.ncp)
+    wprims = unpack_primitives(args.window)
+    nprims = unpack_primitives(args.ncp)
     sys_paths.append(args.ncp)
     ports = ncp.gen_port_prims_from_window_ncp(wprims, nprims)
     nmodel = ncp.NcpModel(wprims, ports, sys_paths, args.basis[0], args.basis[1])
     out = Path(f"{args.window.stem}_{args.ncp.stem}.mtx")
     del args.window, args.ncp, args.basis, args.sys, args.verbose, args.wrap
-    ncp.gen_ncp_mtx(nmodel, out, utils.opt2list(vars(args)), wrap=wrap)
+    sparams = SamplingParameters()
+    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams.update_from_dict(sparams_dict)
+    ncp.gen_ncp_mtx(nmodel, out, sparams.args(), wrap=wrap)
 
 
 def gen() -> None:
@@ -915,36 +1071,36 @@ def gen() -> None:
     args.func(args)
 
 
-def rpxop() -> None:
-    """Operate on input directories given a operation type."""
-    parser = argparse.ArgumentParser(prog="rpxop", description="Batch image processing")
-    subparser = parser.add_subparsers()
-    parser_dcts = subparser.add_parser("dctimestep")
-    parser_dcts.set_defaults(func=mtxmult.batch_dctimestep)
-    parser_dcts.add_argument("mtx", nargs="+", type=Path, help="input matrices")
-    parser_dcts.add_argument("sky", type=Path, help="sky files directory")
-    parser_dcts.add_argument("out", type=Path, help="output directory")
-    parser_dcts.add_argument("-n", type=int, help="number of processors to use")
-    parser_pcomb = subparser.add_parser("pcomb")
-    parser_pcomb.set_defaults(func=mtxmult.batch_pcomb)
-    parser_pcomb.add_argument(
-        "inp", type=str, nargs="+", help="list of inputs, e.g., inp1 + inp2.hdr"
-    )
-    parser_pcomb.add_argument("out", type=Path, help="output directory")
-    parser_pcomb.add_argument("-n", type=int, help="number of processors to use")
-    args = parser.parse_args()
-    if args.func == mtxmult.batch_pcomb:
-        inp = [Path(i) for i in args.inp[::2]]
-        for i in inp:
-            if not i.exists():
-                raise FileNotFoundError(i)
-        ops = args.inp[1::2]
-        args.func(inp, ops, args.out, nproc=args.n)
-    elif args.func == mtxmult.batch_dctimestep:
-        for i in args.mtx:
-            if not i.exists():
-                raise FileNotFoundError(i)
-        args.func(args.mtx, args.sky, args.out, nproc=args.n)
+# def rpxop() -> None:
+#     """Operate on input directories given a operation type."""
+#     parser = argparse.ArgumentParser(prog="rpxop", description="Batch image processing")
+#     subparser = parser.add_subparsers()
+#     parser_dcts = subparser.add_parser("dctimestep")
+#     parser_dcts.set_defaults(func=mtxmult.batch_dctimestep)
+#     parser_dcts.add_argument("mtx", nargs="+", type=Path, help="input matrices")
+#     parser_dcts.add_argument("sky", type=Path, help="sky files directory")
+#     parser_dcts.add_argument("out", type=Path, help="output directory")
+#     parser_dcts.add_argument("-n", type=int, help="number of processors to use")
+#     parser_pcomb = subparser.add_parser("pcomb")
+#     parser_pcomb.set_defaults(func=mtxmult.batch_pcomb)
+#     parser_pcomb.add_argument(
+#         "inp", type=str, nargs="+", help="list of inputs, e.g., inp1 + inp2.hdr"
+#     )
+#     parser_pcomb.add_argument("out", type=Path, help="output directory")
+#     parser_pcomb.add_argument("-n", type=int, help="number of processors to use")
+#     args = parser.parse_args()
+#     if args.func == mtxmult.batch_pcomb:
+#         inp = [Path(i) for i in args.inp[::2]]
+#         for i in inp:
+#             if not i.exists():
+#                 raise FileNotFoundError(i)
+#         ops = args.inp[1::2]
+#         args.func(inp, ops, args.out, nproc=args.n)
+#     elif args.func == mtxmult.batch_dctimestep:
+#         for i in args.mtx:
+#             if not i.exists():
+#                 raise FileNotFoundError(i)
+#         args.func(args.mtx, args.sky, args.out, nproc=args.n)
 
 
 def genradroom(args) -> None:
@@ -952,7 +1108,7 @@ def genradroom(args) -> None:
     Resulting Radiance .rad files will be written to a local
     Objects directory, which will be created if not existed before.
     """
-    aroom = room.make_room(
+    aroom = make_room(
         args.width,
         args.depth,
         args.flrflr,
