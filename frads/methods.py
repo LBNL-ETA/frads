@@ -1,1039 +1,1221 @@
 """Typical Radiance matrix-based simulation workflows
 """
 
-from configparser import ConfigParser
-from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
+import hashlib
 import logging
-import math
 import os
 from pathlib import Path
-import shutil
-import subprocess as sp
-import tempfile as tf
-from typing import Dict, List, Generator, NamedTuple, Sequence, Tuple
+from typing import Any, ByteString, Dict, List, Optional, Union
+from shutil import rmtree
 
-from frads import geom, sky, matrix, mtxmult, utils
-from frads.matrix import Sender, Receiver
-from frads.sky import WeaMetaData, WeaData
-
+from frads.matrix import (
+    BASIS_DIMENSION,
+    load_matrix,
+    load_binary_matrix,
+    Matrix,
+    matrix_multiply_rgb,
+    SensorSender,
+    SkyReceiver,
+    SunReceiver,
+    SunMatrix,
+    SurfaceSender,
+    SurfaceReceiver,
+    ViewSender,
+    sparse_matrix_multiply_rgb_vtds,
+    to_sparse_matrix3,
+)
+from frads.sky import (
+    WeaData,
+    WeaMetaData,
+    gen_perez_sky,
+    parse_epw,
+    parse_wea,
+)
+from frads.utils import (
+    minutes_to_datetime,
+    parse_polygon,
+    parse_rad_header,
+    random_string,
+)
+import numpy as np
 import pyradiance as pr
+from pyradiance.model import parse_view
+from scipy.sparse import csr_matrix
 
 
 logger: logging.Logger = logging.getLogger("frads.methods")
 
 
-class MradModel(NamedTuple):
-    """Mrad model object.
-    Attributes:
-        name: Model name
-        material_path: Material path
-        window_groups: Window primitives grouped by files
-        window_normals: Window normals
-        sender_grid: Grid ray samples mapped to grid surface name.
-        sender_view: View ray samples mapped to view name.
-        views: Mapping from View name to view properties.
-        receiver_sky: Sky as the receiver object.
-        bsdf_xml: Mapping from window groupd name to BSDF file path.
-        cfs_paths: The list of files used for direct-sun coefficient calculations.
-        ncp_shades: The list of non-coplanar shading files.
-        black_env_path: Blackened environment file path.
-
+@dataclass
+class SceneConfig:
+    """
+    SceneConfig is a dataclass that holds the information needed to generate
+    a Radiance scene. It can be initialized with either a raw data string or a list
+    of files. If a list of files is provided, they will be concatenated in
+    the order they are provided.
     """
 
-    name: str
-    material_path: Path
-    window_groups: Dict[str, List[pr.Primitive]]
-    window_normals: List[geom.Vector]
-    sender_grid: dict
-    sender_view: dict
-    views: dict
-    bsdf_xml: dict
-    cfs_paths: list
-    ncp_shades: dict
-    black_env_path: Path
+    files: List[Path] = field(default_factory=list)
+    bytes: ByteString = b""
+    files_mtime: List[float] = field(init=False, default_factory=list)
+
+    def __post_init__(self):
+        if len(self.files) > 0:
+            for fpath in self.files:
+                self.files_mtime.append(os.path.getmtime(fpath))
 
 
 @dataclass
-class MradPath:
-    """
-    This dataclass object holds all the paths during a mrad run.
-    All attributes are initiated with default_factory set to the attribute's type,
-    which means this object can be instantiated without any arguments and
-    add define its attributes later.
+class MaterialConfig:
+    files: List[Path] = field(default_factory=list)
+    bytes: ByteString = b""
+    files_mtime: List[float] = field(init=False, default_factory=list)
 
-    Attributes:
-        pvmx: Point view matrix paths mapped to grid name.
-        pvmxd: Direct only point view matrix paths mapped to grid name.
-        pdsmx: Point daylight coefficient matrix file paths mapped to grid name.
-        pcdsmx: Point direct-sun coefficient matrix file paths mapped to grid name.
-        vvmx: View view matrix paths mapped to view name.
-        vvmxd: Direct only view view matrix paths mapped to view name.
-        vdsmx: View daylight coefficient matrix file paths mapped to grid name.
-        vcdsmx: View direct-sun coefficient matrix file paths mapped to view name.
-        vcdfmx: View direct-sun coefficient(f) matrix file paths mapped to view name.
-        vcdrmx: View direct-sun coefficient(r) matrix file paths mapped to view name.
-        vmap: View matrix material map mapped to view name.
-        cdmap: Direct-sun matrix material map mapped to view name.
-        dmx: Daylight matrix file paths mapped to window name.
-        dmxd: Direct daylight matrix mapped to window name.
-        smxd: Sun-only (3-4 sun patches) sky matrix file path.
-        smx: sky matrix file path.
-        smx_sun: Sun-only (one sun patch) sky matrix file path for illuminance.
-        smx_sun_img: Sun-only (one sun pathc) sky matrix file path for rendering.
-    """
-
-    pvmx: Dict[str, Path] = field(default_factory=dict)
-    vvmx: Dict[str, Path] = field(default_factory=dict)
-    dmx: Dict[str, Path] = field(default_factory=dict)
-    pdsmx: Dict[str, Path] = field(default_factory=dict)
-    vdsmx: Dict[str, Path] = field(default_factory=dict)
-    pcdsmx: Dict[str, Path] = field(default_factory=dict)
-    vcdsmx: Dict[str, Path] = field(default_factory=dict)
-    vcdfmx: Dict[str, Path] = field(default_factory=dict)
-    vcdrmx: Dict[str, Path] = field(default_factory=dict)
-    vmap: Dict[str, Path] = field(default_factory=dict)
-    cdmap: Dict[str, Path] = field(default_factory=dict)
-    smxd: Path = field(default_factory=Path)
-    pvmxd: Dict[str, Path] = field(default_factory=dict)
-    vvmxd: Dict[str, Path] = field(default_factory=dict)
-    dmxd: Dict[str, Path] = field(default_factory=dict)
-    smx: Path = field(default_factory=Path)
-    smx_sun: Path = field(default_factory=Path)
-    smx_sun_img: Path = field(default_factory=Path)
+    def __post_init__(self):
+        if len(self.files) > 0:
+            for fpath in self.files:
+                self.files_mtime.append(os.path.getmtime(fpath))
 
 
-def get_window_group(wpaths: List[Path]) -> Tuple[dict, list]:
-    """Parse window groups from config.
+@dataclass
+class WindowConfig:
+    file: Union[str, Path] = ""
+    bytes: ByteString = b""
+    matrix_file: Union[str, Path] = ""
+    matrix_data: Optional[List[List[float]]] = field(default_factory=list)
+    shading_geometry_file: Union[str, Path] = ""
+    shading_geometry_bytes: Optional[ByteString] = None
+    tensor_tree_file: Union[str, Path] = ""
+    files_mtime: List[float] = field(init=False, default_factory=list)
 
-    Args:
-        wpaths(str): window file paths
-    Return:
-        window_groups(dict): window group name and primitives
-        window_normals(list): a list of normal for each window group.
-    """
-    window_groups = {}
-    window_normals: List[geom.Vector] = []
-    for wpath in wpaths:
-        prims = utils.unpack_primitives(wpath)
-        window_groups[wpath.stem] = prims
-        # Taking normal from the first polygon
-        _normal = geom.parse_polygon(prims[0].fargs).normal
-        if _normal not in window_normals:
-            window_normals.append(_normal)
-    return window_groups, window_normals
-
-
-def get_ncp_shades(npaths: List[Path]) -> dict:
-    """Parse ncp shade groups from config."""
-    ncp_shades = {}
-    for npath in npaths:
-        prims = utils.unpack_primitives(npath)
-        ncp_shades[npath.stem] = prims
-    return ncp_shades
-
-
-def get_wea_data(config: ConfigParser) -> Tuple[WeaMetaData, List[WeaData], str]:
-    """Get wea data and parse into appropriate data types."""
-
-    if wea_path := config["Site"].getpath("wea_path"):
-        logger.info("Using user specified %s file.", wea_path)
-        name = wea_path.stem
-        with open(wea_path, "r", encoding="utf-8") as rdr:
-            wea_metadata, wea_data = sky.parse_wea(rdr.read())
-
-    elif epw_path := config["Site"].getpath("epw_path"):
-        logger.info("Converting %s to a .wea file", epw_path)
-        name = epw_path.stem
-        with open(epw_path, "r", encoding="utf-8") as rdr:
-            wea_metadata, wea_data = sky.parse_epw(rdr.read())
-    else:
-        raise ValueError("Need either a .wea or a .epw file")
-    return wea_metadata, wea_data, name
+    def __post_init__(self):
+        if os.path.exists(self.file):
+            self.files_mtime.append(os.path.getmtime(self.file))
+            if not isinstance(self.file, Path):
+                self.file = Path(self.file)
+        if os.path.exists(self.matrix_file): 
+            self.files_mtime.append(os.path.getmtime(self.matrix_file))
+            if not isinstance(self.matrix_file, Path):
+                self.matrix_file = Path(self.matrix_file)
+        if os.path.exists(self.shading_geometry_file): 
+            self.files_mtime.append(os.path.getmtime(self.shading_geometry_file))
+            if not isinstance(self.shading_geometry_file, Path):
+                self.shading_geometry_file = Path(self.shading_geometry_file)
+        if os.path.exists(self.tensor_tree_file):
+            self.files_mtime.append(os.path.getmtime(self.tensor_tree_file))
+            if not isinstance(self.tensor_tree_file, Path):
+                self.tensor_tree_file = Path(self.tensor_tree_file)
+        if self.bytes == b"":
+            with open(self.file, "rb") as f:
+                self.bytes = f.read()
 
 
-def get_sender_grid(config: ConfigParser) -> Dict[str, Sender]:
-    """Get point grid as ray senders."""
-    sender_grid: Dict[str, Sender] = {}
-    if (grid_files := config["RaySender"].getpaths("grid_points")) is not None:
-        for gfile in grid_files:
-            name = gfile.stem
-            with open(gfile) as f:
-                sensor_pts = [[float(v) for v in l.split()] for l in f.readlines()]
-            sender_grid[name] = matrix.points_as_sender(
-                pts_list=sensor_pts, ray_cnt=config["SimControl"].getint("ray_count")
-            )
-    elif (grid_paths := config["RaySender"].getpaths("grid_surface")) is not None:
-        for gpath in grid_paths:
-            name: str = gpath.stem
-            # Take the first polygon primitive
-            gprimitives = utils.unpack_primitives(gpath)
-            surface_polygon = None
-            for prim in gprimitives:
-                if prim.ptype == "polygon":
-                    surface_polygon = geom.parse_polygon(prim.fargs)
-                    break
-            if surface_polygon is None:
-                raise ValueError(f"No polygon found in {gpath}")
-            sensor_pts = utils.gen_grid(
-                surface_polygon,
-                config["RaySender"].getfloat("grid_height"),
-                config["RaySender"].getfloat("grid_spacing"),
-            )
-            sender_grid[name] = matrix.points_as_sender(
-                pts_list=sensor_pts, ray_cnt=config["SimControl"].getint("ray_count")
-            )
-    return sender_grid
+@dataclass
+class SensorConfig:
+    file: str = ""
+    data: List[List[float]] = field(default_factory=list)
+    file_mtime: float = field(init=False, default=0.0)
 
-
-def get_sender_view(config: ConfigParser) -> Tuple[dict, dict]:
-    """Get a single view as a sender.
-    Args:
-        config: MradConfig object"""
-    sender_view: Dict[str, matrix.Sender] = {}
-    view_dicts: Dict[str, pr.View] = {}
-    if (view := config["RaySender"].getview("view")) is None:
-        return sender_view, view_dicts
-    view_name = "view_00"
-    view_dicts[view_name] = view
-    sender_view[view_name] = matrix.view_as_sender(
-        view=view,
-        ray_cnt=int(config["SimControl"]["ray_count"]),
-        xres=view.xres,
-        yres=view.yres,
-    )
-    return sender_view, view_dicts
-
-
-@contextmanager
-def assemble_model(config: ConfigParser) -> Generator:
-    """Assemble all the pieces together."""
-    logger.info("Model assembling")
-    # Get Ray senders
-    sender_grid = get_sender_grid(config)
-    sender_view, view_dicts = get_sender_view(config)
-    if (not sender_grid) and (not sender_view):
-        raise ValueError("Need to at least specify a grid or a view")
-    # Get materials
-    material_primitives = []
-    for path in config["Model"].getpaths("material"):
-        for prim in utils.unpack_primitives(path):
-            material_primitives.append(prim)
-    material_primitives.append(
-        pr.Primitive("void", "plastic", "black", ["0"], [0, 0, 0, 0, 0])
-    )
-    material_primitives.append(
-        pr.Primitive("void", "glow", "glowing", ["0"], [1, 1, 1, 0])
-    )
-    material_path = Path(f"all_material_{utils.id_generator()}.rad")
-    with open(material_path, "w", encoding="ascii") as wtr:
-        for primitive in material_primitives:
-            wtr.write(str(primitive) + "\n")
-    # Get window groups
-    window_groups, window_normals = get_window_group(
-        config["Model"].getpaths("windows", []),
-    )
-    # Get BSDFs
-    bsdf_mat = {
-        wname: Path(path)
-        for wname, path in zip(
-            window_groups, config["Model"].getpaths("window_xmls", [])
-        )
-    }
-    # Get ncp shades
-    ncp_shades = get_ncp_shades(config["Model"].getpaths("ncps", []))
-    # Get cfs paths
-    cfs_path = config["Model"].getpaths("window_cfs", [])
-    black_env_path = Path(f"blackened_{utils.id_generator()}.rad")
-    with open(black_env_path, "w", encoding="ascii") as wtr:
-        for path in config["Model"].getpaths("scene"):
-            wtr.write(f"\n!xform -m black {path}")
-    yield MradModel(
-        config["Model"].get("name"),
-        material_path,
-        window_groups,
-        window_normals,
-        sender_grid,
-        sender_view,
-        view_dicts,
-        bsdf_mat,
-        cfs_path,
-        ncp_shades,
-        black_env_path,
-    )
-    logger.info("Cleaning up")
-    os.remove(material_path)
-    os.remove(black_env_path)
-
-
-def prep_2phase_pt(mpath: MradPath, model: MradModel, config: ConfigParser) -> None:
-    """Prepare matrices two phase methods."""
-    logger.info("Computing for 2-phase sensor point matrices...")
-    sys_paths = [
-        model.material_path,
-        *config["Model"].getpaths("scene"),
-        *config["Model"].getpaths("windows"),
-    ]
-    opt = config["SimControl"].getoptions("dsmx_opt")
-    opt["n"] = config["SimControl"].getint("nprocess")
-    overwrite = config.getboolean("SimControl", "overwrite", fallback=False)
-    for grid_name, sender_grid in model.sender_grid.items():
-        mpath.pdsmx[grid_name] = Path("Matrices", f"pdsmx_{model.name}_{grid_name}.mtx")
-        receiver_sky = matrix.sky_as_receiver(
-            config["SimControl"]["smx_basis"],
-            out=mpath.pdsmx[grid_name],
-        )
-        if (not mpath.pdsmx[grid_name].is_file()) or overwrite:
-            matrix.rfluxmtx(sender_grid, receiver_sky, sys_paths, utils.opt2list(opt))
-
-
-def prep_2phase_vu(mpath: MradPath, model: MradModel, config: ConfigParser) -> None:
-    """Generate image-based matrices if view defined."""
-    logger.info("Computing for image-based 2-phase matrices...")
-    sys_paths = [
-        model.material_path,
-        *config["Model"].getpaths("scene"),
-        *config["Model"].getpaths("windows"),
-    ]
-    opt = config["SimControl"].getoptions("dsmx_opt")
-    opt["n"] = config["SimControl"].getint("nprocess")
-    overwrite = config.getboolean("SimControl", "overwrite", fallback=False)
-    for view_name, sender_view in model.sender_view.items():
-        mpath.vdsmx[view_name] = Path(
-            "Matrices", f"vdsmx_{model.name}_{view_name}", "%04d.hdr"
-        )
-        receiver_sky = matrix.sky_as_receiver(
-            config["SimControl"]["smx_basis"],
-            out=mpath.vdsmx[view_name],
-        )
-        if (not mpath.vdsmx[view_name].is_dir()) or overwrite:
-            logger.info("Generating for %s", view_name)
-            matrix.rfluxmtx(sender_view, receiver_sky, sys_paths, utils.opt2list(opt))
-
-
-def view_matrix_pt(
-    mpath: MradPath, model: MradModel, config: ConfigParser, direct: bool = False
-) -> None:
-    """."""
-    _opt = config["SimControl"].getoptions("vmx_opt")
-    _env: List[Path] = [
-        model.material_path,
-        *config["Model"].getpaths("scene"),
-    ]
-    if direct:
-        logger.info("Computing direct view matrix for sensor grid:")
-        _opt["ab"] = 1
-        _env = [model.material_path, model.black_env_path]
-    else:
-        logger.info("Computing view matrix for sensor grid:")
-    receiver_windows = Receiver(receiver="", basis=config["SimControl"]["vmx_basis"])
-    for grid_name, sender_grid in model.sender_grid.items():
-        for wname, window_prim in model.window_groups.items():
-            _name = grid_name + wname
-            if direct:
-                mpath.pvmxd[_name] = Path(
-                    "Matrices", f"pvmx_{model.name}_{_name}_d.mtx"
-                )
-                out = mpath.pvmxd[_name]
+    def __post_init__(self):
+        if self.file != "":
+            self.file_mtime = os.path.getmtime(self.file)
+        if len(self.data) == 0:
+            if self.file != "":
+                with open(self.file) as f:
+                    self.data = [
+                        [float(i) for i in line.split()] for line in f.readlines()
+                    ]
             else:
-                mpath.pvmx[_name] = Path("Matrices", f"pvmx_{model.name}_{_name}.mtx")
-                out = mpath.pvmx[_name]
-            receiver_windows += matrix.surface_as_receiver(
-                prim_list=window_prim,
-                basis=config["SimControl"]["vmx_basis"],
-                offset=None,
-                left=False,
-                source="glow",
-                out=out,
-            )
-        if direct:
-            files_exist = all(f.is_file() for f in mpath.pvmxd.values())
-        else:
-            files_exist = all(f.is_file() for f in mpath.pvmx.values())
-        if (not files_exist) or config.getboolean(
-            "SimControl", "overwrite", fallback=False
-        ):
-            logger.info("Generating vmx for %s", grid_name)
-            matrix.rfluxmtx(sender_grid, receiver_windows, _env, utils.opt2list(_opt))
+                raise ValueError("SensorConfig must have either file or data")
 
 
-def view_matrix_vu(
-    mpath: MradPath, model: MradModel, config: ConfigParser, direct: bool = False
-) -> None:
-    """Prepare matrices using three-phase methods."""
-    _opt = config["SimControl"].getoptions("vmx_opt")
-    _env = [model.material_path, *config["Model"].getpaths("scene")]
-    direct_msg = ""
-    if direct:
-        _opt["i"] = True
-        _opt["ab"] = 1
-        _env = [model.material_path, model.black_env_path]
-        direct_msg = " direct-only"
-    _opt["n"] = config["SimControl"].getint("nprocess")
-    overwrite = config.getboolean("SimControl", "overwrite", fallback=False)
-    for view, sender_view in model.sender_view.items():
-        vrcvr_windows = Receiver(receiver="", basis=config["SimControl"]["vmx_basis"])
-        for wname, window_prim in model.window_groups.items():
-            _name = view + wname
-            if direct:
-                mpath.vvmxd[_name] = Path(
-                    "Matrices", f"vvmx_{model.name}_{_name}_d", "%04d.hdr"
-                )
-                out = mpath.vvmxd[_name]
-            else:
-                mpath.vvmx[_name] = Path(
-                    "Matrices", f"vvmx_{model.name}_{_name}", "%04d.hdr"
-                )
-                out = mpath.vvmx[_name]
-            out.parent.mkdir(exist_ok=True)
-            vrcvr_windows += matrix.surface_as_receiver(
-                prim_list=window_prim,
-                basis=config["SimControl"]["vmx_basis"],
-                source="glow",
-                out=out,
-            )
-        if direct:
-            exists = all(
-                any(d.iterdir()) for d in mpath.vvmxd[_name].parents[1].glob("vvmx*_d")
-            )
-        else:
-            exists = all(
-                any(d.iterdir())
-                for d in mpath.vvmx[_name].parents[1].glob("vvmx*[!_d]")
-            )
-        if (not exists) or overwrite:
-            logger.info("Computing%s image-based view matrix", direct_msg)
-            matrix.rfluxmtx(sender_view, vrcvr_windows, _env, utils.opt2list(_opt))
+@dataclass
+class ViewConfig:
+    file: Union[str, Path] = ""
+    view: Union[pr.View, str] = field(default_factory=str)
+    xres: int = 512
+    yres: int = 512
+    file_mtime: float = field(init=False, default=0.0)
+
+    def __post_init__(self):
+        if self.file != "":
+            self.file_mtime = os.path.getmtime(self.file)
+        if not isinstance(self.file, Path):
+            self.file = Path(self.file)
+        if self.file.exists() and self.view == "":
+            self.view = pr.load_views(self.file)[0]
+        elif not isinstance(self.view, pr.View):
+            self.view = parse_view(self.view)
 
 
-def daylight_matrix(
-    mpath: MradPath, model: MradModel, config: ConfigParser, direct: bool = False
-) -> None:
-    """Call rfluxmtx to generate daylight matrices for each sender surface."""
-    logger.info("Computing daylight matrix...")
-    dmx_opt = config["SimControl"].getoptions("dmx_opt")
-    dmx_opt["n"] = config["SimControl"].getint("nprocess")
-    dmx_env = [model.material_path, *config["Model"].getpaths("scene")]
-    if direct:
-        dmx_opt["ab"] = 0
-        dmx_env = [model.material_path, model.black_env_path]
-    for sname, surface_primitives in model.window_groups.items():
-        _name = sname
-        if direct:
-            mpath.dmxd[sname] = Path("Matrices", f"dmx_{model.name}_{_name}_d.mtx")
-            out = mpath.dmxd[sname]
-        else:
-            mpath.dmx[sname] = Path("Matrices", f"dmx_{model.name}_{_name}.mtx")
-            out = mpath.dmx[sname]
-        if regen(out, config):
-            logger.info("Generating daylight matrix for %s", _name)
-            sndr_window = matrix.surface_as_sender(
-                prim_list=surface_primitives, basis=config["SimControl"]["vmx_basis"]
-            )
-            receiver_sky = matrix.sky_as_receiver(
-                config["SimControl"]["smx_basis"], out
-            )
-            matrix.rfluxmtx(sndr_window, receiver_sky, dmx_env, utils.opt2list(dmx_opt))
+@dataclass
+class Settings:
+    name: str = field(default="")
+    num_processors: int = 1
+    method: str = field(default="3phase")
+    overwrite: bool = False
+    save_matrices: bool = False
+    sky_basis: str = field(default="r1")
+    window_basis: str = field(default="kf")
+    non_coplanar_basis: str = field(default="kf")
+    sun_basis: str = field(default="r6")
+    sun_culling: bool = field(default=True)
+    separate_direct: bool = field(default=False)
+    epw_file: str = field(default="")
+    wea_file: str = field(default="")
+    start_hour: int = field(default=8)
+    end_hour: int = field(default=18)
+    daylight_hours_only: bool = True
+    latitude: int = field(default=37)
+    longitude: int = field(default=122)
+    time_zone: int = field(default=120)
+    orientation: int = field(default=0)
+    site_elevation: int = field(default=100)
+    sensor_sky_matrix: List[str] = field(
+        default_factory=lambda: ["-ab", "6", "-ad", "8192", "-lw", "5e-5"]
+    )
+    sensor_sun_matrix: List[str] = field(
+        default_factory=lambda: [
+            "-ab",
+            "1",
+            "-ad",
+            "256",
+            "-lw",
+            "1e-3",
+            "-dj",
+            "0",
+            "-st",
+            "0",
+        ]
+    )
+    view_sun_matrix: List[str] = field(
+        default_factory=lambda: [
+            "-ab",
+            "1",
+            "-ad",
+            "256",
+            "-lw",
+            "1e-3",
+            "-dj",
+            "0",
+            "-st",
+            "0",
+        ]
+    )
+    view_sky_matrix: List[str] = field(
+        default_factory=lambda: ["-ab", "6", "-ad", "8192", "-lw", "5e-5"]
+    )
+    daylight_matrix: List[str] = field(
+        default_factory=lambda: ["-ab", "2", "-c", "5000"]
+    )
+    sensor_window_matrix: List[str] = field(
+        default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
+    )
+    view_window_matrix: List[str] = field(
+        default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
+    )
+    files_mtime: List[float] = field(init=False, default_factory=list)
+
+    def __post_init__(self):
+        if self.wea_file != "":
+            self.files_mtime.append(os.path.getmtime(self.wea_file))
+        if self.epw_file != "":
+            self.files_mtime.append(os.path.getmtime(self.epw_file))
 
 
-def blacken_env(model: MradModel, config: ConfigParser) -> Tuple[str, str]:
-    """."""
-    bwindow_path = f"blackened_window_{utils.id_generator()}.rad"
-    gwindow_path = f"glowing_window_{utils.id_generator()}.rad"
-    blackened_window = []
-    glowing_window = []
-    for _, windows in model.window_groups.items():
-        for window in windows:
-            blackened_window.append(
-                pr.Primitive(
-                    "black",
-                    window.ptype,
-                    window.identifier,
-                    window.sargs,
-                    window.fargs,
-                )
-            )
-            glowing_window.append(
-                pr.Primitive(
-                    "glowing",
-                    window.ptype,
-                    window.identifier,
-                    window.sargs,
-                    window.fargs,
-                )
-            )
-    with open(bwindow_path, "w", encoding="ascii") as wtr:
-        wtr.write("\n".join(list(map(str, blackened_window))))
-    with open(gwindow_path, "w", encoding="ascii") as wtr:
-        wtr.write("\n".join(list(map(str, glowing_window))))
-    vmap_oct = f"vmap_{utils.id_generator()}.oct"
-    cdmap_oct = f"cdmap_{utils.id_generator()}.oct"
-    with open(vmap_oct, "wb") as wtr:
-        wtr.write(
-            pr.oconv(
-                str(model.material_path),
-                *[str(s) for s in config["Model"].getpaths("scene")],
-                gwindow_path,
-                frozen=True,
-            )
-        )
-    logger.info("Generating view matrix material map octree")
-    with open(cdmap_oct, "wb") as wtr:
-        wtr.write(
-            pr.oconv(
-                str(model.material_path),
-                *[str(s) for s in config["Model"].getpaths("scene")],
-                bwindow_path,
-                frozen=True,
-            )
-        )
-    logger.info("Generating direct-sun matrix material map octree")
-    os.remove(bwindow_path)
-    os.remove(gwindow_path)
-    return vmap_oct, cdmap_oct
+@dataclass
+class Model:
+    scene: "SceneConfig"
+    windows: Dict[str, "WindowConfig"]
+    materials: "MaterialConfig"
+    sensors: Dict[str, "SensorConfig"]
+    views: Dict[str, "ViewConfig"]
+
+    # Make Path() out of all path strings
+    def __post_init__(self):
+        if isinstance(self.scene, dict):
+            self.scene = SceneConfig(**self.scene)
+        if isinstance(self.materials, dict):
+            self.materials = MaterialConfig(**self.materials)
+        for k, v in self.windows.items():
+            if isinstance(v, dict):
+                self.windows[k] = WindowConfig(**v)
+        for k, v in self.sensors.items():
+            if isinstance(v, dict):
+                self.sensors[k] = SensorConfig(**v)
+        for k, v in self.views.items():
+            if isinstance(v, dict):
+                self.views[k] = ViewConfig(**v)
 
 
-def direct_sun_matrix_pt(
-    mpath: MradPath, model: MradModel, config: ConfigParser
-) -> None:
-    """Compute direct sun matrix for sensor points.
-    Args:
-        smx_path: path to sun only sky matrix
-    Returns:
-        path to resulting direct sun matrix
+@dataclass
+class WorkflowConfig:
+    settings: "Settings"
+    model: "Model"
+    hash_str: str = field(init=False)
+
+    def __post_init__(self):
+        if isinstance(self.settings, dict):
+            self.settings = Settings(**self.settings)
+        if isinstance(self.model, dict):
+            self.model = Model(**self.model)
+        self.hash_str = hashlib.md5(str(self.__dict__).encode()).hexdigest()[:16]
+
+    @staticmethod
+    def from_dict(obj: Dict[str, Any]) -> "WorkflowConfig":
+        settings = Settings(**obj["settings"])
+        model = Model(**obj["model"])
+        return WorkflowConfig(settings, model)
+
+
+class PhaseMethod:
+    """
+    Base class for phase methods.
+    This class is not meant to be used directly.
     """
 
-    logger.info("Direct sun matrix for sensor grid")
-    cdsenv = [model.material_path, model.black_env_path, *model.cfs_paths]
-    _cfs_name = "".join([Path(cfs).stem for cfs in model.cfs_paths])
-    for grid_name, sender_grid in model.sender_grid.items():
-        mpath.pcdsmx[grid_name] = Path(
-            "Matrices", f"pcdsmx_{model.name}_{grid_name}_{_cfs_name}.mtx"
+    def __init__(self, config):
+        """
+        Initialize a phase method.
+
+        Args:
+            config: A WorkflowConfig object.
+
+        """
+        self.config = config
+
+        # Setup the view and sensor senders
+        self.view_senders = {}
+        self.sensor_senders = {}
+        for name, sensors in self.config.model.sensors.items():
+            self.sensor_senders[name] = SensorSender(sensors.data)
+        for name, view in self.config.model.views.items():
+            self.view_senders[name] = ViewSender(
+                view.view, xres=view.xres, yres=view.yres
+            )
+
+        # Setup the sky receiver object
+        self.sky_receiver = SkyReceiver(self.config.settings.sky_basis)
+
+        # Figure out the weather related stuff
+        if self.config.settings.epw_file != "":
+            with open(self.config.settings.epw_file) as f:
+                self.wea_metadata, self.wea_data = parse_epw(f.read())
+            self.wea_header = self.wea_metadata.wea_header()
+            self.wea_str = self.wea_header + "\n".join(str(d) for d in self.wea_data)
+        elif self.config.settings.wea_file != "":
+            with open(self.config.settings.wea_file) as f:
+                self.wea_metadata, self.wea_data = parse_wea(f.read())
+            self.wea_header = self.wea_metadata.wea_header()
+            self.wea_str = self.wea_header + "\n".join(str(d) for d in self.wea_data)
+        else:
+            if (
+                self.config.settings.latitude is None
+                or self.config.settings.longitude is None
+            ):
+                raise ValueError(
+                    "Latitude and longitude must be specified if no weather file is given"
+                )
+            self.wea_header = (
+                f"place {self.config.settings.latitude}_{self.config.settings.longitude}\n"
+                f"latitude {self.config.settings.latitude}\n"
+                f"longitude {self.config.settings.longitude}\n"
+                f"time_zone {self.config.settings.time_zone}\n"
+                f"site_elevation {self.config.settings.site_elevation}\n"
+                f"weather_data_file_units 1\n"
+            )
+            self.wea_metadata = WeaMetaData(
+                "city",
+                "country",
+                self.config.settings.latitude,
+                self.config.settings.longitude,
+                self.config.settings.time_zone,
+                self.config.settings.site_elevation,
+            )
+
+        # Setup Temp and Octrees directory
+        self.tmpdir = Path("Temp")
+        self.tmpdir.mkdir(exist_ok=True)
+        self.octdir = Path("Octrees")
+        self.octdir.mkdir(exist_ok=True)
+        self.mtxdir = Path("Matrices")
+        self.mtxdir.mkdir(exist_ok=True)
+        self.mfile = (self.mtxdir / self.config.hash_str).with_suffix(".npz")
+
+        # Generate a base octree
+        self.octree = self.octdir / f"{random_string(5)}.oct"
+
+    def __enter__(self):
+        """
+        Context manager enter method. This method is called when
+        the class is used as a context manager. Anything happens
+        after the with statement is run.
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        """
+        Context manager exit method. This method is called when
+        the class is used as a context manager. Cleans up the
+        Temp and Octrees directory.
+        """
+        rmtree("Octrees")
+        rmtree("Matrices")
+        rmtree("Temp")
+
+    def generate_matrices(self):
+        raise NotImplementedError
+
+    def calculate_view(self, view, time, dni, dhi):
+        raise NotImplementedError
+
+    def calculate_sensor(self, sensor, time, dni, dhi):
+        raise NotImplementedError
+
+    def get_sky_matrix(self, time, dni, dhi):
+        _wea = self.wea_header
+        _wea += str(WeaData(time, dni, dhi))
+        smx = pr.gendaymtx(
+            _wea.encode(),
+            outform="d",
+            mfactor=int(self.config.settings.sky_basis[-1]),
+            header=False,
         )
-        if regen(mpath.pcdsmx[grid_name], config):
-            logger.info("Generating using rcontrib...")
-            rcvr_sun = matrix.sun_as_receiver(
-                basis="r6",
-                smx_path=mpath.smx_sun,
-                window_normals=model.window_normals,
+        return load_binary_matrix(
+            smx,
+            nrows=BASIS_DIMENSION[self.config.settings.sky_basis] + 1,
+            ncols=1,
+            ncomp=3,
+            dtype="d",
+        )
+
+    def get_sky_matrix_from_wea(self, mfactor: int, sun_only=False, onesun=False):
+        if self.wea_str is None:
+            raise ValueError("No weather string available")
+        _sun_str = pr.gendaymtx(
+            self.wea_str.encode(),
+            sun_file="-",
+            dryrun=True,
+            daylight_hours_only=True,
+        )
+        prims = pr.parse_primitive(_sun_str.decode())
+        _datetimes = [
+            minutes_to_datetime(2023, int(p.identifier.lstrip("solar")))
+            for p in prims
+            if p.ptype == "light"
+        ]
+        _matrix = pr.gendaymtx(
+            self.wea_str.encode(),
+            sun_only=sun_only,
+            onesun=onesun,
+            outform="d",
+            daylight_hours_only=True,
+            mfactor=mfactor,
+        )
+        _nrows, _ncols, _ncomp, _dtype = parse_rad_header(pr.getinfo(_matrix).decode())
+        return load_binary_matrix(
+            _matrix,
+            nrows=_nrows,
+            ncols=_ncols,
+            ncomp=_ncomp,
+            dtype=_dtype,
+            header=True,
+        )
+
+    def save_matrices(self):
+        raise NotImplementedError
+
+
+class TwoPhaseMethod(PhaseMethod):
+    """
+    Implements two phase method
+    """
+
+    def __init__(self, config):
+        """
+        Initializes the two phase method
+        Args:
+            config: A WorkflowConfig object
+        """
+        super().__init__(config)
+        oct_stdin = config.model.materials.bytes + config.model.scene.bytes
+        for window in config.model.windows.values():
+            oct_stdin += window.bytes
+        with open(self.octree, "wb") as f:
+            f.write(
+                pr.oconv(
+                    *config.model.materials.files,
+                    *config.model.scene.files,
+                    stdin=oct_stdin,
+                )
+            )
+        self.view_sky_matrices = {}
+        self.sensor_sky_matrices = {}
+        for vs in self.view_senders:
+            self.view_sky_matrices[vs] = Matrix(
+                self.view_senders[vs], [self.sky_receiver], self.octree
+            )
+        for ss in self.sensor_senders:
+            self.sensor_sky_matrices[ss] = Matrix(
+                self.sensor_senders[ss], [self.sky_receiver], self.octree
+            )
+
+    def generate_matrices(self) -> None:
+        """
+        Generate matrices for all view and sensor points
+        Args:
+            save: Save matrices to a .npz file
+            overwrite: Overwrite existing matrices
+        """
+        # First check if matrices files already exist
+        if self.mfile.exists() and (not self.config.settings.overwrite):
+            self.load_matrices()
+            return
+        # Then check if overwrite is set to True
+        for _, mtx in self.view_sky_matrices.items():
+            mtx.generate(
+                self.config.settings.view_sky_matrix,
+                nproc=self.config.settings.num_processors,
+            )
+        for _, mtx in self.sensor_sky_matrices.items():
+            mtx.generate(
+                self.config.settings.sensor_sky_matrix,
+                nproc=self.config.settings.num_processors,
+            )
+        if self.config.settings.save_matrices:
+            self.save_matrices()
+
+    def load_matrices(self):
+        """
+        Load matrices from a .npz file
+        """
+        logger.info(f"Loading matrices from {self.mfile}")
+        if not self.mfile.exists():
+            raise FileNotFoundError("Matrices file not found")
+        mdata = np.load(self.mfile)
+        for view, mtx in self.view_sky_matrices.items():
+            mtx.array = mdata[f"{view}_sky_matrix"]
+        for sensor, mtx in self.sensor_sky_matrices.items():
+            mtx.array = mdata[f"{sensor}_sky_matrix"]
+
+    def calculate_view(self, view, time, dni, dhi):
+        sky_matrix = self.get_sky_matrix(time, dni, dhi)
+        return matrix_multiply_rgb(self.view_sky_matrices[view].array, sky_matrix)
+
+    def calculate_sensor(self, sensor, time, dni, dhi):
+        sky_matrix = self.get_sky_matrix(time, dni, dhi)
+        return matrix_multiply_rgb(
+            self.sensor_sky_matrices[sensor].array,
+            sky_matrix,
+            weights=[47.4, 119.9, 11.6],
+        )
+
+    def calculate_view_from_wea(self, view):
+        if self.wea_data is None:
+            raise ValueError("No wea data available")
+        sky_matrix = self.get_sky_matrix_from_wea(
+            int(self.config.settings.sky_basis[-1])
+        )
+        # arbitrary chunksize
+        chunksize = 300
+        shape = (
+            self.view_sky_matrices[view].nrows,
+            sky_matrix.shape[1],
+            3,
+        )
+        final = np.memmap(
+            f"{view}_2ph.dat", shape=shape, dtype=np.float64, mode="w+", order="F"
+        )
+        for idx in range(0, sky_matrix.shape[1], chunksize):
+            end = min(idx + chunksize, sky_matrix.shape[1])
+            _chunksize = end - idx
+            res = matrix_multiply_rgb(
+                self.view_sky_matrices[view].array,
+                sky_matrix[:, idx:end, :],
+            )
+            final[:, idx:end, 0] = res[:, :, 0]
+            final[:, idx:end, 1] = res[:, :, 1]
+            final[:, idx:end, 2] = res[:, :, 2]
+            final.flush()
+        return final
+
+    def calculate_sensor_from_wea(self, sensor):
+        if self.wea_data is None:
+            raise ValueError("No wea data available")
+        return matrix_multiply_rgb(
+            self.sensor_sky_matrices[sensor].array,
+            self.get_sky_matrix_from_wea(int(self.config.settings.sky_basis[-1])),
+            weights=[47.4, 119.9, 11.6],
+        )
+
+    def save_matrices(self):
+        """
+        """
+        matrices = {}
+        for view, mtx in self.view_sky_matrices.items():
+            matrices[f"{view}_sky_matrix"] = mtx.array
+        for sensor, mtx in self.sensor_sky_matrices.items():
+            matrices[f"{sensor}_sky_matrix"] = mtx.array
+        np.savez(self.mtxdir / self.config.hash_str, **matrices)
+
+
+class ThreePhaseMethod(PhaseMethod):
+    def __init__(self, config):
+        super().__init__(config)
+        with open(self.octree, "wb") as f:
+            f.write(
+                pr.oconv(
+                    *config.model.materials.files,
+                    *config.model.scene.files,
+                    stdin=config.model.materials.bytes + config.model.scene.bytes,
+                )
+            )
+        self.window_senders = {}
+        self.window_receivers = {}
+        self.window_bsdfs = {}
+        self.daylight_matrices = {}
+        for _name, window in self.config.model.windows.items():
+            _prims = pr.parse_primitive(window.bytes.decode())
+            if window.matrix_file != "":
+                self.window_bsdfs[_name] = load_matrix(window.matrix_file)
+                window_basis = [
+                    k
+                    for k, v in BASIS_DIMENSION.items()
+                    if v == self.window_bsdfs[_name].shape[0]
+                ][0]
+            elif window.matrix_data != []:
+                self.window_bsdfs[_name] = np.array(window.matrix_data)
+            else:
+                # raise ValueError("No matrix data or file available", _name)
+                logger.warning("No matrix data or file available", _name)
+            if _name in self.window_bsdfs:
+                window_basis = [
+                    k
+                    for k, v in BASIS_DIMENSION.items()
+                    if v == self.window_bsdfs[_name].shape[0]
+                ][0]
+            else:
+                window_basis = self.config.settings.window_basis
+            self.window_receivers[_name] = SurfaceReceiver(
+                _prims,
+                window_basis,
+            )
+            self.window_senders[_name] = SurfaceSender(_prims, window_basis)
+            self.daylight_matrices[_name] = Matrix(
+                self.window_senders[_name],
+                [self.sky_receiver],
+                self.octree,
+            )
+        self.view_window_matrices = {}
+        self.sensor_window_matrices = {}
+        for _v, sender in self.view_senders.items():
+            self.view_window_matrices[_v] = Matrix(
+                sender, list(self.window_receivers.values()), self.octree
+            )
+        for _s, sender in self.sensor_senders.items():
+            self.sensor_window_matrices[_s] = Matrix(
+                sender, list(self.window_receivers.values()), self.octree
+            )
+
+    def generate_matrices(self, view_matrices=True):
+        """
+        view_matrices: Toggle to generate view matrices. Toggle it off can be useful for
+        not needing the view matrices but still need the view data for things like
+        edgps calculation.
+        """
+        if self.mfile.exists() and (not self.config.settings.overwrite):
+            self.load_matrices()
+            return
+        if view_matrices:
+            for _, mtx in self.view_window_matrices.items():
+                mtx.generate(self.config.settings.view_window_matrix)
+        for _, mtx in self.sensor_window_matrices.items():
+            mtx.generate(self.config.settings.sensor_window_matrix)
+        for _, mtx in self.daylight_matrices.items():
+            mtx.generate(self.config.settings.daylight_matrix)
+        if self.config.settings.save_matrices:
+            self.save_matrices()
+
+    def load_matrices(self):
+        """
+        """
+        logger.info(f"Loading matrices from {self.mfile}")
+        mdata = np.load(self.mfile)
+        for view, mtx in self.view_window_matrices.items():
+            if (key := f"{view}_window_matrix") in mdata:
+                mtx.array = mdata[key]
+        for sensor, mtx in self.sensor_window_matrices.items():
+            mtx.array = mdata[f"{sensor}_window_matrix"]
+        for name, mtx in self.daylight_matrices.items():
+            mtx.array = mdata[f"{name}_daylight_matrix"]
+
+
+    def calculate_view(
+        self,
+        view: str,
+        bsdf: np.ndarray,
+        time: datetime,
+        dni: float,
+        dhi: float,
+    ):
+        sky_matrix = self.get_sky_matrix(time, dni, dhi)
+        res = []
+        if isinstance(bsdf, list):
+            if len(bsdf) != len(self.config.model.windows):
+                raise ValueError("Number of BSDF should match number of windows.")
+        for idx, _name in enumerate(self.config.model.windows):
+            _bsdf = bsdf[idx] if isinstance(bsdf, list) else bsdf
+            res.append(
+                matrix_multiply_rgb(
+                    self.view_window_matrices[view].array[idx],
+                    _bsdf,
+                    self.daylight_matrices[_name].array,
+                    sky_matrix,
+                )
+            )
+        return np.sum(res, axis=0)
+
+    def calculate_sensor(
+        self,
+        sensor: str,
+        bsdf: Union[np.ndarray, List[np.ndarray]],
+        time: datetime,
+        dni: float,
+        dhi: float,
+    ):
+        sky_matrix = self.get_sky_matrix(time, dni, dhi)
+        res = []
+        if isinstance(bsdf, list):
+            if len(bsdf) != len(self.config.model.windows):
+                raise ValueError("Number of BSDF should match number of windows.")
+        for idx, _name in enumerate(self.config.model.windows):
+            _bsdf = bsdf[idx] if isinstance(bsdf, list) else bsdf
+            res.append(
+                matrix_multiply_rgb(
+                    self.sensor_window_matrices[sensor].array[idx],
+                    _bsdf,
+                    self.daylight_matrices[_name].array,
+                    sky_matrix,
+                    weights=[47.4, 119.9, 11.6],
+                )
+            )
+        return np.sum(res, axis=0)
+
+    def calculate_view_from_wea(self, view: str):
+        if self.wea_data is None:
+            raise ValueError("No wea data available")
+        sky_matrix = self.get_sky_matrix_from_wea(
+            int(self.config.settings.sky_basis[-1])
+        )
+        # arbitrary chunksize
+        chunksize = 300
+        shape = (
+            self.view_senders[view].xres * self.view_senders[view].yres,
+            sky_matrix.shape[1],
+            3,
+        )
+        final = np.memmap(
+            f"{view}_3ph.dat", shape=shape, dtype=np.float64, mode="w+", order="F"
+        )
+        for idx in range(0, sky_matrix.shape[1], chunksize):
+            end = min(idx + chunksize, sky_matrix.shape[1])
+            _chunksize = end - idx
+            res = np.zeros(
+                (
+                    self.view_senders[view].xres * self.view_senders[view].yres,
+                    _chunksize,
+                    3,
+                )
+            )
+            for widx, _name in enumerate(self.config.model.windows):
+                res += matrix_multiply_rgb(
+                    self.view_window_matrices[view].array[widx],
+                    self.window_bsdfs[_name],
+                    self.daylight_matrices[_name].array,
+                    sky_matrix[:, idx:end, :],
+                )
+            final[:, idx:end, 0] = res[:, :, 0]
+            final[:, idx:end, 1] = res[:, :, 1]
+            final[:, idx:end, 2] = res[:, :, 2]
+            final.flush()
+        return final
+
+    def calculate_sensor_from_wea(self, sensor: str):
+        if self.wea_data is None:
+            raise ValueError("No wea data available")
+        sky_matrix = self.get_sky_matrix_from_wea(
+            int(self.config.settings.sky_basis[-1])
+        )
+        res = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
+        for idx, _name in enumerate(self.config.model.windows):
+            res += matrix_multiply_rgb(
+                self.sensor_window_matrices[sensor].array[idx],
+                self.window_bsdfs[_name],
+                self.daylight_matrices[_name].array,
+                sky_matrix,
+                weights=[47.4, 119.9, 11.6],
+            )
+        return res
+
+    def calculate_edgps(
+        self,
+        view: str,
+        shades: Union[List[pr.Primitive], List[str]],
+        bsdf,
+        date_time,
+        dni,
+        dhi,
+        ambient_bounce=1,
+    ):
+        """
+        Calculate enhanced simplified daylight glare probability (EDGPs) for a view.
+        Args:
+            view: view name, must be in config.model.views
+            shades: list of shades, either primitves or file paths. This is used
+            for high resolution direct sun calculation.
+            bsdf: bsdf matrix, either a single matrix or a list of matrices depending
+            on the number of windows This is used to calculate the vertical illuminance.
+            date_time: datetime object
+            dni: direct normal irradiance
+            dhi: diffuse horizontal irradiance
+            ambient_bounce: ambient bounce, default to 1. Could be set to zero for
+            macroscopic non-scattering systems.
+        Returns:
+            EDGPs
+        """
+        # generate octree with bsdf
+        stdin = b""
+        stdin += gen_perez_sky(
+            date_time,
+            self.wea_metadata.latitude,
+            self.wea_metadata.longitude,
+            self.wea_metadata.timezone,
+            dni,
+            dhi,
+        )
+        if isinstance(shades[0], pr.Primitive):
+            for shade in shades:
+                stdin += shade.bytes
+        elif isinstance(shades[0], (str, Path)):
+            _shades = shades
+        else:
+            _shades = []
+        octree = "test.oct"
+        with open(octree, "wb") as f:
+            f.write(pr.oconv(*shades, stdin=stdin, octree=self.octree))
+        # render image with -ab 1
+        params = ["-ab", f"{ambient_bounce}"]
+        hdr = pr.rpict(
+            self.view_senders[view].view.args(),
+            octree,
+            # fix resolution. Evalglare would complain if resolution too small
+            xres=800,
+            yres=800,
+            params=params,
+        )
+        ev = self.calculate_sensor(
+            view,
+            bsdf,
+            date_time,
+            dni,
+            dhi,
+        )
+        res = pr.evalglare(hdr, ev=float(ev))
+        edgps = float(res.split(b":")[1].split()[0])
+        return edgps
+
+    def save_matrices(self):
+        matrices = {}
+        for view, mtx in self.view_window_matrices.items():
+            matrices[f"{view}_window_matrix"] = mtx.array
+        for sensor, mtx in self.sensor_window_matrices.items():
+            matrices[f"{sensor}_window_matrix"] = mtx.array
+        for window, mtx in self.daylight_matrices.items():
+            matrices[f"{window}_daylight_matrix"] = mtx.array
+        np.savez(self.mfile, **matrices)
+
+
+class FivePhaseMethod(PhaseMethod):
+    def __init__(self, config):
+        super().__init__(config)
+        with open(self.octree, "wb") as f:
+            f.write(
+                pr.oconv(
+                    *config.model.materials.files,
+                    *config.model.scene.files,
+                    stdin=(config.model.materials.bytes + config.model.scene.bytes),
+                )
+            )
+        self.blacked_out_octree = self.octdir / f"{random_string(5)}.oct"
+        self.vmap_oct = self.octdir / f"vmap_{random_string(5)}.oct"
+        self.cdmap_oct = self.octdir / f"cdmap_{random_string(5)}.oct"
+        self.window_senders = {}
+        self.window_receivers = {}
+        self.window_bsdfs = {}
+        self.view_window_matrices = {}
+        self.sensor_window_matrices = {}
+        self.daylight_matrices = {}
+        self.view_window_direct_matrices = {}
+        self.sensor_window_direct_matrices = {}
+        self.daylight_direct_matrices = {}
+        self.sensor_sun_direct_matrices = {}
+        self.view_sun_direct_matrices = {}
+        self.view_sun_direct_illuminance_matrices = {}
+        self.vmap = {}
+        self.cdmap = {}
+        self.direct_sun_matrix = self.get_sky_matrix_from_wea(
+            mfactor=int(self.config.settings.sun_basis[-1]), onesun=True, sun_only=True
+        )
+        self._prepare_window_objects()
+        self._prepare_sun_receivers()
+        self.direct_sun_matrix = to_sparse_matrix3(self.direct_sun_matrix)
+        self._gen_blacked_out_octree()
+        self._prepare_mapping_octrees()
+        self._prepare_view_sender_objects()
+        self._prepare_sensor_sender_objects()
+
+    def _gen_blacked_out_octree(self):
+        black_scene = b"\n".join(
+            pr.xform(s, modifier="black") for s in self.config.model.scene.files
+        )
+        if self.config.model.scene.bytes != b"":
+            black_scene += pr.xform(
+                self.config.model.scene.data.encode(), modifier="black"
+            )
+        black = pr.Primitive("void", "plastic", "black", [], [0, 0, 0, 0, 0])
+        glow = pr.Primitive("void", "glow", "glowing", [], [1, 1, 1, 0])
+        with open(self.blacked_out_octree, "wb") as f:
+            f.write(
+                pr.oconv(
+                    *self.config.model.materials.files,
+                    # *self.config.model.windows,
+                    stdin=self.config.model.materials.bytes
+                    + str(glow).encode()
+                    + str(black).encode()
+                    + black_scene,
+                )
+            )
+
+    def _prepare_window_objects(self):
+        for _name, window in self.config.model.windows.items():
+            _prims = pr.parse_primitive(window.bytes.decode())
+            self.window_receivers[_name] = SurfaceReceiver(
+                _prims, self.config.settings.window_basis
+            )
+            self.window_senders[_name] = SurfaceSender(
+                _prims, self.config.settings.window_basis
+            )
+            if window.matrix_file != "":
+                self.window_bsdfs[_name] = load_matrix(window.matrix_file)
+            elif window.matrix_data != []:
+                self.window_bsdfs[_name] = np.array(window.matrix_data)
+            else:
+                raise ValueError("No matrix data or file available", _name)
+            self.daylight_matrices[_name] = Matrix(
+                self.window_senders[_name],
+                [self.sky_receiver],
+                self.octree,
+            )
+            self.daylight_direct_matrices[_name] = Matrix(
+                self.window_senders[_name],
+                [self.sky_receiver],
+                self.blacked_out_octree,
+            )
+
+    def _prepare_view_sender_objects(self):
+        for _v, sender in self.view_senders.items():
+            self.vmap[_v] = load_binary_matrix(
+                pr.rtrace(
+                    sender.content,
+                    params=["-ffd", "-av", ".31831", ".31831", ".31831"],
+                    octree=self.vmap_oct,
+                ),
+                nrows=sender.xres * sender.yres,
+                ncols=1,
+                ncomp=3,
+                dtype="d",
+                header=True,
+            )
+            self.cdmap[_v] = load_binary_matrix(
+                pr.rtrace(
+                    sender.content,
+                    params=["-ffd", "-av", ".31831", ".31831", ".31831"],
+                    octree=self.cdmap_oct,
+                ),
+                nrows=sender.xres * sender.yres,
+                ncols=1,
+                ncomp=3,
+                dtype="d",
+                header=True,
+            )
+            self.view_window_matrices[_v] = Matrix(
+                sender, list(self.window_receivers.values()), self.octree
+            )
+            self.view_window_direct_matrices[_v] = Matrix(
+                sender, list(self.window_receivers.values()), self.blacked_out_octree
+            )
+            self.view_sun_direct_matrices[_v] = SunMatrix(
+                sender, self.view_sun_receiver, self.blacked_out_octree
+            )
+            self.view_sun_direct_illuminance_matrices[_v] = SunMatrix(
+                sender, self.view_sun_receiver, self.blacked_out_octree
+            )
+
+    def _prepare_sensor_sender_objects(self):
+        for _s, sender in self.sensor_senders.items():
+            self.sensor_window_matrices[_s] = Matrix(
+                sender, list(self.window_receivers.values()), self.octree
+            )
+            self.sensor_window_direct_matrices[_s] = Matrix(
+                sender, list(self.window_receivers.values()), self.blacked_out_octree
+            )
+            self.sensor_sun_direct_matrices[_s] = SunMatrix(
+                sender, self.sensor_sun_receiver, self.blacked_out_octree
+            )
+
+    def _prepare_sun_receivers(self):
+        if self.config.settings.sun_culling:
+            window_normals = [
+                parse_polygon(r.surfaces[0]).normal.tobytes()
+                for r in self.window_receivers.values()
+            ]
+            unique_window_normals = [np.frombuffer(arr) for arr in set(window_normals)]
+            self.sensor_sun_receiver = SunReceiver(
+                self.config.settings.sun_basis,
+                sun_matrix=self.direct_sun_matrix,
                 full_mod=True,
             )
-            cdsmx_opt = config["SimControl"].getoptions("cdsmx_opt")
-            cdsmx_opt["n"] = config["SimControl"].getint("nprocess")
-            sun_oct = Path(f"sun_{utils.id_generator()}.oct")
-            matrix.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
-            matrix.rcontrib(
-                sender_grid,
-                rcvr_sun.modifier,
-                sun_oct,
-                mpath.pcdsmx[grid_name],
-                utils.opt2list(cdsmx_opt),
+            self.view_sun_receiver = SunReceiver(
+                self.config.settings.sun_basis,
+                sun_matrix=self.direct_sun_matrix,
+                window_normals=unique_window_normals,
+                full_mod=False,
             )
-            sun_oct.unlink()
-
-
-def direct_sun_matrix_vu(
-    mpath: MradPath, model: MradModel, vmap_oct, cdmap_oct, config: ConfigParser
-) -> None:
-    """Compute direct sun matrix for images.
-    Args:
-        mpath:
-        model:
-        vmap_oct:
-        cdmap_oct:
-        config:
-    Returns:
-        None
-    """
-    logger.info("Direct sun matrix for view (image)")
-    rcvr_sun = matrix.sun_as_receiver(
-        basis="r6", smx_path=mpath.smx_sun_img, window_normals=model.window_normals
-    )
-    mod_names = [f"{int(line[3:]):04d}" for line in rcvr_sun.modifier.splitlines()]
-    sun_oct = Path(f"sun_{utils.id_generator()}.oct")
-    cdsenv = [model.material_path, model.black_env_path, *model.cfs_paths]
-    _cfs_name = "".join([Path(cfs).stem for cfs in model.cfs_paths])
-    matrix.rcvr_oct(rcvr_sun, cdsenv, sun_oct)
-    cdsmx_opt = config["SimControl"].getoptions("cdsmx_opt")
-    cdsmx_opt["n"] = config["SimControl"].getint("nprocess")
-    cdsmx_opt_list = utils.opt2list(cdsmx_opt)
-    for view, sndr in model.sender_view.items():
-        mpath.vmap[view] = Path("Matrices", f"vmap_{model.name}_{view}.hdr")
-        mpath.cdmap[view] = Path("Matrices", f"cdmap_{model.name}_{view}.hdr")
-        rpict_opt = pr.SamplingParameters()
-        rpict_opt.ps = 1
-        rpict_opt.ab = 0
-        rpict_opt.av = (0.31831, 0.31831, 0.31831)
-        with open(mpath.vmap[view], "wb") as wtr:
-            wtr.write(
-                pr.rpict(model.views[view].args(), vmap_oct, xres=model.views[view].xres, yres=model.views[view].yres, params=rpict_opt.args())
-            )
-        with open(mpath.cdmap[view], "wb") as wtr:
-            wtr.write(
-                pr.rpict(model.views[view].args(), cdmap_oct, xres=model.views[view].xres, yres=model.views[view].yres, params=rpict_opt.args())
-            )
-        mpath.vcdfmx[view] = Path("Matrices", f"vcdfmx_{model.name}_{view}_{_cfs_name}")
-        mpath.vcdrmx[view] = Path("Matrices", f"vcdrmx_{model.name}_{view}_{_cfs_name}")
-        tempf = Path("Matrices", "vcdfmx")
-        tempr = Path("Matrices", "vcdrmx")
-        if regen(mpath.vcdfmx[view], config):
-            logger.info("Generating direct sun f matrix for %s", view)
-            matrix.rcontrib(sndr, rcvr_sun.modifier, sun_oct, tempf, cdsmx_opt_list)
-            mpath.vcdfmx[view].mkdir(exist_ok=True)
-            for idx, file in enumerate(sorted(tempf.glob("*.hdr"))):
-                file.replace(mpath.vcdfmx[view] / (mod_names[idx] + ".hdr"))
-            shutil.rmtree(tempf)
-        if regen(mpath.vcdrmx[view], config):
-            logger.info("Generating direct sun r matrix for %s", view)
-            cdsmx_opt_list.append("-i+")
-            matrix.rcontrib(sndr, rcvr_sun.modifier, sun_oct, tempr, cdsmx_opt_list)
-            mpath.vcdrmx[view].mkdir(exist_ok=True)
-            for idx, file in enumerate(sorted(tempr.glob("*.hdr"))):
-                file.replace(mpath.vcdrmx[view] / (mod_names[idx] + ".hdr"))
-            shutil.rmtree(tempr)
-    sun_oct.unlink()
-
-
-def calc_2phase_pt(
-    mpath: MradPath,
-    model: MradModel,
-    datetime_stamps: Sequence[str],
-) -> None:
-    """."""
-    logger.info("Computing for 2-phase sensor grid results.")
-    for grid_name in mpath.pdsmx:
-        grid_lines = model.sender_grid[grid_name].sender.decode().strip().splitlines()
-        # we don't care about the direction part
-        xypos = [",".join(line.split()[:3]) for line in grid_lines]
-        opath = Path("Results", f"grid_{model.name}_{grid_name}.txt")
-        res = mtxmult.mtxmult(mpath.pdsmx[grid_name], mpath.smx)
-        if isinstance(res, bytes):
-            res = res.decode().splitlines()
         else:
-            res = ["\t".join(map(str, row)) for row in res.T.tolist()]
-        with open(opath, "w", encoding="utf-8") as wtr:
-            wtr.write("\t" + "\t".join(xypos) + "\n")
-            for idx, value in enumerate(res):
-                wtr.write(datetime_stamps[idx] + "\t")
-                wtr.write(value.rstrip() + "\n")
-
-
-def calc_2phase_vu(mpath: MradPath, model: MradModel, datetime_stamps) -> None:
-    """."""
-    logger.info("Computing for 2-phase image-based results")
-    for view in mpath.vdsmx:
-        opath = Path("Results", f"view_{model.name}_{view}")
-        if opath.is_dir():
-            shutil.rmtree(opath)
-        cmd = mtxmult.get_imgmult_cmd(mpath.vdsmx[view], mpath.smx, odir=opath)
-        logger.info(" ".join(cmd))
-        sp.run(cmd, check=True)
-        ofiles = sorted(opath.glob("*.hdr"))
-        for idx, val in enumerate(ofiles):
-            val.replace(opath / (datetime_stamps[idx] + ".hdr"))
-
-
-def calc_3phase_pt(
-    mpath: MradPath,
-    model: MradModel,
-    datetime_stamps: list,
-) -> None:
-    """."""
-    logger.info("Computing for 3-phase sensor grid results")
-    for grid_name in model.sender_grid:
-        presl = []
-        grid_lines = model.sender_grid[grid_name].sender.decode().strip().splitlines()
-        xyzpos = [",".join(line.split()[:3]) for line in grid_lines]
-        for wname in model.window_groups:
-            _res = mtxmult.mtxmult(
-                mpath.pvmx[grid_name + wname],
-                model.bsdf_xml[wname],
-                mpath.dmx[wname],
-                mpath.smx,
+            self.sensor_sun_receiver = SunReceiver(
+                self.config.settings.sun_basis, full_mod=True
             )
-            if isinstance(_res, bytes):
-                presl.append(
-                    [
-                        map(float, line.decode().strip().split("\t"))
-                        for line in _res.splitlines()
-                    ]
-                )
-            else:
-                presl.append(_res.T.tolist())
-        res = [[sum(tup) for tup in zip(*line)] for line in zip(*presl)]
-        respath = Path("Results", f"grid_{model.name}_{grid_name}.txt")
-        with open(respath, "w", encoding="utf-8") as wtr:
-            wtr.write("\t" + "\t".join(xyzpos) + "\n")
-            for idx, val in enumerate(res):
-                wtr.write(datetime_stamps[idx] + "\t")
-                wtr.write("\t".join(map(str, val)) + "\n")
-
-
-def calc_3phase_vu(
-    mpath: MradPath, model: MradModel, datetime_stamps, config: ConfigParser
-) -> None:
-    """."""
-    for view in model.sender_view:
-        opath = Path("Results", f"view_{model.name}_{view}")
-        if opath.is_dir():
-            shutil.rmtree(opath)
-        logger.info("Computing for 3-phase image-based results for %s", view)
-        vresl = []
-        for wname in model.window_groups:
-            _vrespath = Path("Results", f"{view}_{model.name}_{wname}")
-            _vrespath.mkdir(exist_ok=True)
-            cmd = mtxmult.get_imgmult_cmd(
-                mpath.vvmx[view + wname],
-                model.bsdf_xml[wname],
-                mpath.dmx[wname],
-                mpath.smx,
-                odir=_vrespath,
+            self.view_sun_receiver = SunReceiver(
+                self.config.settings.sun_basis, full_mod=False
             )
-            logger.info(" ".join(cmd))
-            sp.run(cmd, check=True)
-            vresl.append(_vrespath)
-        if len(vresl) > 1:
-            ops = ["+"] * (len(vresl) - 1)
-            mtxmult.batch_pcomb(
-                vresl, ops, opath, nproc=config.getint("SimControl", "nprocess")
-            )
-            for path in vresl:
-                shutil.rmtree(path)
-        else:
-            shutil.move(vresl[0], opath)
-        ofiles = sorted(opath.glob("*.hdr"))
-        for idx, ofile in enumerate(ofiles):
-            ofile.replace(opath / (datetime_stamps[idx] + ".hdr"))
 
-
-def calc_5phase_pt(
-    mpath: MradPath,
-    model: MradModel,
-    datetime_stamps: Sequence[str],
-) -> None:
-    """."""
-    logger.info("Computing sensor grid results")
-    for grid_name in model.sender_grid:
-        presl = []
-        pdresl = []
-        grid_lines = model.sender_grid[grid_name].sender.decode().strip().splitlines()
-        xyzpos = [",".join(line.split()[:3]) for line in grid_lines]
-        mult_cds = mtxmult.mtxmult(mpath.pcdsmx[grid_name], mpath.smx_sun)
-        if isinstance(mult_cds, bytes):
-            prescd = [
-                list(map(float, line.decode().strip().split("\t")))
-                for line in mult_cds.splitlines()
-            ]
-        else:
-            prescd = mult_cds.T.tolist()
-        for wname in model.window_groups:
-            _res = mtxmult.mtxmult(
-                mpath.pvmx[grid_name + wname],
-                model.bsdf_xml[wname],
-                mpath.dmx[wname],
-                mpath.smx,
-            )
-            _resd = mtxmult.mtxmult(
-                mpath.pvmxd[grid_name + wname],
-                model.bsdf_xml[wname],
-                mpath.dmxd[wname],
-                mpath.smxd,
-            )
-            if isinstance(_res, bytes):
-                _res = [
-                    map(float, line.decode().strip().split("\t"))
-                    for line in _res.splitlines()
-                ]
-                _resd = [
-                    map(float, line.decode().strip().split("\t"))
-                    for line in _resd.splitlines()
-                ]
-            else:
-                _res = _res.T.tolist()
-                _resd = _resd.T.tolist()
-            presl.append(_res)
-            pdresl.append(_resd)
-        pres3 = [[sum(tup) for tup in zip(*line)] for line in zip(*presl)]
-        pres3d = [[sum(tup) for tup in zip(*line)] for line in zip(*pdresl)]
-        res = [
-            [x - y + z for x, y, z in zip(a, b, c)]
-            for a, b, c in zip(pres3, pres3d, prescd)
-        ]
-        respath = Path("Results", f"grid_{model.name}_{grid_name}.txt")
-        with open(respath, "w", encoding="utf-8") as wtr:
-            wtr.write("\t" + "\t".join(xyzpos) + "\n")
-            for idx, val in enumerate(res):
-                wtr.write(datetime_stamps[idx] + "\t")
-                wtr.write("\t".join(map(str, val)) + "\n")
-
-
-def calc_5phase_vu(
-    mpath: MradPath,
-    model: MradModel,
-    datetime_stamps,
-    datetime_stamps_d6,
-    config: ConfigParser,
-) -> None:
-    """Compute for image-based 5-phase method result."""
-    nprocess = config.getint("SimControl", "nprocess")
-    for view in model.sender_view:
-        logger.info("Computing for image-based results for %s", view)
-        vresl = []
-        vdresl = []
-        with tf.TemporaryDirectory() as td:
-            vrescdr = Path(tf.mkdtemp(dir=td))
-            vrescdf = Path(tf.mkdtemp(dir=td))
-            vrescd = Path(tf.mkdtemp(dir=td))
-            cmds = []
-            if mpath.vcdrmx != {}:
-                cmds.append(
-                    mtxmult.get_imgmult_cmd(
-                        mpath.vcdrmx[view] / "%04d.hdr", mpath.smx_sun_img, odir=vrescdr
+    def _prepare_mapping_octrees(self):
+        blacked_out_windows = []
+        glowing_windows = []
+        for _, sender in self.window_senders.items():
+            for window in sender.surfaces:
+                blacked_out_windows.append(
+                    str(
+                        pr.Primitive(
+                            "black",
+                            window.ptype,
+                            window.identifier,
+                            window.sargs,
+                            window.fargs,
+                        )
                     )
                 )
-            if mpath.vcdfmx != {}:
-                cmds.append(
-                    mtxmult.get_imgmult_cmd(
-                        mpath.vcdfmx[view] / "%04d.hdr", mpath.smx_sun_img, odir=vrescdf
+                glowing_windows.append(
+                    str(
+                        pr.Primitive(
+                            "glowing",
+                            window.ptype,
+                            window.identifier,
+                            window.sargs,
+                            window.fargs,
+                        )
                     )
                 )
-            for wname in model.window_groups:
-                _vrespath = tf.mkdtemp(dir=td)
-                _vdrespath = tf.mkdtemp(dir=td)
-                cmds.append(
-                    mtxmult.get_imgmult_cmd(
-                        mpath.vvmx[view + wname],
-                        model.bsdf_xml[wname],
-                        mpath.dmx[wname],
-                        mpath.smx,
-                        odir=Path(_vrespath),
-                    )
-                )
-                cmds.append(
-                    mtxmult.get_imgmult_cmd(
-                        mpath.vvmxd[view + wname],
-                        model.bsdf_xml[wname],
-                        mpath.dmxd[wname],
-                        mpath.smxd,
-                        odir=Path(_vdrespath),
-                    )
-                )
-                vresl.append(Path(_vrespath))
-                vdresl.append(Path(_vdrespath))
-            logger.info("Multiplying matrices for images.")
-            for cmd in cmds:
-                logger.info(" ".join(cmd))
-            utils.batch_process(cmds, nproc=nprocess)
-            logger.info("Combine results for each window groups.")
-            res3 = Path(tf.mkdtemp(dir=td))
-            res3di = Path(tf.mkdtemp(dir=td))
-            res3d = Path(tf.mkdtemp(dir=td))
-            if len(model.window_groups) > 1:
-                ops = ["+"] * (len(vresl) - 1)
-                mtxmult.batch_pcomb(vresl, ops, res3, nproc=nprocess)
-                mtxmult.batch_pcomb(vdresl, ops, res3di, nproc=nprocess)
-            else:
-                for file in vresl[0].glob("*.hdr"):
-                    file.replace(res3 / file.name)
-                for file in vdresl[0].glob("*.hdr"):
-                    file.replace(res3di / file.name)
-            logger.info("Applying material reflectance map")
-            mtxmult.batch_pcomb(
-                [res3di, mpath.vmap[view]], ["*"], res3d, nproc=nprocess
-            )
-            mtxmult.batch_pcomb(
-                [vrescdr, mpath.cdmap[view], vrescdf],
-                ["*", "+"],
-                vrescd,
-                nproc=nprocess,
-            )
-            opath = Path("Results", f"view_{model.name}_{view}")
-            if opath.is_dir():
-                shutil.rmtree(opath)
-            logger.info("Assemble all phase results.")
-            res3_path = sorted(res3.glob("*.hdr"))
-            for idx, stamp in enumerate(datetime_stamps):
-                res3_path[idx].replace(res3 / (stamp + ".hdr"))
-            res3d_path = sorted(res3d.glob("*.hdr"))
-            for idx, stamp in enumerate(datetime_stamps):
-                res3d_path[idx].replace(res3d / (stamp + ".hdr"))
-            vrescd_path = sorted(vrescd.glob("*.hdr"))
-            for idx, stamp in enumerate(datetime_stamps_d6):
-                vrescd_path[idx].replace(vrescd / (stamp + ".hdr"))
-            opath.mkdir(exist_ok=True)
-            cmds = []
-            opaths = []
-            for hdr3 in os.listdir(res3):
-                if hdr3 in os.listdir(vrescd):
-                    opaths.append(opath / hdr3)
-                    cmds.append(
-                        [
-                            "pcomb",
-                            "-o",
-                            str(res3 / hdr3),
-                            "-s",
-                            "-1",
-                            "-o",
-                            str(res3d / hdr3),
-                            "-o",
-                            str(vrescd / hdr3),
-                        ]
-                    )
-                else:
-                    os.replace(res3 / hdr3, opath / hdr3)
-            if len(cmds) > 0:
-                utils.batch_process(cmds, opaths=opaths)
-            logger.info("Done computing for %s", view)
+        black = pr.Primitive("void", "plastic", "black", [], [0, 0, 0, 0, 0])
+        glow = pr.Primitive("void", "glow", "glowing", [], [1, 1, 1, 0])
+        blacked_out_windows = str(black) + " ".join(blacked_out_windows)
+        glowing_windows = str(glow) + " ".join(glowing_windows)
+        with open(self.vmap_oct, "wb") as wtr:
+            wtr.write(pr.oconv(stdin=glowing_windows.encode(), octree=self.octree))
+        logger.info("Generating view matrix material map octree")
+        with open(self.cdmap_oct, "wb") as wtr:
+            wtr.write(pr.oconv(stdin=blacked_out_windows.encode(), octree=self.octree))
+
+    def generate_matrices(self):
+        if self.mfile.exists():
+            if not self.config.settings.overwrite:
+                self.load_matrices()
+                return
+        logger.info("Generating matrices...")
+        logger.info("Step 1/5: Generating view matrices...")
+        for mtx in self.view_window_matrices.values():
+            mtx.generate(self.config.settings.view_window_matrix, memmap=True)
+        for mtx in self.sensor_window_matrices.values():
+            mtx.generate(self.config.settings.sensor_window_matrix)
+        logger.info("Step 2/5: Generating daylight matrices...")
+        for mtx in self.daylight_matrices.values():
+            mtx.generate(self.config.settings.daylight_matrix)
+        logger.info("Step 3/5: Generating direct view matrices...")
+        for _, mtx in self.view_window_direct_matrices.items():
+            mtx.generate(["-ab", "1"], sparse=True)
+        for _, mtx in self.sensor_window_direct_matrices.items():
+            mtx.generate(["-ab", "1"], sparse=True)
+        logger.info("Step 4/5: Generating direct daylight matrices...")
+        for _, mtx in self.daylight_direct_matrices.items():
+            mtx.generate(["-ab", "0"], sparse=True)
+        logger.info("Step 5/5: Generating direct sun matrices...")
+        for _, mtx in self.sensor_sun_direct_matrices.items():
+            mtx.generate(["-ab", "0"])
+        for _, mtx in self.view_sun_direct_matrices.items():
+            mtx.generate(["-ab", "0"])
+        for _, mtx in self.view_sun_direct_illuminance_matrices.items():
+            mtx.generate(["-ab", "0", "-i+"])
+        logger.info("Done!")
+        if self.config.settings.save_matrices:
+            self.save_matrices()
+
+    def load_matrices(self):
+        """
+        """
+        logger.info(f"Loading matrices from {self.mfile}")
+        mdata = np.load(self.mfile, allow_pickle=True)
+        for view, mtx in self.view_window_matrices.items():
+            mtx.array = mdata[f"{view}_window_matrix"] 
+        for sensor, mtx in self.sensor_window_matrices.items():
+            mtx.array = mdata[f"{sensor}_window_matrix"] 
+        for window, mtx in self.daylight_matrices.items():
+            mtx.array = mdata[f"{window}_daylight_matrix"] 
+        for view, mtx in self.view_window_direct_matrices.items():
+            mtx.array = mdata[f"{view}_window_direct_matrix"] 
+        for sensor, mtx in self.sensor_window_direct_matrices.items():
+            mtx.array = mdata[f"{sensor}_window_direct_matrix"] 
+        for window, mtx in self.daylight_direct_matrices.items():
+            mtx.array = mdata[f"{window}_daylight_direct_matrix"] 
+        for sensor, mtx in self.sensor_sun_direct_matrices.items():
+            mtx.array = mdata[f"{sensor}_sun_direct_matrix"] 
+        for view, mtx in self.view_sun_direct_matrices.items():
+            mtx.array = mdata[f"{view}_sun_direct_matrix"] 
+        for view, mtx in self.view_sun_direct_illuminance_matrices.items():
+            mtx.array = mdata[f"{view}_sun_direct_illuminance_matrix"] 
 
 
-def regen(path: Path, config) -> bool:
-    """
-    Decides whether to regenerate a file depending on
-    if the file already exists and if overwrite is on.
-    """
-    if path.is_file():
-        exist = True
-    elif path.is_dir():
-        exist = True
-    else:
-        exist = False
-    return (not exist) or config.getboolean("SimControl", "overwrite", fallback=False)
-
-
-def two_phase(model: MradModel, config: ConfigParser) -> MradPath:
-    """Two-phase simulation workflow."""
-    mpath = MradPath()
-    wea_meta, wea_data, wea_name = get_wea_data(config)
-    mpath.smx = Path("Matrices") / (wea_name + ".smx")
-    wea_data, datetime_stamps = sky.filter_wea(
-        wea_data,
-        wea_meta,
-        daylight_hours_only=config.getboolean("Site", "daylight_hours_only"),
-        start_hour=config.getfloat("Site", "start_hour"),
-        end_hour=config.getfloat("Site", "end_hour"),
-    )
-    if regen(mpath.smx, config):
-        with open(mpath.smx, "wb") as wtr:
-            wtr.write(
-                sky.genskymtx(
-                    mfactor=int(config["SimControl"]["smx_basis"][-1]),
-                    data=wea_data,
-                    meta=wea_meta,
-                    rotate=config["Site"].getfloat("orientation"),
-                )
-            )
-    prep_2phase_pt(mpath, model, config)
-    prep_2phase_vu(mpath, model, config)
-    if not config.getboolean("SimControl", "no_multiply", fallback=False):
-        calc_2phase_pt(mpath, model, datetime_stamps)
-        calc_2phase_vu(mpath, model, datetime_stamps)
-    return mpath
-
-
-def three_phase(
-    model: MradModel, config: ConfigParser, direct: bool = False
-) -> MradPath:
-    """3/5-phase simulation workflow."""
-    do_multiply = config.getboolean("SimControl", "no_multiply", fallback=False)
-    mpath = MradPath()
-    wea_meta, wea_data, wea_name = get_wea_data(config)
-    mpath.smx = Path("Matrices") / (wea_name + ".smx")
-    wea_data, datetime_stamps = sky.filter_wea(
-        wea_data,
-        wea_meta,
-        daylight_hours_only=config.getboolean("Site", "daylight_hours_only"),
-        start_hour=config.getfloat("Site", "start_hour"),
-        end_hour=config.getfloat("Site", "end_hour"),
-    )
-    if regen(mpath.smx, config):
-        with open(mpath.smx, "wb") as wtr:
-            wtr.write(
-                sky.genskymtx(
-                    mfactor=int(config["SimControl"]["smx_basis"][-1]),
-                    data=wea_data,
-                    meta=wea_meta,
-                    rotate=config["Site"].getfloat("orientation"),
-                )
-            )
-    view_matrix_pt(mpath, model, config)
-    view_matrix_vu(mpath, model, config)
-    daylight_matrix(mpath, model, config)
-    if direct:
-        if not (orientation := config["Site"].getfloat("orientation")) in (None, 0):
-            rotate_radians = math.radians(orientation)
-            rotated_window_normals = [
-                n.rotate_3d(geom.Vector(0, 0, 1), rotate_radians)
-                for n in model.window_normals
-            ]
-        wea_data_d6, datetime_stamps_d6 = sky.filter_wea(
-            wea_data,
-            wea_meta,
-            daylight_hours_only=False,
-            start_hour=0,
-            end_hour=0,
-            remove_zero=True,
-            window_normals=rotated_window_normals
-            if orientation
-            else model.window_normals,
+    def calculate_view_from_wea(self, view: str):
+        logger.info("Step 1/2: Generating sky matrix from wea")
+        sky_matrix = self.get_sky_matrix_from_wea(
+            int(self.config.settings.sky_basis[-1])
         )
-        mpath.smxd = Path("Matrices") / (wea_name + "_d.smx")
-        with open(mpath.smxd, "wb") as wtr:
-            wtr.write(
-                sky.genskymtx(
-                    mfactor=int(config["SimControl"]["smx_basis"][-1]),
-                    data=wea_data,
-                    meta=wea_meta,
-                    sun_only=True,
+        direct_sky_matrix = self.get_sky_matrix_from_wea(
+            int(self.config.settings.sky_basis[-1]), sun_only=True
+        )
+        direct_sky_matrix = to_sparse_matrix3(direct_sky_matrix)
+        logger.info("Step 2/2: Multiplying matrices...")
+        chunksize = 300
+        shape = (
+            self.view_window_matrices[view].nrows,
+            sky_matrix.shape[1],
+            3,
+        )
+        res = np.memmap(
+            f"{view}_5ph.dat", shape=shape, dtype=np.float64, mode="w+", order="F"
+        )
+        for idx in range(0, sky_matrix.shape[1], chunksize):
+            end = min(idx + chunksize, sky_matrix.shape[1])
+            _res = [[], [], []]
+            for widx, _name in enumerate(self.config.model.windows):
+                for c in range(3):
+                    tdmx = np.dot(
+                        self.window_bsdfs[_name][:, :, c],
+                        self.daylight_matrices[_name].array[:, :, c],
+                    )
+                    tdsmx = np.dot(tdmx, sky_matrix[:, idx:end, c])
+                    vtdsmx = np.dot(
+                        self.view_window_matrices[view].array[widx][:, :, c], tdsmx
+                    )
+                    tdmx = np.dot(
+                        csr_matrix(self.window_bsdfs[_name][:, :, c]),
+                        self.daylight_direct_matrices[_name].array[c],
+                    )
+                    tdsmx = np.dot(tdmx, direct_sky_matrix[c][:, idx:end])
+                    vtdsmx_d = np.dot(
+                        self.view_window_direct_matrices[view].array[widx][c], tdsmx
+                    )
+                    _res[c].append(vtdsmx - vtdsmx_d.toarray())
+            for c in range(3):
+                cdr = np.dot(
+                    self.view_sun_direct_matrices[view].array[c],
+                    self.direct_sun_matrix[c][:, idx:end],
                 )
-            )
-        mpath.smx_sun_img = Path("Matrices") / (wea_name + "_d6_img.smx")
-        with open(mpath.smx_sun_img, "wb") as wtr:
-            wtr.write(
-                sky.genskymtx(
-                    mfactor=int(config["SimControl"]["cdsmx_basis"][-1]),
-                    data=wea_data_d6,
-                    meta=wea_meta,
-                    rotate=config["Site"].getfloat("orientation"),
-                    onesun=True,
-                    sun_only=True,
+                cdf = np.dot(
+                    self.view_sun_direct_illuminance_matrices[view].array[c],
+                    self.direct_sun_matrix[c][:, idx:end],
+                ).multiply(csr_matrix(self.cdmap[view][:, :, c]))
+                res[:, idx:end, c] = (
+                    np.sum(_res[c], axis=0) + cdr.toarray() + cdf.toarray()
                 )
+            res.flush()
+        return res
+
+    def calculate_sensor_from_wea(self, sensor):
+        sky_matrix = self.get_sky_matrix_from_wea(
+            int(self.config.settings.sky_basis[-1])
+        )
+        direct_sky_matrix = self.get_sky_matrix_from_wea(
+            int(self.config.settings.sky_basis[-1]), sun_only=True
+        )
+        direct_sky_matrix = to_sparse_matrix3(direct_sky_matrix)
+        res3 = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
+        res3d = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
+        for idx, _name in enumerate(self.config.model.windows):
+            res3 += matrix_multiply_rgb(
+                self.sensor_window_matrices[sensor].array[idx],
+                self.window_bsdfs[_name],
+                self.daylight_matrices[_name].array,
+                sky_matrix,
+                weights=[47.4, 119.9, 11.6],
             )
-        mpath.smx_sun = Path("Matrices") / (wea_name + "_d6.smx")
-        with open(mpath.smx_sun, "wb") as wtr:
-            wtr.write(
-                sky.genskymtx(
-                    mfactor=int(config["SimControl"]["cdsmx_basis"][-1]),
-                    data=wea_data,
-                    meta=wea_meta,
-                    rotate=config["Site"].getfloat("orientation"),
-                    onesun=True,
-                    sun_only=True,
-                )
+            res3d += sparse_matrix_multiply_rgb_vtds(
+                self.sensor_window_direct_matrices[sensor].array[idx],
+                self.window_bsdfs[_name],
+                self.daylight_direct_matrices[_name].array,
+                direct_sky_matrix,
+                weights=[47.4, 119.9, 11.6],
             )
-        vmap_oct, cdmap_oct = blacken_env(model, config)
-        direct_sun_matrix_pt(mpath, model, config)
-        if len(datetime_stamps_d6) > 0:
-            direct_sun_matrix_vu(mpath, model, vmap_oct, cdmap_oct, config)
-        daylight_matrix(mpath, model, config, direct=True)
-        view_matrix_pt(mpath, model, config, direct=True)
-        view_matrix_vu(mpath, model, config, direct=True)
-        os.remove(vmap_oct)
-        os.remove(cdmap_oct)
-        if not do_multiply:
-            calc_5phase_pt(
-                mpath,
-                model,
-                datetime_stamps,
+        rescd = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
+        for c, w in enumerate([47.4, 119.9, 11.6]):
+            rescd += w * np.dot(
+                self.sensor_sun_direct_matrices[sensor].array[c],
+                self.direct_sun_matrix[c],
             )
-            calc_5phase_vu(
-                mpath,
-                model,
-                datetime_stamps,
-                datetime_stamps_d6,
-                config,
-            )
+        return res3 - res3d + rescd
+
+    def save_matrices(self):
+        matrices = {}
+        for view, mtx in self.view_window_matrices.items():
+            matrices[f"{view}_window_matrix"] = mtx.array
+        for sensor, mtx in self.sensor_window_matrices.items():
+            matrices[f"{sensor}_window_matrix"] = mtx.array
+        for window, mtx in self.daylight_matrices.items():
+            matrices[f"{window}_daylight_matrix"] = mtx.array
+        for view, mtx in self.view_window_direct_matrices.items():
+            matrices[f"{view}_window_direct_matrix"] = mtx.array
+        for sensor, mtx in self.sensor_window_direct_matrices.items():
+            matrices[f"{sensor}_window_direct_matrix"] = mtx.array
+        for window, mtx in self.daylight_direct_matrices.items():
+            matrices[f"{window}_daylight_direct_matrix"] = mtx.array
+        for sensor, mtx in self.sensor_sun_direct_matrices.items():
+            matrices[f"{sensor}_sun_direct_matrix"] = mtx.array
+        for view, mtx in self.view_sun_direct_matrices.items():
+            matrices[f"{view}_sun_direct_matrix"] = mtx.array
+        for view, mtx in self.view_sun_direct_illuminance_matrices.items():
+            matrices[f"{view}_sun_direct_illuminance_matrix"] = mtx.array
+        np.savez_compressed(self.mfile, **matrices)
+
+
+def get_workflow(config):
+    workflow = None
+    if config.settings.method.lower().startswith(("2", "two")):
+        workflow = TwoPhaseMethod(config)
+    elif config.settings.method.lower().startswith(("3", "three")):
+        workflow = ThreePhaseMethod(config)
+    elif config.settings.method.lower().startswith(("5", "five")):
+        workflow = FivePhaseMethod(config)
     else:
-        if not do_multiply:
-            calc_3phase_pt(mpath, model, datetime_stamps)
-            calc_3phase_vu(mpath, model, datetime_stamps, config)
-    return mpath
+        raise NotImplementedError("Method not implemented")
+    return workflow

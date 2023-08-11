@@ -8,11 +8,35 @@ from pathlib import Path
 from typing import Optional
 
 from frads import sky
+import copy
+from pyenergyplus.api import EnergyPlusAPI
 
 
 class EPModel:
-    def __init__(self, epjs):
-        self.epjs = epjs
+    def __init__(self, fpath: Path):
+        """Load and parse input file into a JSON object.
+        If the input file is in .idf format, use command-line
+        energyplus program to convert it to epJSON format
+        Args:
+            fpath: input file path
+        """
+        self.api = EnergyPlusAPI()
+        epjson_path: Path
+        if fpath.suffix == ".idf":
+            state = self.api.state_manager.new_state()
+            self.api.runtime.set_console_output_status(state, False)
+            self.api.runtime.run_energyplus(state, ["--convert-only", str(fpath)])
+            self.api.state_manager.delete_state(state)
+            epjson_path = Path(fpath.with_suffix(".epJSON").name)
+            if not epjson_path.is_file():
+                raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
+        elif fpath.suffix == ".epJSON":
+            epjson_path = fpath
+        else:
+            raise Exception(f"Unknown file type {fpath}")
+        with open(epjson_path) as rdr:
+            self.epjs = json.load(rdr)
+        self.actuators_list = None
 
     @property
     def cfs(self):
@@ -77,13 +101,15 @@ class EPModel:
         """
         name = glazing_system.name
         if (
-            glazing_system.solar_results is not None
-            and glazing_system.photopic_results is not None
+            glazing_system.solar_results is None
+            and glazing_system.photopic_results is None
         ):
+            glazing_system.compute_solar_photopic_results()
             solar_results = glazing_system.solar_results
             photopic_results = glazing_system.photopic_results
         else:
-            raise ValueError("Solar and photopic results must be computed first.")
+            solar_results = glazing_system.solar_results
+            photopic_results = glazing_system.photopic_results
 
         # Initialize Contruction:ComplexFenestrationState dictionary with system and outer layer names
 
@@ -308,16 +334,33 @@ class EPModel:
         for key, obj in mappings.items():
             self._add(key, obj)
 
-            # Set the all fenestration surface constructions to complex fenestration state
-            # pick the first cfs
-            cfs = list(self.epjs["Construction:ComplexFenestrationState"].keys())[0]
-            for window_name in self.epjs["FenestrationSurface:Detailed"]:
-                self.epjs["FenestrationSurface:Detailed"][window_name][
-                    "construction_name"
-                ] = cfs
+        # Set the all fenestration surface constructions to complex fenestration state
+        # pick the first cfs
+        cfs = list(self.epjs["Construction:ComplexFenestrationState"].keys())[0]
+        for window_name in self.epjs["FenestrationSurface:Detailed"]:
+            self.epjs["FenestrationSurface:Detailed"][window_name][
+                "construction_name"
+            ] = cfs
 
-    def add_lighting(self):
+    def add_lighting(self, zone, replace=False) -> None:
         """Add lighting objects to the epjs dictionary."""
+
+        dict2 = copy.deepcopy(self.epjs["Lights"])
+
+        if self.epjs["Lights"] is not None:
+            for l in dict2:
+                if (
+                    self.epjs["Lights"][l][
+                        "zone_or_zonelist_or_space_or_spacelist_name"
+                    ]
+                    == zone
+                ):
+                    if replace == True:
+                        del self.epjs["Lights"][l]
+                    else:
+                        raise ValueError(
+                            "Lighting already exists in this zone. If want to replace, set replace=True."
+                        )
 
         # Initialize lighting schedule type limit dictionary
         schedule_type_limit = {}
@@ -338,22 +381,16 @@ class EPModel:
         # Initialize lights dictionary with a constant-off schedule for each zone
 
         lights = {}
-        for zone in self.epjs["Zone"]:
-            _name = f"Light_{zone}"
-            lights[_name] = {
-                "design_level_calculation_method": "LightingLevel",
-                "fraction_radiant": 0,
-                "fraction_replaceable": 1,
-                "fraction_visible": 1,
-                "lighting_level": 0,
-                "return_air_fraction": 0,
-                "schedule_name": "constant_off",
-                "zone_or_zonelist_or_space_or_spacelist_name": zone,
-            }
-
-        # Add lighting output to the epjs dictionary
-
-        self.request_output("Lights Electricity Rate")
+        lights[f"Light_{zone}"] = {
+            "design_level_calculation_method": "LightingLevel",
+            "fraction_radiant": 0,
+            "fraction_replaceable": 1,
+            "fraction_visible": 1,
+            "lighting_level": 0,
+            "return_air_fraction": 0,
+            "schedule_name": "constant_off",
+            "zone_or_zonelist_or_space_or_spacelist_name": zone,
+        }
 
         mappings = {
             "ScheduleTypeLimits": schedule_type_limit,
@@ -364,8 +401,10 @@ class EPModel:
         for key, obj in mappings.items():
             self._add(key, obj)
 
-    def request_output(self, opt_name: str):
+    def request_ep_output_variable(self, opt_name: str):
         i = 1
+        if "Output:Variable" not in self.epjs:
+            self.epjs["Output:Variable"] = {}
         for output in self.epjs["Output:Variable"].values():
             i += 1
             if output["variable_name"] == opt_name:
@@ -377,45 +416,50 @@ class EPModel:
                 "variable_name": opt_name,
             }
 
+    def request_ep_output_meter(self, opt_name: str):
+        i = 1
+        if "Output:Meter" not in self.epjs:
+            self.epjs["Output:Meter"] = {}
+        for output in self.epjs["Output:Meter"].values():
+            i += 1
+            if output["key_name"] == opt_name:
+                break
+        else:
+            self.epjs["Output:Meter"][f"Output:Meter {i}"] = {
+                "key_name": opt_name,
+                "reporting_frequency": "Timestep",
+            }
+
+    def actuator_func(self, state):
+        actuators_list = []
+        if self.actuators_list is None:
+            list = self.api.api.listAllAPIDataCSV(state).decode("utf-8")
+            for line in list.split("\n"):
+                if line.startswith("Actuator"):
+                    actuators_list.append(line.split(",", 1)[1])
+            self.actuators_list = actuators_list
+        else:
+            self.api.api.stopSimulation(state)
+
+    def gen_list_of_actuators(self):
+        with EnergyPlusSetup(self) as ep:
+            ep.set_callback(
+                "callback_begin_system_timestep_before_predictor", self.actuator_func
+            )
+            ep.run(
+                weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
+                output_prefix="test1",
+            )
+
 
 def ep_datetime_parser(inp):
     date, time = inp.strip().split()
     month, day = [int(i) for i in date.split("/")]
     hr, mi, sc = [int(i) for i in time.split(":")]
     if hr == 24 and mi == 0 and sc == 0:
-        return datetime(1900, month, day, 0, mi, sc) + timedelta(
-            days=1
-        )
+        return datetime(1900, month, day, 0, mi, sc) + timedelta(days=1)
     else:
         return datetime(1900, month, day, hr, mi, sc)
-
-
-def load_epmodel(fpath: Path, api) -> EPModel:
-    """Load and parse input file into a JSON object.
-    If the input file is in .idf format, use command-line
-    energyplus program to convert it to epJSON format
-    Args:
-        fpath: input file path
-    Returns:
-        epjs: JSON object as a Python dictionary
-    """
-    epjson_path: Path
-    if fpath.suffix == ".idf":
-        state = api.state_manager.new_state()
-        api.runtime.set_console_output_status(state, False)
-        api.runtime.run_energyplus(state, ["--convert-only", str(fpath)])
-        api.state_manager.delete_state(state)
-        epjson_path = Path(fpath.with_suffix(".epJSON").name)
-        if not epjson_path.is_file():
-            raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
-    elif fpath.suffix == ".epJSON":
-        epjson_path = fpath
-    else:
-        raise Exception(f"Unknown file type {fpath}")
-    with open(epjson_path) as rdr:
-        epjs = json.load(rdr)
-
-    return EPModel(epjs)
 
 
 class Handles:
@@ -426,9 +470,9 @@ class Handles:
 
 
 class EnergyPlusSetup:
-    def __init__(self, api, epjs):
-        self.api = api
-        self.epjs = epjs
+    def __init__(self, epmodel):
+        self.api = epmodel.api
+        self.epjs = epmodel.epjs
         self.state = self.api.state_manager.new_state()
         self.handles = Handles()
 
@@ -450,10 +494,40 @@ class EnergyPlusSetup:
     def __exit__(self, exc_type, exc_value, exc_tb):
         self.api.state_manager.delete_state(self.state)
 
-    def actuate(self, actuator_key, value):
+    def actuate(self, name: str, key: str, value):
+        """
+        :param component_type: The actuator category, e.g. "Weather Data"
+        :param name: The name of the actuator to retrieve, e.g. "Outdoor Dew Point"
+        :param key: The instance of the variable to retrieve, e.g. "Environment"
+
+        """
+        if key not in self.handles.actuator:
+            raise ValueError("Actuator not found", name, key)
         self.api.exchange.set_actuator_value(
-            self.state, self.handles.actuator[actuator_key], value
+            self.state, self.handles.actuator[key][name], value
         )
+
+    def request_actuator(self, state, component_type: str, name: str, key: str):
+        """
+        :param component_type: The actuator category, e.g. "Weather Data"
+        :param name: The name of the actuator to retrieve, e.g. "Outdoor Dew Point"
+        :param key: The instance of the variable to retrieve, e.g. "Environment"
+
+        """
+        if (key, name) in self.handles.actuator.items():
+            pass
+        else:
+            handle = self.api.exchange.get_actuator_handle(
+                state, component_type, name, key
+            )
+            if handle == -1:
+                raise ValueError(
+                    f"Actuator {component_type} {name} {key} not found", key
+                )
+            # check key exists
+            if key not in self.handles.actuator:
+                self.handles.actuator[key] = {}
+            self.handles.actuator[key][name] = handle
 
     def get_variable_value(self, name: str, key: str):
         return self.api.exchange.get_variable_value(
@@ -461,11 +535,14 @@ class EnergyPlusSetup:
         )
 
     def request_variable(self, name: str, key: str):
-        self.api.exchange.request_variable(self.state, name, key)
-        # check key exists
-        if key not in self.handles.variable:
-            self.handles.variable[key] = {}
-        self.handles.variable[key][name] = None
+        if (key, name) in self.handles.actuator.items():
+            pass
+        else:
+            self.api.exchange.request_variable(self.state, name, key)
+            # check key exists
+            if key not in self.handles.variable:
+                self.handles.variable[key] = {}
+            self.handles.variable[key][name] = None
 
     def get_handles(self):
         def callback_function(state):
@@ -479,30 +556,28 @@ class EnergyPlusSetup:
                 except TypeError:
                     print("No variables requested for", self.handles.variable, key)
 
-            for cfs in self.epjs["Construction:ComplexFenestrationState"]:
-                handle = self.api.api.getConstructionHandle(state, cfs.encode())
-                if handle == -1:
-                    raise ValueError("Construction handle not found", cfs)
-                self.handles.construction[cfs] = handle
+            if "Construction:ComplexFenestrationState" in self.epjs:
+                for cfs in self.epjs["Construction:ComplexFenestrationState"]:
+                    handle = self.api.api.getConstructionHandle(state, cfs.encode())
+                    if handle == -1:
+                        raise ValueError("Construction handle not found", cfs)
+                    self.handles.construction[cfs] = handle
 
-            for window in self.epjs["FenestrationSurface:Detailed"]:
-                handle = self.api.exchange.get_actuator_handle(
-                    state, "Surface", "Construction State", window
-                )
-                if handle == -1:
-                    raise ValueError("Window actuator not found", window)
-                self.handles.actuator[window] = handle
+            if "FenestrationSurface:Detailed" in self.epjs:
+                for window in self.epjs["FenestrationSurface:Detailed"]:
+                    self.request_actuator(
+                        state,
+                        component_type="Surface",
+                        name="Construction State",
+                        key=window,
+                    )
 
             for light in self.epjs.get("Lights", []):
-                act_handle = self.api.exchange.get_actuator_handle(
-                    state, "Lights", "Electricity Rate", light
+                self.request_actuator(
+                    state, component_type="Lights", name="Electricity Rate", key=light
                 )
-                if act_handle == -1:
-                    raise ValueError("Light actuator not found", light)
-                self.handles.actuator[light] = act_handle
 
                 self.request_variable("Lights Electricity Energy", light)
-
                 var_handle = self.api.exchange.get_variable_handle(
                     state, "Lights Electricity Energy", light
                 )
@@ -539,18 +614,20 @@ class EnergyPlusSetup:
         output_directory: Optional[str] = None,
         output_prefix: Optional[str] = "eplus",
     ):
-
         options = {"-w": weather_file, "-d": output_directory, "-p": output_prefix}
         # check if any of options are None, if so, dont pass them to run_energyplus
         options = {k: v for k, v in options.items() if v is not None}
         opt = [item for sublist in options.items() for item in sublist]
 
+        if "OutputControl:Files" not in self.epjs:
+            self.epjs["OutputControl:Files"] = {
+                "OutputControl:Files 1": {"output_csv": "Yes"}
+            }
+
         with open(f"{output_prefix}.json", "w") as wtr:
             json.dump(self.epjs, wtr)
 
-        self.api.runtime.run_energyplus(
-            self.state, [*opt, "-r", f"{output_prefix}.json"]
-        )
+        self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
 
     def set_callback(self, method_name: str, func):
         try:

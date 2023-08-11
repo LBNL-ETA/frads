@@ -1,99 +1,141 @@
 """
 This module contains all utility functions used throughout frads.
 """
+from datetime import datetime, timedelta
 from io import TextIOWrapper
 import logging
-import math
+import re
 from pathlib import Path
-import random
+from random import choice
 import string
 import subprocess as sp
-from typing import Any, Dict, Optional, List, Set, Tuple, Union
-import sys
-sys.path.insert(0, ".")
+from typing import Any, Dict, Optional, List, Set, Union
 
 from frads import geom
-from pyradiance import Primitive, parse_primitive
+import numpy as np
+from pyradiance import Primitive, parse_primitive, pvaluer
 
 
 logger: logging.Logger = logging.getLogger("frads.utils")
 
 
-GEOM_TYPE = ["polygon", "ring", "tube", "cone"]
+def parse_rad_header(header_str: str) -> tuple:
+    """Parse a Radiance matrix file header.
 
-MATERIAL_TYPE = ["plastic", "glass", "trans", "dielectric", "BSDF"]
-
-
-TREG_BASE = [
-    (90.0, 0),
-    (78.0, 30),
-    (66.0, 30),
-    (54.0, 24),
-    (42.0, 24),
-    (30.0, 18),
-    (18.0, 12),
-    (6.0, 6),
-    (0.0, 1),
-]
-
-
-def polygon2prim(polygon: geom.Polygon, modifier: str, identifier: str) -> Primitive:
-    """Generate a primitive from a polygon."""
-    return Primitive(modifier, "polygon", identifier, [""], polygon.to_real())
-
-
-# def unpack_idf(path: str) -> dict:
-#     """Read and parse and idf files."""
-#     with open(path, "r") as rdr:
-#         return parsers.parse_idf(rdr.read())
-
-
-def frange_inc(start, stop, step):
-    """Generate increasing non-integer range."""
-    r = start
-    while r < stop:
-        yield r
-        r += step
-
-
-def square2disk(in_square_a: float, in_square_b: float) -> tuple:
-    """Shirley-Chiu square to disk mapping.
     Args:
-        in_square_a: [-1, 1]
-        in_square_b: [-1, 1]
+        header_str(str): header as string
+    Returns:
+        A tuple contain nrow, ncol, ncomp, datatype
+    Raises:
+        ValueError if any of NROWs NCOLS NCOMP FORMAT is not found.
+        (This is problematic as it can happen)
     """
-    if in_square_a + in_square_b > 0:
-        if in_square_a > in_square_b:
-            in_square_rgn = 0
-        else:
-            in_square_rgn = 1
-    else:
-        if in_square_b > in_square_a:
-            in_square_rgn = 2
-        else:
-            in_square_rgn = 3
-    out_disk_r = [in_square_a, in_square_b, -in_square_a, -in_square_b][in_square_rgn]
-    if in_square_b * in_square_b > 0:
-        phi_select_4 = 6 - in_square_a / in_square_b
-    else:
-        phi_select_4 = 0
-    phi_select = [
-        in_square_b / in_square_a,
-        2 - in_square_a / in_square_b,
-        4 + in_square_b / in_square_a,
-        phi_select_4,
+    compiled = re.compile(
+        r" NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ", flags=re.X
+    )
+    matches = compiled.findall(header_str)
+    if len(matches) != 4:
+        raise ValueError("Can't find one of the header entries.")
+    nrow = int([mat[0] for mat in matches if mat[0] != ""][0])
+    ncol = int([mat[1] for mat in matches if mat[1] != ""][0])
+    ncomp = int([mat[2] for mat in matches if mat[2] != ""][0])
+    dtype = [mat[3] for mat in matches if mat[3] != ""][0].strip()
+    return nrow, ncol, ncomp, dtype
+
+
+def polygon_primitive(
+    polygon: geom.Polygon, modifier: str, identifier: str
+) -> Primitive:
+    """
+    Generate a primitive from a polygon.
+    Args:
+        polygon: a Polygon object
+        modifier: a Radiance primitive modifier
+        identifier: a Radiance primitive identifier
+    Returns:
+        A Primitive object
+    """
+    return Primitive(modifier, "polygon", identifier, [], polygon.coordinates)
+
+
+def parse_polygon(primitive: Primitive) -> geom.Polygon:
+    """Parse a primitive into a polygon.
+    Args:
+        primitive: a dictionary object containing a primitive
+    Returns:
+        A Polygon object
+    """
+    if primitive.ptype != "polygon":
+        raise ValueError("Not a polygon: ", primitive.identifier)
+    vertices = [
+        np.array(primitive.fargs[i : i + 3]) for i in range(0, len(primitive.fargs), 3)
     ]
-    out_disk_phi = math.pi / 4 * phi_select[in_square_rgn]
-    out_disk_x = out_disk_r * math.cos(out_disk_phi)
-    out_disk_y = out_disk_r * math.sin(out_disk_phi)
-    return out_disk_x, out_disk_y, out_disk_r, out_disk_phi
+    return geom.Polygon(vertices)
 
 
-def id_generator(size: int = 3, chars: Optional[str] = None) -> str:
-    """Generate random characters."""
-    if chars is None:
-        chars = string.ascii_uppercase + string.digits
-    return "".join(random.choice(chars) for _ in range(size))
+def array_hdr(array: np.ndarray, xres: int, yres: int, dtype="d") -> bytes:
+    """
+    Call pvalue to generate a HDR image from a numpy array.
+    Args:
+        array: one-dimensional pixel values [[r1, g1, b1], [r2, g2, b2], ...]
+        xres: x resolution
+        yres: y resolution
+        dtype: data type of the array. 'd' for double, 'f' for float
+    Returns:
+        HDR image in bytes
+    """
+    return pvaluer(array.tobytes(), inform=dtype, header=False, xres=xres, yres=yres)
+
+
+def write_hdr(fname, array, xres, yres, dtype="d") -> None:
+    """
+    Write a array into a HDR image.
+    Args:
+        fname: output file name
+        array: one-dimensional pixel values [[r1, g1, b1], [r2, g2, b2], ...]
+        xres: x resolution
+        yres: y resolution
+        dtype: data type of the array. 'd' for double, 'f' for float
+    Returns:
+        None
+    """
+    with open(fname, "wb") as f:
+        f.write(array_hdr(array, xres, yres, dtype=dtype))
+
+
+def write_hdrs(array, xres, yres, dtype="d", outdir=".") -> None:
+    """
+    Write a series of HDR images to a file.
+    Args:
+        array: two-dimensional pixel values [[r1, g1, b1], [r2, g2, b2], ...]
+            where each column of data represents a image.
+        xres: x resolution
+        yres: y resolution
+        dtype: data type of the array. 'd' for double, 'f' for float
+        outdir: output directory
+    Returns:
+        None
+    """
+    if not Path(outdir).exists():
+        Path(outdir).mkdir(parents=True)
+    # iterate through the columns of array
+    for i in range(array.shape[1]):
+        fname = f"{outdir}/hdr_{i}.hdr"
+        write_hdr(fname, array[:, i], xres, yres, dtype=dtype)
+
+
+def write_ep_rad_model(outpath: str, model: dict) -> None:
+    """
+    Write a epjson2rad model into a Radiance file.
+    Args:
+        outpath: output file path
+        model: a model object
+    """
+    with open(outpath, "wb") as f:
+        f.write(model["model"]["materials"]["bytes"])
+        f.write(model["model"]["scene"]["bytes"])
+        for window in model["model"]["windows"].values():
+            f.write(window["bytes"])
 
 
 def unpack_primitives(file: Union[str, Path, TextIOWrapper]) -> List[Primitive]:
@@ -106,45 +148,20 @@ def unpack_primitives(file: Union[str, Path, TextIOWrapper]) -> List[Primitive]:
     return parse_primitive(lines)
 
 
-def primitive_normal(primitive_paths: List[str]) -> Set[geom.Vector]:
+def primitive_normal(primitive_paths: List[str]) -> List[np.ndarray]:
     """Return a set of normal vectors given a list of primitive paths."""
     _primitives: List[Primitive] = []
-    _normals: List[geom.Vector]
     for path in primitive_paths:
         _primitives.extend(unpack_primitives(path))
-    _normals = [geom.parse_polygon(prim.fargs).normal for prim in _primitives]
-    return set(_normals)
-
-
-def samp_dir(primlist: list) -> geom.Vector:
-    """Calculate the primitives' average sampling
-    direction weighted by area."""
-    primlist = [p for p in primlist if p.ptype in ("polygon", "ring")]
-    normal_area = geom.Vector()
-    for prim in primlist:
-        polygon = geom.parse_polygon(prim.fargs)
-        normal_area += polygon.normal.scale(polygon.area)
-    sdir = normal_area.scale(1.0 / len(primlist))
-    sdir = sdir.normalize()
-    return sdir
-
-
-def up_vector(primitives: list) -> geom.Vector:
-    """Define the up vector given primitives.
-
-    Args:
-        primitives: list of dictionary (primitives)
-
-    Returns:
-        returns a str as x,y,z
-
-    """
-    norm_dir = samp_dir(primitives)
-    if norm_dir != geom.Vector(0, 0, 1):
-        upvect = norm_dir.cross(geom.Vector(0, 0, 1).cross(norm_dir)).normalize()
-    else:
-        upvect = geom.Vector(0, 1, 0)
-    return upvect
+    seen = {}
+    unique = []
+    _normals = [parse_polygon(prim).normal for prim in _primitives]
+    for n in _normals:
+        nstr = n.tobytes()
+        if nstr not in seen:
+            seen[nstr] = True
+            unique.append(n)
+    return unique
 
 
 def neutral_plastic_prim(
@@ -216,6 +233,68 @@ def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough) -> Prim
     return Primitive(mod, "plastic", ident, [], real_args)
 
 
+# Generate a Manikin polygon from a file
+# Move the polygon to the correct place
+# Rotate the polygon
+
+# Generate the rays from the polygons
+
+
+def add_manikin(
+    manikin_file: str,
+    manikin_name: str,
+    zone: dict,
+    position: List[float],
+    rotation: float = 0,
+) -> None:
+    """Add a manikin to the scene.i
+    Args:
+        manikin: manikin primitives as a .rad file
+        zone: zone as a dictionary, must have 'model' key, we assume all scene
+        data is inside the data key, and not files.
+        position: position of the manikin (x, y), where x and y are 0-1
+        rotation: rotation of the manikin in degree (0-360)
+    Returns:
+        A zone with added manikin
+    Notes:
+        Zone dictionary is modified in place.
+    """
+    zone["model"]["scene"]["bytes"] += b" "
+    zone_primitives = parse_primitive(zone["model"]["scene"]["bytes"].decode())
+    zone_polygons = [parse_polygon(p) for p in zone_primitives if p.ptype == "polygon"]
+    xmin, xmax, ymin, ymax, zmin, _ = geom.get_polygon_limits(zone_polygons)
+    target = np.array(
+        [xmin + (xmax - xmin) * position[0], ymin + (ymax - ymin) * position[1], zmin]
+    )
+    with open(manikin_file) as f:
+        manikin_primitives = parse_primitive(f.read())
+    non_polygon_primitives = [p for p in manikin_primitives if p.ptype != "polygon"]
+    for primitive in non_polygon_primitives:
+        zone["model"]["scene"]["bytes"] += primitive.bytes
+    manikin_polygons = [
+        parse_polygon(p) for p in manikin_primitives if p.ptype == "polygon"
+    ]
+    xminm, xmaxm, yminm, ymaxm, zminm, _ = geom.get_polygon_limits(manikin_polygons)
+    manikin_base_center = np.array([(xmaxm - xminm) / 2, (ymaxm - yminm) / 2, zminm])
+    if rotation != 0:
+        manikin_polygons = [
+            p.rotate(manikin_base_center, np.array([0, 0, 1]), np.radians(rotation))
+            for p in manikin_polygons
+        ]
+    move_vector = manikin_base_center - target
+    moved_manikin_polygons = [polygon.move(move_vector) for polygon in manikin_polygons]
+    moved_manikin = [
+        polygon2prim(polygon, primitive.modifier, primitive.identifier)
+        for polygon, primitive in zip(moved_manikin_polygons, manikin_primitives)
+    ]
+    for primitive in moved_manikin:
+        zone["model"]["scene"]["bytes"] += primitive.bytes
+    manikin_rays = []
+    for polygon in moved_manikin_polygons:
+        manikin_rays.append([*polygon.centroid.tolist(), *polygon.normal.tolist()])
+    zone["model"]["sensors"][manikin_name] = {"data": manikin_rays}
+
+
 def glass_prim(
     mod, ident, tr: float, tg: float, tb: float, refrac: float = 1.52
 ) -> Primitive:
@@ -230,7 +309,7 @@ def glass_prim(
         material primtive (dict)
 
     """
-    tmsv_red = tr * 1.08981 
+    tmsv_red = tr * 1.08981
     tmsv_green = tg * 1.08981
     tmsv_blue = tb * 1.08981
     real_args = [tmsv_red, tmsv_green, tmsv_blue, refrac]
@@ -294,92 +373,33 @@ def opt2list(opt: dict) -> List[str]:
     return out
 
 
-def calc_reinsrc_dir(
-    mf: int, x1: float = 0.5, x2: float = 0.5
-) -> Tuple[List[geom.Vector], List[float]]:
-    """
-    Calculate Reinhart/Treganza sampling directions.
-    Direct translation of Radiance reinsrc.cal file.
-
-    Args:
-        mf(int): multiplication factor.
-        x1(float, optional): bin position 1
-        x2(float, optional): bin position 2
-    Returns:
-        A list of geom.Vector
-        A list of solid angle associated with each vector
-    """
-
-    def rnaz(r):
-        """."""
-        if r > (mf * 7 - 0.5):
-            return 1
-        return mf * TNAZ[int(math.floor((r + 0.5) / mf))]
-
-    def raccum(r):
-        """."""
-        if r > 0.5:
-            return rnaz(r - 1) + raccum(r - 1)
-        return 0
-
-    def rfindrow(r, rem):
-        """."""
-        if (rem - rnaz(r)) > 0.5:
-            return rfindrow(r + 1, rem - rnaz(r))
-        return r
-
-    TNAZ = [30, 30, 24, 24, 18, 12, 6]
-    rowMax = 7 * mf + 1
-    runlen = 144 * mf**2 + 3
-    rmax = raccum(rowMax)
-    alpha = 90 / (mf * 7 + 0.5)
-    dvecs = []
-    omegas = []
-    for rbin in range(1, runlen):
-        rrow = rowMax - 1 if rbin > (rmax - 0.5) else rfindrow(0, rbin)
-        rcol = rbin - raccum(rrow) - 1
-        razi_width = 2 * math.pi / rnaz(rrow)
-        rah = alpha * math.pi / 180
-        razi = (rcol + x2 - 0.5) * razi_width if rbin > 0.5 else 2 * math.pi * x2
-        ralt = (rrow + x1) * rah if rbin > 0.5 else math.asin(-x1)
-        cos_alt = math.cos(ralt)
-        if rmax - 0.5 > rbin:
-            romega = razi_width * (math.sin(rah * (rrow + 1)) - math.sin(rah * rrow))
-        else:
-            romega = 2 * math.pi * (1 - math.cos(rah / 2))
-        dx = math.sin(razi) * cos_alt
-        dy = math.cos(razi) * cos_alt
-        dz = math.sin(ralt)
-        dvecs.append(geom.Vector(dx, dy, dz))
-        omegas.append(romega)
-    return dvecs, omegas
-
-
-def pt_inclusion(pt: geom.Vector, polygon_pts: List[geom.Vector]) -> int:
+def pt_inclusion(pt: np.ndarray, polygon_pts: List[np.ndarray]) -> int:
     """Test whether a point is inside a polygon
     using winding number algorithm."""
 
     def isLeft(pt0, pt1, pt2):
         """Test whether a point is left to a line."""
-        return (pt1.x - pt0.x) * (pt2.y - pt0.y) - (pt2.x - pt0.x) * (pt1.y - pt0.y)
+        return (pt1[0] - pt0[0]) * (pt2[1] - pt0[1]) - (pt2[0] - pt0[0]) * (
+            pt1[1] - pt0[1]
+        )
 
     # Close the polygon for looping
     # polygon_pts.append(polygon_pts[0])
     polygon_pts = [*polygon_pts, polygon_pts[0]]
     wn = 0
     for i in range(len(polygon_pts) - 1):
-        if polygon_pts[i].y <= pt.y:
-            if polygon_pts[i + 1].y > pt.y:
+        if polygon_pts[i][1] <= pt[1]:
+            if polygon_pts[i + 1][1] > pt[1]:
                 if isLeft(polygon_pts[i], polygon_pts[i + 1], pt) > 0:
                     wn += 1
         else:
-            if polygon_pts[i + 1].y <= pt.y:
+            if polygon_pts[i + 1][1] <= pt[1]:
                 if isLeft(polygon_pts[i], polygon_pts[i + 1], pt) < 0:
                     wn -= 1
     return wn
 
 
-def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> list:
+def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> List[List[float]]:
     """Generate a grid of points for orthogonal planar surfaces.
 
     Args:
@@ -390,34 +410,34 @@ def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> list:
         List of the points as list
     """
     vertices = polygon.vertices
-    plane_height = sum(i.z for i in vertices) / len(vertices)
+    plane_height = sum(i[2] for i in vertices) / len(vertices)
     imin, imax, jmin, jmax, _, _ = polygon.extreme
     xlen_spc = (imax - imin) / spacing
     ylen_spc = (jmax - jmin) / spacing
     xstart = ((xlen_spc - int(xlen_spc) + 1)) * spacing / 2
     ystart = ((ylen_spc - int(ylen_spc) + 1)) * spacing / 2
-    x0 = [x + xstart for x in frange_inc(imin, imax, spacing)]
-    y0 = [x + ystart for x in frange_inc(jmin, jmax, spacing)]
-    grid_dir = polygon.normal.reverse()
-    grid_hgt = geom.Vector(0, 0, plane_height) + grid_dir.scale(height)
+    x0 = np.arange(imin, imax, spacing) + xstart
+    y0 = np.arange(jmin, jmax, spacing) + ystart
+    grid_dir = polygon.normal * -1
+    grid_hgt = np.array((0, 0, plane_height)) + grid_dir * height
     raw_pts = [
-        geom.Vector(round(i, 3), round(j, 3), round(grid_hgt.z, 3))
+        np.array((round(i, 3), round(j, 3), round(grid_hgt[2], 3)))
         for i in x0
         for j in y0
     ]
     scale_factor = 1 - 0.3 / (imax - imin)  # scale boundary down .3 meter
     _polygon = polygon.scale(
-        geom.Vector(scale_factor, scale_factor, 0), polygon.centroid
+        np.array((scale_factor, scale_factor, 0)), polygon.centroid
     )
     _vertices = _polygon.vertices
-    if polygon.normal == geom.Vector(0, 0, 1):
+    if np.array_equal(polygon.normal, np.array((0, 0, 1))):
         # pt_incls = pt_inclusion(_vertices)
         _grid = [p for p in raw_pts if pt_inclusion(p, _vertices) > 0]
     else:
         # pt_incls = pt_inclusion(_vertices[::-1])
         _grid = [p for p in raw_pts if pt_inclusion(p, _vertices[::-1]) > 0]
     # _grid = [p for p in raw_pts if pt_incls.test_inside(p) > 0]
-    grid = [p.to_list() + grid_dir.to_list() for p in _grid]
+    grid = [p.tolist() + grid_dir.tolist() for p in _grid]
     return grid
 
 
@@ -498,3 +518,13 @@ def batch_process(
                     proc.stdin.write(sin)
             for proc in processes:
                 proc.wait()
+
+
+def random_string(size: int) -> str:
+    """Generate random characters."""
+    chars = string.ascii_uppercase + string.digits
+    return "".join(choice(chars) for _ in range(size))
+
+
+def minutes_to_datetime(year: int, minutes: int):
+    return datetime(year, 1, 1) + timedelta(minutes=minutes)
