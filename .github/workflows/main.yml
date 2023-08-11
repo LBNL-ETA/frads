@@ -29,15 +29,10 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Download latest EnergyPlus
-      run: gh release download -R NREL/EnergyPlus -p '*Ubuntu20*.tar.gz'
+      run: wget https://github.com/taoning/pyenergyplus/releases/download/v23.1.0/pyenergyplus-23.1.0-py3-none-macosx_10_13_x86_64.whl
 
     - name: Install EnergyPlus
-      run: |
-        ls
-        tar -xvf EnergyPlus*Ubuntu*.tar.gz
-        rm EnergyPlus*.tar.gz
-        mv EnergyPlus* EnergyPlus
-        ls
+      run: pip install pyenergyplus-23.1.0-py3-none-macosx_10_13_x86_64.whl
 
     - name: Install frads
       run: |
@@ -45,8 +40,6 @@ jobs:
 
     - name: Run tests
       run: |
-        export PATH=$PATH:${{ github.workspace }}/EnergyPlus
-        energyplus --version
         pip install pytest
         pytest test
 
@@ -67,18 +60,10 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Download latest EnergyPlus
-      run: gh release download -R NREL/EnergyPlus -p '*macOS11*.tar.gz'
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: curl -O "https://github.com/taoning/pyenergyplus/releases/download/v23.1.0/pyenergyplus-23.1.0-py3-none-macosx_10_13_x86_64.whl"
 
     - name: Install EnergyPlus
-      run: |
-        tar -xvf EnergyPlus*macOS*.tar.gz
-        ls
-        rm EnergyPlus*.tar.gz
-        mv EnergyPlus*macOS* EnergyPlus
-        ls
-        export PATH=$PATH:${{ github.workspace }}/EnergyPlus
+      run: pip install pyenergyplus-23.1.0-py3-none-macosx_10_13_x86_64.whl
 
     - name: Install frads
       run: |
@@ -86,8 +71,6 @@ jobs:
 
     - name: Run tests
       run: |
-        export PATH=$PATH:${{ github.workspace }}/EnergyPlus
-        energyplus --version
         pip install pytest
         pytest test
 
@@ -111,14 +94,10 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Download latest EnergyPlus
-      run: gh release download -R NREL/EnergyPlus -p "*Windows*.zip"
+      run: Invoke-WebRequest -Uri "https://github.com/taoning/pyenergyplus/releases/download/v23.1.0/pyenergyplus-23.1.0-py3-none-win_amd64.whl"
 
     - name: Install EnergyPlus
-      run: |
-        unzip EnergyPlus*Windows*.zip
-        del /f EnergyPlus*.zip
-        move "EnergyPlus*" EnergyPlus
-        ls
+      run: pip install pyenergyplus-23.1.0-py3-none-win_amd64.whl
 
     - name: Install frads
       run: |
@@ -126,6 +105,5 @@ jobs:
 
     - name: Run tests
       run: |
-        set PATH=%PATH%;${{ github.workspace }}\EnergyPlus
         pip install pytest
         pytest 
