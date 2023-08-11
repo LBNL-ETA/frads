@@ -29,7 +29,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Download latest EnergyPlus
-      run: wget https://github.com/taoning/pyenergyplus/releases/download/v23.1.0/pyenergyplus-23.1.0-py3-none-macosx_10_13_x86_64.whl
+      run: wget https://github.com/taoning/pyenergyplus/releases/download/v23.1.0/pyenergyplus-23.1.0-py3-none-manylinux1_x86_64.whl
 
     - name: Install EnergyPlus
       run: pip install pyenergyplus-23.1.0-py3-none-macosx_10_13_x86_64.whl
@@ -60,7 +60,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Download latest EnergyPlus
-      run: curl -O "https://github.com/taoning/pyenergyplus/releases/download/v23.1.0/pyenergyplus-23.1.0-py3-none-macosx_10_13_x86_64.whl"
+      run: curl -L "https://github.com/taoning/pyenergyplus/releases/download/v23.1.0/pyenergyplus-23.1.0-py3-none-macosx_10_13_x86_64.whl" -o "pyenergyplus-23.1.0-py3-none-macosx_10_13_x86_64.whl"
 
     - name: Install EnergyPlus
       run: pip install pyenergyplus-23.1.0-py3-none-macosx_10_13_x86_64.whl
@@ -74,8 +74,7 @@ jobs:
         pip install pytest
         pytest test
 
-  test_windows:
-    runs-on: windows-latest
+  test_windows: runs-on: windows-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     strategy:
@@ -94,7 +93,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Download latest EnergyPlus
-      run: Invoke-WebRequest -Uri "https://github.com/taoning/pyenergyplus/releases/download/v23.1.0/pyenergyplus-23.1.0-py3-none-win_amd64.whl"
+      run: bitsadmin /transfer myDownloadJob /download /priority normal "https://github.com/taoning/pyenergyplus/releases/download/v23.1.0/pyenergyplus-23.1.0-py3-none-win_amd64.whl" "%CD%\pyenergyplus-23.1.0-py3-none-win_amd64.whl"
 
     - name: Install EnergyPlus
       run: pip install pyenergyplus-23.1.0-py3-none-win_amd64.whl
