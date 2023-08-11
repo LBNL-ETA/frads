@@ -18,9 +18,11 @@ from typing import Sequence
 import pyradiance as pr
 from frads import matrix
 from frads import geom
+
 # from frads.types import Primitive
 # from frads.types import NcpModel
 from frads import utils
+import numpy as np
 
 logger: logging.Logger = logging.getLogger("frads.mfacade")
 
@@ -30,7 +32,7 @@ class NcpModel:
     """Non-coplanar data model."""
 
     windows: Sequence[pr.Primitive]
-    ports: Sequence[pr.Primitive]
+    ports: List[pr.Primitive]
     env: List[Path]
     sbasis: str
     rbasis: str
@@ -43,26 +45,26 @@ def ncp_compute_back(
     logger.info("Computing for front side")
     for idx, wp in enumerate(model.windows):
         logger.info("Front transmission for window %s", idx)
-        front_rcvr = matrix.surface_as_receiver(
-            prim_list=model.ports,
+        front_rcvr = matrix.SurfaceReceiver(
+            surfaces=model.ports,
             basis=model.rbasis,
-            left=True,
+            left_hand=True,
             offset=None,
             source="glow",
             out=src[f"tb{idx}"],
         )
         # sndr_prim = utils.polygon2prim(wplg, 'fsender', f'window{idx}')
-        sndr = matrix.surface_as_sender(
-            prim_list=[wp], basis=model.sbasis, left=True, offset=None
+        sndr = matrix.SurfaceSender(
+            surfaces=[wp], basis=model.sbasis, left_hand=True, offset=None
         )
         if refl:
             logger.info("Front reflection for window %s", idx)
-            wflip = geom.parse_polygon(wp.real_arg).flip()
+            wflip = utils.parse_polygon(wp).flip()
             wflip_prim = utils.polygon2prim(wflip, "breceiver", f"window{idx}")
-            back_rcvr = matrix.surface_as_receiver(
-                prim_list=[wflip_prim],
+            back_rcvr = matrix.SurfaceReceiver(
+                surfaces=[wflip_prim],
                 basis="-" + model.rbasis,
-                left=False,
+                left_hand=False,
                 offset=None,
                 source="glow",
                 out=src[f"rb{idx}"],
@@ -423,7 +425,7 @@ def gen_port_prims_from_window(
 
 
 def gen_ports_from_window_ncp(
-    wp: geom.Polygon, np: List[geom.Polygon]
+    wp: geom.Polygon, ncp: List[geom.Polygon]
 ) -> List[geom.Polygon]:
     """
     Generate ports polygons that encapsulate the window and NCP geometries.
@@ -436,16 +438,16 @@ def gen_ports_from_window_ncp(
     to encapsulate the original window and NCP geomteries.
     """
     wn = wp.normal
-    if (abs(wn.y) == 1) or (abs(wn.x) == 1):
-        np.append(wp)
-        bbox = geom.getbbox(np, offset=0.00)
-        bbox.remove([b for b in bbox if b.normal.reverse() == wn][0])
-        return [b.move(wn.scale(-0.1)) for b in bbox]
+    if (abs(wn[1]) == 1) or (abs(wn[0]) == 1):
+        ncp.append(wp)
+        bbox = geom.getbbox(ncp, offset=0.00)
+        bbox.remove([b for b in bbox if np.array_equal(b.normal * -1, wn)][0])
+        return [b.move(wn * -0.1) for b in bbox]
     xax = [1, 0, 0]
     _xax = [-1, 0, 0]
     yax = [0, 1, 0]
     _yax = [0, -1, 0]
-    zaxis = geom.Vector(0, 0, 1)
+    zaxis = np.array((0, 0, 1))
     rm_pg = [xax, _yax, _xax, yax]
     area_list = []
     win_normals = []
@@ -455,7 +457,7 @@ def gen_ports_from_window_ncp(
         rad = math.radians(deg)
         win_polygon_r = wp.rotate(zaxis, rad)
         win_normals.append(win_polygon_r.normal)
-        ncs_polygon_r = [p.rotate(zaxis, rad) for p in np]
+        ncs_polygon_r = [p.rotate(zaxis, rad) for p in ncp]
         ncs_polygon_r.append(win_polygon_r)
         _bbox = geom.getbbox(ncs_polygon_r, offset=0.0)
         bboxes.append(_bbox)
