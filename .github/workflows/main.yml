@@ -32,7 +32,7 @@ jobs:
       run: wget https://github.com/taoning/pyenergyplus/releases/download/v23.1.0/pyenergyplus-23.1.0-py3-none-manylinux1_x86_64.whl
 
     - name: Install EnergyPlus
-      run: pip install pyenergyplus-23.1.0-py3-none-macosx_10_13_x86_64.whl
+      run: pip install pyenergyplus-23.1.0-py3-none-manylinux1_x86_64.whl
 
     - name: Install frads
       run: |
