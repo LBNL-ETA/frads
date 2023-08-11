@@ -6,8 +6,6 @@ from datetime import datetime, timedelta
 import json
 from pathlib import Path
 from typing import Optional
-import os
-import sys
 
 from frads import sky
 import copy
