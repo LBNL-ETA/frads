@@ -74,7 +74,8 @@ jobs:
         pip install pytest
         pytest test
 
-  test_windows: runs-on: windows-latest
+  test_windows: 
+    runs-on: windows-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     strategy:
