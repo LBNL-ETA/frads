@@ -580,8 +580,6 @@ def rfluxmtx_markup(
             sampling_direction, np.cross(np.array([0, 0, 1]), sampling_direction)
         )
         up_vector = up_vector / np.linalg.norm(up_vector)
-    if np.isnan(up_vector[0]):
-        breakpoint()
     if left_hand:
         up_vector = -up_vector
     up_vector = ",".join(map(str, up_vector.tolist()))
