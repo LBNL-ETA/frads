@@ -44,6 +44,12 @@ You can verify that Python is installed by typing python from your cmd/powershel
 	Type "help", "copyright", "credits" or "license" for more information.
 	>>>
 
+### Installing pyenergyplus
+frads relies on pyenergyplus for running and interacting with EnergyPlus in Python.
+pyenergyplus can be installed by downloading and installing [wheels](https://github.com/taoning/pyenergyplus/releases/tag/v23.1.0)
+for your specific platform.
+
+
 ### Install frads
 
 After you have Python installed, you should have `pip` command available in your shell environment as well. You can then use `pip` to install `frads`:
