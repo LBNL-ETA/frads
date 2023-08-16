@@ -68,7 +68,7 @@ class EPModel:
         floors = []
         for k, v in self.epjs["BuildingSurface:Detailed"].items():
             if v["surface_type"] == "Floor":
-                floor.append(k)
+                floors.append(k)
         return floors
 
     @property
@@ -80,6 +80,12 @@ class EPModel:
     @property
     def zones(self):
         return list(self.epjs["Zone"].keys())
+
+    @property
+    def actuators(self):
+        if self.actuators_list is None:
+            self._gen_list_of_actuators()
+        return self.actuators_list
 
     def _add(self, key, obj):
         if key in self.epjs:
@@ -443,7 +449,7 @@ class EPModel:
         else:
             self.api.api.stopSimulation(state)
 
-    def gen_list_of_actuators(self):
+    def _gen_list_of_actuators(self):
         with EPSetup(self) as ep:
             ep.set_callback(
                 "callback_begin_system_timestep_before_predictor", self._actuator_func
@@ -451,6 +457,7 @@ class EPModel:
             ep.run(
                 weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
                 output_prefix="test1",
+                silent=True,
             )
 
 
@@ -615,6 +622,7 @@ class EPSetup:
         weather_file: Optional[str] = None,
         output_directory: Optional[str] = None,
         output_prefix: Optional[str] = "eplus",
+        silent: bool = False,
     ):
         options = {"-w": weather_file, "-d": output_directory, "-p": output_prefix}
         # check if any of options are None, if so, dont pass them to run_energyplus
@@ -629,6 +637,7 @@ class EPSetup:
         with open(f"{output_prefix}.json", "w") as wtr:
             json.dump(self.epjs, wtr)
 
+        self.api.runtime.set_console_output_status(self.state, not silent)
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
 
     def set_callback(self, method_name: str, func):
