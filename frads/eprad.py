@@ -444,7 +444,7 @@ class EPModel:
             self.api.api.stopSimulation(state)
 
     def gen_list_of_actuators(self):
-        with EnergyPlusSetup(self) as ep:
+        with EPSetup(self) as ep:
             ep.set_callback(
                 "callback_begin_system_timestep_before_predictor", self._actuator_func
             )
@@ -471,7 +471,7 @@ class Handles:
         self.construction = {}
 
 
-class EnergyPlusSetup:
+class EPSetup:
     def __init__(self, epmodel):
         self.api = epmodel.api
         self.epjs = epmodel.epjs
