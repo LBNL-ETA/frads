@@ -57,22 +57,22 @@ class EPModel:
         return list(self.epjs["FenestrationSurface:Detailed"].keys())
 
     @property
-    def walls_window(self):
-        walls_wndo = []
+    def window_walls(self):
+        wndo_walls = []
         for k, v in self.epjs["FenestrationSurface:Detailed"].items():
-            walls_wndo.append(v["building_surface_name"])
-        return walls_wndo
+            wndo_walls.append(v["building_surface_name"])
+        return wndo_walls
 
     @property
     def floors(self):
-        floor = []
+        floors = []
         for k, v in self.epjs["BuildingSurface:Detailed"].items():
             if v["surface_type"] == "Floor":
                 floor.append(k)
-        return floor
+        return floors
 
     @property
-    def lighting_zone(self):
+    def lighting_zones(self):
         if "Lights" in self.epjs:
             return list(self.epjs["Lights"].keys())
         return "No Lights"
@@ -89,7 +89,7 @@ class EPModel:
             # add
             self.epjs[key] = obj
 
-    def add_cfs(self, glazing_system) -> None:
+    def add_glazing_system(self, glazing_system) -> None:
         """
         Add CFS to an EnergyPlus JSON file.
 
@@ -344,7 +344,7 @@ class EPModel:
                 "construction_name"
             ] = cfs
 
-    def add_lighting(self, zone, replace=False) -> None:
+    def add_lighting_system(self, zone, replace=False) -> None:
         """Add lighting objects to the epjs dictionary."""
 
         dict2 = copy.deepcopy(self.epjs["Lights"])
@@ -403,7 +403,7 @@ class EPModel:
         for key, obj in mappings.items():
             self._add(key, obj)
 
-    def request_ep_output_variable(self, opt_name: str):
+    def add_output_variable(self, opt_name: str):
         i = 1
         if "Output:Variable" not in self.epjs:
             self.epjs["Output:Variable"] = {}
@@ -418,7 +418,7 @@ class EPModel:
                 "variable_name": opt_name,
             }
 
-    def request_ep_output_meter(self, opt_name: str):
+    def add_output_meter(self, opt_name: str):
         i = 1
         if "Output:Meter" not in self.epjs:
             self.epjs["Output:Meter"] = {}
@@ -432,7 +432,7 @@ class EPModel:
                 "reporting_frequency": "Timestep",
             }
 
-    def actuator_func(self, state):
+    def _actuator_func(self, state):
         actuators_list = []
         if self.actuators_list is None:
             list = self.api.api.listAllAPIDataCSV(state).decode("utf-8")
@@ -446,7 +446,7 @@ class EPModel:
     def gen_list_of_actuators(self):
         with EnergyPlusSetup(self) as ep:
             ep.set_callback(
-                "callback_begin_system_timestep_before_predictor", self.actuator_func
+                "callback_begin_system_timestep_before_predictor", self._actuator_func
             )
             ep.run(
                 weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
