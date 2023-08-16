@@ -451,7 +451,9 @@ class EPModel:
             ep.run(
                 weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
                 output_prefix="test1",
+                silent=True,
             )
+        return self.actuators_list
 
 
 def ep_datetime_parser(inp):
@@ -615,6 +617,7 @@ class EnergyPlusSetup:
         weather_file: Optional[str] = None,
         output_directory: Optional[str] = None,
         output_prefix: Optional[str] = "eplus",
+        silent: bool = False,
     ):
         options = {"-w": weather_file, "-d": output_directory, "-p": output_prefix}
         # check if any of options are None, if so, dont pass them to run_energyplus
@@ -629,6 +632,7 @@ class EnergyPlusSetup:
         with open(f"{output_prefix}.json", "w") as wtr:
             json.dump(self.epjs, wtr)
 
+        self.api.runtime.set_console_output_status(self.state, not silent)
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
 
     def set_callback(self, method_name: str, func):
