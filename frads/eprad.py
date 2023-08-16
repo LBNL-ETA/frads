@@ -81,6 +81,12 @@ class EPModel:
     def zones(self):
         return list(self.epjs["Zone"].keys())
 
+    @property
+    def actuators(self):
+        if self.actuators_list is None:
+            self._gen_list_of_actuators()
+        return self.actuators_list
+
     def _add(self, key, obj):
         if key in self.epjs:
             # merge
@@ -432,7 +438,7 @@ class EPModel:
                 "reporting_frequency": "Timestep",
             }
 
-    def actuator_func(self, state):
+    def _actuator_func(self, state):
         actuators_list = []
         if self.actuators_list is None:
             list = self.api.api.listAllAPIDataCSV(state).decode("utf-8")
@@ -443,17 +449,16 @@ class EPModel:
         else:
             self.api.api.stopSimulation(state)
 
-    def gen_list_of_actuators(self):
+    def _gen_list_of_actuators(self):
         with EnergyPlusSetup(self) as ep:
             ep.set_callback(
-                "callback_begin_system_timestep_before_predictor", self.actuator_func
+                "callback_begin_system_timestep_before_predictor", self._actuator_func
             )
             ep.run(
                 weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
                 output_prefix="test1",
                 silent=True,
             )
-        return self.actuators_list
 
 
 def ep_datetime_parser(inp):
