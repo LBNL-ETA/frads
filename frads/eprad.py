@@ -41,7 +41,7 @@ class EnergyPlusModel:
         self.actuators_list = None
 
     @property
-    def cfs(self):
+    def complex_fenestration_states(self):
         """
         Example:
             >>> model.cfs
