@@ -14,7 +14,7 @@ import copy
 from pyenergyplus.api import EnergyPlusAPI
 
 
-class EPModel:
+class EnergyPlusModel:
     def __init__(self, fpath: Path):
         """Load and parse input file into a JSON object.
         If the input file is in .idf format, use command-line
@@ -450,7 +450,7 @@ class EPModel:
             self.api.api.stopSimulation(state)
 
     def _gen_list_of_actuators(self):
-        with EPSetup(self) as ep:
+        with EnergyPlusSetup(self) as ep:
             ep.set_callback(
                 "callback_begin_system_timestep_before_predictor", self._actuator_func
             )
@@ -478,7 +478,7 @@ class Handles:
         self.construction = {}
 
 
-class EPSetup:
+class EnergyPlusSetup:
     def __init__(self, epmodel):
         self.api = epmodel.api
         self.epjs = epmodel.epjs
