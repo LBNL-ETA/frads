@@ -27,5 +27,5 @@ gen <command> <sub-command> -h
 ## Commands
 - [glaze](glaze.md)
 - [grid](grid.md)
-- [matrix](matrix.md)
+- [matrix](matrix/index.md)
 - [room](room.md)

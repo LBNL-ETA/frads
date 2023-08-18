@@ -1,4 +1,6 @@
-site_name: frads documentation
+site_name: Frads
+site_description: Building lighting and energy simulation control in Python
+strict: true
 repo_url: https://github.com/LBNL-ETA/frads/
 
 theme:
@@ -22,11 +24,14 @@ theme:
   font:
     text: OpenSans
   features:
-    - navigation.tracking
-      # - navigation.tabs
-    - navigation.sections
-    - navigation.indexes
-
+    # - navigation.tracking
+    # - navigation.tabs
+    # - navigation.sections
+    # - navigation.indexes
+    - content.tabs.link
+    - content.code.annotate
+    - announce.dismiss
+    - navigation.tabs
 
 markdown_extensions:
   - admonition
@@ -52,11 +57,24 @@ plugins:
     handlers:
       python:
         options:
+          member_order: source
+          separate_signature: true
           show_source: false
           show_root_heading: true
+          merge_init_into_class: true
 
 nav:
-  - Home: "../"
+  - Get Started:
+    - Welcome to frads: index.md 
+    - Why frads: why.md
+    - Installation: install.md
+    # - Usage:
+    #   - Phase Methods:
+    #     - Two Phase Method: usage/phase/twophase.md
+    #     - Three Phase Method: usage/phase/threephase.md
+    #     - Five Phase Method: usage/phase/fivephase.md
+  - How-To Guides:
+    - how-to/index.md
   - Manual:
     - manual/index.md
     - mrad:
@@ -79,7 +97,12 @@ nav:
         - view-sun: manual/gen/matrix/view_sun.md
         - ncp: manual/gen/matrix/ncp.md
       - room: manual/gen/room.md
-  - How-To Guides:
-    - how-to/index.md
   - Reference:
-    - ref/index.md
+    - WorkflowConfig: ref/config.md
+    - TwoPhaseMethod: ref/twophase.md
+    - ThreePhaseMethod: ref/threephase.md
+    - FivePhaseMethod: ref/fivephase.md
+    - matrix: ref/matrix.md
+    - EPModel: ref/epmodel.md
+    - EnergyPlusSetup: ref/epsetup.md
+

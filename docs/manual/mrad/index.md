@@ -13,8 +13,8 @@ A configuration file can be generated using the `init` subcommand (see blow). It
 
 ## Commands
 
- - [mrad init](mrad_init.md)
- - [mrad run](mrad_run.md)
+ - [mrad init](init.md)
+ - [mrad run](run.md)
 
 ### Verbosity setting
 

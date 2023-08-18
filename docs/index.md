@@ -1,17 +1,18 @@
 # Welcome to frads documentation
 
-Date: 2022-10-26
+Date: 2023-08-14
 
-Version: 0.2.8
+Version: 1.0.0
 
 `frads` project is an open source, BSD-licensed library providing easy-to-use wrapper for Radiance rendering engine.
 
 ## Table Of Contents
 The documentation consists of three parts:
 
-1. [Manual](manual/index.md): containing manual pages for all the command-line-interfaces.
-2. [How-To Guides](how-to/index.md): scenario-based how-to guides
-3. [Reference](ref/index.md): Code API
+1. [How-To Guides](how-to/index.md): Scenario-based how-to guides
+2. [Usage](usage/config.md): Classes and functions usage.
+3. [CLI Manual](manual/index.md): Manual pages for all the command-line-interfaces.
+4. [Reference](ref/index.md): Code API documentation
 
 ## Installation
 You can find installation instructions on our [README](https://github.com/LBNL-ETA/frads#installation).
