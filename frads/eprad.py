@@ -6,8 +6,7 @@ from datetime import datetime, timedelta
 import json
 from pathlib import Path
 from typing import Optional
-import os
-import sys
+
 
 from frads import sky
 import copy
@@ -409,7 +408,25 @@ class EnergyPlusModel:
         for key, obj in mappings.items():
             self._add(key, obj)
 
-    def add_output_variable(self, opt_name: str):
+    def add_output(self, opt_name: str, opt_type: str):
+        """Add an output variable or meter to the epjs dictionary.
+
+        Args:
+            opt_name: Name of the output variable or meter.
+            opt_type: Type of the output. "variable" or "meter".
+
+        Raises:
+            raise ValueError("opt_type must be 'variable' or 'meter'.")
+        """
+
+        if opt_type == "variable":
+            self._add_output_variable(opt_name)
+        elif opt_type == "meter":
+            self._add_output_meter(opt_name)
+        else:
+            raise ValueError("opt_type must be 'variable' or 'meter'.")
+
+    def _add_output_variable(self, opt_name: str):
         i = 1
         if "Output:Variable" not in self.epjs:
             self.epjs["Output:Variable"] = {}
@@ -424,7 +441,7 @@ class EnergyPlusModel:
                 "variable_name": opt_name,
             }
 
-    def add_output_meter(self, opt_name: str):
+    def _add_output_meter(self, opt_name: str):
         i = 1
         if "Output:Meter" not in self.epjs:
             self.epjs["Output:Meter"] = {}
