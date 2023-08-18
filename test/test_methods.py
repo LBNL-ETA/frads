@@ -3,7 +3,7 @@ from datetime import datetime
 from frads.methods import TwoPhaseMethod, ThreePhaseMethod, WorkflowConfig
 from frads.window import GlazingSystem
 from frads.epjson2rad import epjson2rad
-from frads.eprad import EPModel
+from frads.eprad import EnergyPlusModel
 import frads as fr
 import numpy as np
 
@@ -100,7 +100,7 @@ def test_three_phase():
 
 def test_eprad_threephase():
     """
-    Integration test for ThreePhaseMethod using EPModel and GlazingSystem
+    Integration test for ThreePhaseMethod using EnergyPlusModel and GlazingSystem
     """
     idf_path = resource_dir / "RefBldgMediumOfficeNew2004_Chicago.idf"
     view_path = resource_dir / "view1.vf"
@@ -110,7 +110,7 @@ def test_eprad_threephase():
     shade_path = resource_dir / "ec60.rad"
     shade_bsdf_path = resource_dir / "ec60.xml"
 
-    epmodel = EPModel(idf_path)
+    epmodel = EnergyPlusModel(idf_path)
     gs_ec60 = GlazingSystem()
     gs_ec60.add_glazing_layer(product_7406_path)
     gs_ec60.add_glazing_layer(clear_glass_path)

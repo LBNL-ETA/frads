@@ -1,6 +1,5 @@
 from pathlib import Path
 from frads.window import GlazingSystem, AIR, ARGON
-from frads.eprad import EPModel
 
 
 test_dir = Path(__file__).parent.resolve()
