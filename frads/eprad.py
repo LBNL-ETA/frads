@@ -558,13 +558,12 @@ class EnergyPlusSetup:
         epmodel: EnergyPlusModel object
 
     Example:
-        >>> with EnergyPlusSetup(epmodel) as ep:
-        >>>     ep.run(weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
-                     output_prefix="test1", silent=True)
+        >>> epsetup = EnergyPlusSetup(epmodel, epw="USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
     """
 
-    def __init__(self, epmodel: EnergyPlusModel):
+    def __init__(self, epmodel: EnergyPlusModel, epw: str):
         self.api = epmodel.api
+        self.epw = epw
         self.epjs = epmodel.epjs
         self.state = self.api.state_manager.new_state()
         self.handles = Handles()
@@ -603,7 +602,7 @@ class EnergyPlusSetup:
             ValueError: If the actuator is not found
 
         Example:
-            >>> ep.actuate("Weather Data", "Outdoor Dew Point", "Environment", 10)
+            >>> epsetup.actuate("Weather Data", "Outdoor Dew Point", "Environment", 10)
         """
 
         if key not in self.handles.actuator:  # check if key exists in actuator handles
@@ -638,7 +637,7 @@ class EnergyPlusSetup:
             ValueError: If the variable is not found
 
         Example:
-            >>> ep.get_variable_value("Outdoor Dew Point", "Environment")
+            >>> epsetup.get_variable_value("Outdoor Dew Point", "Environment")
         """
         return self.api.exchange.get_variable_value(
             self.state, self.handles.variable[key][name]
@@ -652,7 +651,7 @@ class EnergyPlusSetup:
             key: The instance of the variable to retrieve, e.g. "Environment"
 
         Example:
-            >>> ep.request_variable("Outdoor Dew Point", "Environment")
+            >>> epsetup.request_variable("Outdoor Dew Point", "Environment")
         """
         if (key, name) in self.handles.actuator.items():
             pass
@@ -712,7 +711,6 @@ class EnergyPlusSetup:
 
     def run(
         self,
-        weather_file: Optional[str] = None,
         output_directory: Optional[str] = None,
         output_prefix: Optional[str] = "eplus",
         silent: bool = False,
@@ -720,17 +718,15 @@ class EnergyPlusSetup:
         """Run EnergyPlus simulation.
 
         Args:
-            weather_file: Weather file name.
             output_directory: Output directory name.
             output_prefix: Output file prefix.
             silent: If True, suppress EnergyPlus output.
 
         Example:
-            >>> ep.run(weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
-                          output_prefix="test1", silent=True)
+            >>> epsetup.run(output_prefix="test1", silent=True)
         """
 
-        options = {"-w": weather_file, "-d": output_directory, "-p": output_prefix}
+        options = {"-w": self.epw, "-d": output_directory, "-p": output_prefix}
         # check if any of options are None, if so, dont pass them to run_energyplus
         options = {k: v for k, v in options.items() if v is not None}
         opt = [item for sublist in options.items() for item in sublist]
@@ -745,6 +741,7 @@ class EnergyPlusSetup:
 
         self.api.runtime.set_console_output_status(self.state, not silent)
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
+        self.api.state_manager.delete_state(self.state)
 
     def set_callback(self, method_name: str, func: Callable):
         """Set callback function for EnergyPlus runtime API.
@@ -757,7 +754,7 @@ class EnergyPlusSetup:
             AttributeError: If method_name is not found in EnergyPlus runtime API.
 
         Example:
-            >>> ep.set_callback("callback_begin_system_timestep_before_predictor", func)
+            >>> epsetup.set_callback("callback_begin_system_timestep_before_predictor", func)
         """
         try:
             method = getattr(self.api.runtime, method_name)
