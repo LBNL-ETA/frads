@@ -17,7 +17,7 @@ from pyenergyplus.api import EnergyPlusAPI
 class EnergyPlusModel:
     """Load and parse input file into a JSON object.
 
-    If the input file is in .idf format, use command-line energyplus program \
+    If the input file is in .idf format, use command-line EnergyPlus program \
         to convert it to epJSON format
     
     Args:
@@ -579,7 +579,7 @@ class EnergyPlusSetup:
             timezone=(0 - loc["time_zone"]) * 15,
         )
 
-        self.api.runtime.callback_begin_new_environment(self.state, self.get_handles())
+        self.api.runtime.callback_begin_new_environment(self.state, self._get_handles())
 
     def __enter__(self):
         return self
@@ -663,7 +663,7 @@ class EnergyPlusSetup:
                 self.handles.variable[key] = {}
             self.handles.variable[key][name] = None
 
-    def get_handles(self):
+    def _get_handles(self):
         def callback_function(state):
             for key in self.handles.variable:
                 try:
