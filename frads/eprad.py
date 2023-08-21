@@ -5,10 +5,11 @@ Class and functions for accessing EnergyPlus Python API
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 
 
 from frads import sky
+from frads.window import GlazingSystem
 import copy
 from pyenergyplus.api import EnergyPlusAPI
 
@@ -108,7 +109,7 @@ class EnergyPlusModel:
             self._gen_list_of_actuators()
         return self.actuators_list
 
-    def _add(self, key, obj):
+    def _add(self, key: str, obj: dict or str):
         """Add an object to the epjs dictionary.
 
         Args:
@@ -122,7 +123,7 @@ class EnergyPlusModel:
             # add
             self.epjs[key] = obj
 
-    def add_glazing_system(self, glazing_system):
+    def add_glazing_system(self, glazing_system: GlazingSystem):
         """Add glazing system to EnergyPlusModel's epjs dictionary.
 
         Args:
@@ -374,7 +375,7 @@ class EnergyPlusModel:
                 "construction_name"
             ] = cfs
 
-    def add_lighting(self, zone, replace=False) -> None:
+    def add_lighting(self, zone: str, replace: bool = False):
         """Add lighting object to EnergyPlusModel's epjs dictionary.
 
         Args:
@@ -562,7 +563,7 @@ class EnergyPlusSetup:
                      output_prefix="test1", silent=True)
     """
 
-    def __init__(self, epmodel):
+    def __init__(self, epmodel: EnergyPlusModel):
         self.api = epmodel.api
         self.epjs = epmodel.epjs
         self.state = self.api.state_manager.new_state()
@@ -745,7 +746,7 @@ class EnergyPlusSetup:
         self.api.runtime.set_console_output_status(self.state, not silent)
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
 
-    def set_callback(self, method_name: str, func):
+    def set_callback(self, method_name: str, func: Callable):
         """Set callback function for EnergyPlus runtime API.
 
         Args:
