@@ -14,13 +14,19 @@ from pyenergyplus.api import EnergyPlusAPI
 
 
 class EnergyPlusModel:
+    """Load and parse input file into a JSON object.
+
+    If the input file is in .idf format, use command-line energyplus program \
+        to convert it to epJSON format
+    
+    Args:
+        fpath: input file path (.idf or .epJSON)
+
+    Example:
+        >>> model = EnergyPlusModel(Path("model.idf"))
+    """
+
     def __init__(self, fpath: Path):
-        """Load and parse input file into a JSON object.
-        If the input file is in .idf format, use command-line
-        energyplus program to convert it to epJSON format
-        Args:
-            fpath: input file path
-        """
         self.api = EnergyPlusAPI()
         epjson_path: Path
         if fpath.suffix == ".idf":
@@ -43,7 +49,7 @@ class EnergyPlusModel:
     def complex_fenestration_states(self):
         """
         Example:
-            >>> model.cfs
+            >>> model.complex_fenestration_states
         """
         return list(self.epjs["Construction:ComplexFenestrationState"].keys())
 
@@ -57,6 +63,10 @@ class EnergyPlusModel:
 
     @property
     def window_walls(self):
+        """
+        Example:
+            >>> model.window_walls
+        """
         wndo_walls = []
         for k, v in self.epjs["FenestrationSurface:Detailed"].items():
             wndo_walls.append(v["building_surface_name"])
@@ -64,6 +74,10 @@ class EnergyPlusModel:
 
     @property
     def floors(self):
+        """
+        Example:
+            >>> model.floors
+        """
         floors = []
         for k, v in self.epjs["BuildingSurface:Detailed"].items():
             if v["surface_type"] == "Floor":
@@ -72,12 +86,20 @@ class EnergyPlusModel:
 
     @property
     def lighting_zones(self):
+        """
+        Example:
+            >>> model.lighting_zones
+        """
         if "Lights" in self.epjs:
             return list(self.epjs["Lights"].keys())
         return "No Lights"
 
     @property
     def zones(self):
+        """
+        Example:
+            >>> model.zones
+        """
         return list(self.epjs["Zone"].keys())
 
     @property
@@ -87,6 +109,12 @@ class EnergyPlusModel:
         return self.actuators_list
 
     def _add(self, key, obj):
+        """Add an object to the epjs dictionary.
+
+        Args:
+            key: Key of the object to be added.
+            obj: Object to be added.
+        """
         if key in self.epjs:
             # merge
             self.epjs[key] = {**self.epjs[key], **obj}
@@ -94,17 +122,14 @@ class EnergyPlusModel:
             # add
             self.epjs[key] = obj
 
-    def add_glazing_system(self, glazing_system) -> None:
-        """
-        Add CFS to an EnergyPlus JSON file.
+    def add_glazing_system(self, glazing_system):
+        """Add glazing system to EnergyPlusModel's epjs dictionary.
 
         Args:
-            solar_results: Solar results from pywincalc.
-            photopic_results: Photopic results from pywincalc.
-            glazing_system: Glazing system from pywincalc.
-            epjs: EnergyPlus JSON file.
-        Returns:
-            None
+            glazing_system: GlazingSystem object
+
+        Example:
+            >>> model.add_glazing_system(glazing_system1)
         """
         name = glazing_system.name
         if (
@@ -350,8 +375,18 @@ class EnergyPlusModel:
             ] = cfs
 
     def add_lighting(self, zone, replace=False) -> None:
-        """Add lighting objects to the epjs dictionary."""
+        """Add lighting object to EnergyPlusModel's epjs dictionary.
 
+        Args:
+            zone: Zone name to add lighting to.
+            replace: If True, replace existing lighting object in zone.
+
+        Raises:
+            ValueError: If lighting already exists in zone and replace is False.
+
+        Example:
+            >>> model.add_lighting("Zone1")
+        """
         dict2 = copy.deepcopy(self.epjs["Lights"])
 
         if self.epjs["Lights"] is not None:
@@ -366,7 +401,8 @@ class EnergyPlusModel:
                         del self.epjs["Lights"][l]
                     else:
                         raise ValueError(
-                            "Lighting already exists in this zone. If want to replace, set replace=True."
+                            f"Lighting already exists in {zone}."
+                            "To replace, set replace=True."
                         )
 
         # Initialize lighting schedule type limit dictionary
@@ -417,6 +453,10 @@ class EnergyPlusModel:
 
         Raises:
             raise ValueError("opt_type must be 'variable' or 'meter'.")
+
+        Example:
+            >>> model.add_output("Zone Mean Air Temperature", "variable")
+            >>> model.add_output("Cooling:Electricity", "meter")
         """
 
         if opt_type == "variable":
@@ -427,6 +467,11 @@ class EnergyPlusModel:
             raise ValueError("opt_type must be 'variable' or 'meter'.")
 
     def _add_output_variable(self, opt_name: str):
+        """Add an output variable to the epjs dictionary.
+
+        Args:
+            opt_name: Name of the output variable.
+        """
         i = 1
         if "Output:Variable" not in self.epjs:
             self.epjs["Output:Variable"] = {}
@@ -442,6 +487,11 @@ class EnergyPlusModel:
             }
 
     def _add_output_meter(self, opt_name: str):
+        """Add an output meter to the epjs dictionary.
+
+        Args:
+            opt_name: Name of the output meter.
+        """
         i = 1
         if "Output:Meter" not in self.epjs:
             self.epjs["Output:Meter"] = {}
@@ -478,7 +528,12 @@ class EnergyPlusModel:
             )
 
 
-def ep_datetime_parser(inp):
+def ep_datetime_parser(inp: str):
+    """Parse date and time from EnergyPlus output.
+
+    Args:
+        inp: Date and time string from EnergyPlus output.
+    """
     date, time = inp.strip().split()
     month, day = [int(i) for i in date.split("/")]
     hr, mi, sc = [int(i) for i in time.split(":")]
@@ -546,6 +601,8 @@ class EnergyPlusSetup:
         Raises:
             ValueError: If the actuator is not found
 
+        Example:
+            >>> ep.actuate("Weather Data", "Outdoor Dew Point", "Environment", 10)
         """
 
         if key not in self.handles.actuator:  # check if key exists in actuator handles
@@ -566,12 +623,36 @@ class EnergyPlusSetup:
             self.state, self.handles.actuator[key][name], value
         )
 
-    def get_variable_value(self, name: str, key: str):
+    def get_variable_value(self, name: str, key: str) -> float:
+        """Get the value of a variable in the EnergyPlus model during runtime.
+
+        Args:
+            name: The name of the variable to retrieve, e.g. "Outdoor Dew Point"
+            key: The instance of the variable to retrieve, e.g. "Environment"
+
+        Returns:
+            The value of the variable
+
+        Raises:
+            ValueError: If the variable is not found
+
+        Example:
+            >>> ep.get_variable_value("Outdoor Dew Point", "Environment")
+        """
         return self.api.exchange.get_variable_value(
             self.state, self.handles.variable[key][name]
         )
 
     def request_variable(self, name: str, key: str):
+        """Request a variable from the EnergyPlus model during runtime.
+
+        Args:
+            name: The name of the variable to retrieve, e.g. "Outdoor Dew Point"
+            key: The instance of the variable to retrieve, e.g. "Environment"
+
+        Example:
+            >>> ep.request_variable("Outdoor Dew Point", "Environment")
+        """
         if (key, name) in self.handles.actuator.items():
             pass
         else:
@@ -602,7 +683,12 @@ class EnergyPlusSetup:
 
         return callback_function
 
-    def get_datetime(self):
+    def get_datetime(self) -> datetime:
+        """Get the current date and time from EnergyPlus
+
+        Returns:
+            datetime object
+        """
         year = self.api.exchange.year(self.state)
         month = self.api.exchange.month(self.state)
         day = self.api.exchange.day_of_month(self.state)
@@ -630,6 +716,19 @@ class EnergyPlusSetup:
         output_prefix: Optional[str] = "eplus",
         silent: bool = False,
     ):
+        """Run EnergyPlus simulation.
+
+        Args:
+            weather_file: Weather file name.
+            output_directory: Output directory name.
+            output_prefix: Output file prefix.
+            silent: If True, suppress EnergyPlus output.
+
+        Example:
+            >>> ep.run(weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
+                          output_prefix="test1", silent=True)
+        """
+
         options = {"-w": weather_file, "-d": output_directory, "-p": output_prefix}
         # check if any of options are None, if so, dont pass them to run_energyplus
         options = {k: v for k, v in options.items() if v is not None}
@@ -647,6 +746,18 @@ class EnergyPlusSetup:
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
 
     def set_callback(self, method_name: str, func):
+        """Set callback function for EnergyPlus runtime API.
+
+        Args:
+            method_name: Name of the method to set callback for.
+            func: Callback function.
+
+        Raises:
+            AttributeError: If method_name is not found in EnergyPlus runtime API.
+
+        Example:
+            >>> ep.set_callback("callback_begin_system_timestep_before_predictor", func)
+        """
         try:
             method = getattr(self.api.runtime, method_name)
         except AttributeError:
