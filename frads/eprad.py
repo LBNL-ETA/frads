@@ -349,7 +349,7 @@ class EnergyPlusModel:
                 "construction_name"
             ] = cfs
 
-    def add_lighting_system(self, zone, replace=False) -> None:
+    def add_lighting(self, zone, replace=False) -> None:
         """Add lighting objects to the epjs dictionary."""
 
         dict2 = copy.deepcopy(self.epjs["Lights"])
@@ -496,6 +496,17 @@ class Handles:
 
 
 class EnergyPlusSetup:
+    """Class for setting up and running EnergyPlus simulations.
+
+    Args:
+        epmodel: EnergyPlusModel object
+
+    Example:
+        >>> with EnergyPlusSetup(epmodel) as ep:
+        >>>     ep.run(weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
+                     output_prefix="test1", silent=True)
+    """
+
     def __init__(self, epmodel):
         self.api = epmodel.api
         self.epjs = epmodel.epjs
@@ -520,40 +531,40 @@ class EnergyPlusSetup:
     def __exit__(self, exc_type, exc_value, exc_tb):
         self.api.state_manager.delete_state(self.state)
 
-    def actuate(self, name: str, key: str, value):
-        """
-        :param component_type: The actuator category, e.g. "Weather Data"
-        :param name: The name of the actuator to retrieve, e.g. "Outdoor Dew Point"
-        :param key: The instance of the variable to retrieve, e.g. "Environment"
+    def actuate(self, component_type: str, name: str, key: str, value: float):
+        """Set or update the operating value of an actuator in the EnergyPlus model.
+
+        If actuator has not been requested previously, it will be requested.
+        Set the actuator value to the value specified.
+
+        Args:
+            component_type: The actuator category, e.g. "Weather Data"
+            name: The name of the actuator to retrieve, e.g. "Outdoor Dew Point"
+            key: The instance of the variable to retrieve, e.g. "Environment"
+            value: The value to set the actuator to
+
+        Raises:
+            ValueError: If the actuator is not found
 
         """
-        if key not in self.handles.actuator:
-            raise ValueError("Actuator not found", name, key)
+
+        if key not in self.handles.actuator:  # check if key exists in actuator handles
+            self.handles.actuator[key] = {}
+        if (
+            name not in self.handles.actuator[key]
+        ):  # check if name exists in actuator handles
+            handle = self.api.exchange.get_actuator_handle(
+                self.state, component_type, name, key
+            )
+            if handle == -1:
+                del self.handles.actuator[key]
+                raise ValueError(f"Actuator {component_type} {name} {key} not found")
+            self.handles.actuator[key][name] = handle
+
+        # set actuator value
         self.api.exchange.set_actuator_value(
             self.state, self.handles.actuator[key][name], value
         )
-
-    def request_actuator(self, state, component_type: str, name: str, key: str):
-        """
-        :param component_type: The actuator category, e.g. "Weather Data"
-        :param name: The name of the actuator to retrieve, e.g. "Outdoor Dew Point"
-        :param key: The instance of the variable to retrieve, e.g. "Environment"
-
-        """
-        if (key, name) in self.handles.actuator.items():
-            pass
-        else:
-            handle = self.api.exchange.get_actuator_handle(
-                state, component_type, name, key
-            )
-            if handle == -1:
-                raise ValueError(
-                    f"Actuator {component_type} {name} {key} not found", key
-                )
-            # check key exists
-            if key not in self.handles.actuator:
-                self.handles.actuator[key] = {}
-            self.handles.actuator[key][name] = handle
 
     def get_variable_value(self, name: str, key: str):
         return self.api.exchange.get_variable_value(
@@ -588,28 +599,6 @@ class EnergyPlusSetup:
                     if handle == -1:
                         raise ValueError("Construction handle not found", cfs)
                     self.handles.construction[cfs] = handle
-
-            if "FenestrationSurface:Detailed" in self.epjs:
-                for window in self.epjs["FenestrationSurface:Detailed"]:
-                    self.request_actuator(
-                        state,
-                        component_type="Surface",
-                        name="Construction State",
-                        key=window,
-                    )
-
-            for light in self.epjs.get("Lights", []):
-                self.request_actuator(
-                    state, component_type="Lights", name="Electricity Rate", key=light
-                )
-
-                self.request_variable("Lights Electricity Energy", light)
-                var_handle = self.api.exchange.get_variable_handle(
-                    state, "Lights Electricity Energy", light
-                )
-                if var_handle == -1:
-                    raise ValueError("Light variable not found", light)
-                self.handles.variable[light]["Lights Electricity Energy"] = var_handle
 
         return callback_function
 
