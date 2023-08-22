@@ -44,7 +44,6 @@ class EnergyPlusModel:
             raise Exception(f"Unknown file type {fpath}")
         with open(epjson_path) as rdr:
             self.epjs = json.load(rdr)
-        self.actuators_list = None
 
     @property
     def complex_fenestration_states(self):
@@ -102,12 +101,6 @@ class EnergyPlusModel:
             >>> model.zones
         """
         return list(self.epjs["Zone"].keys())
-
-    @property
-    def actuators(self):
-        if self.actuators_list is None:
-            self._gen_list_of_actuators()
-        return self.actuators_list
 
     def _add(self, key: str, obj: dict or str):
         """Add an object to the epjs dictionary.
@@ -402,7 +395,7 @@ class EnergyPlusModel:
                         del self.epjs["Lights"][l]
                     else:
                         raise ValueError(
-                            f"Lighting already exists in {zone}."
+                            f"Lighting already exists in {zone}. "
                             "To replace, set replace=True."
                         )
 
@@ -506,28 +499,6 @@ class EnergyPlusModel:
                 "reporting_frequency": "Timestep",
             }
 
-    def _actuator_func(self, state):
-        actuators_list = []
-        if self.actuators_list is None:
-            list = self.api.api.listAllAPIDataCSV(state).decode("utf-8")
-            for line in list.split("\n"):
-                if line.startswith("Actuator"):
-                    actuators_list.append(line.split(",", 1)[1])
-            self.actuators_list = actuators_list
-        else:
-            self.api.api.stopSimulation(state)
-
-    def _gen_list_of_actuators(self):
-        with EnergyPlusSetup(self) as ep:
-            ep.set_callback(
-                "callback_begin_system_timestep_before_predictor", self._actuator_func
-            )
-            ep.run(
-                weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
-                output_prefix="test1",
-                silent=True,
-            )
-
 
 def ep_datetime_parser(inp: str):
     """Parse date and time from EnergyPlus output.
@@ -561,12 +532,14 @@ class EnergyPlusSetup:
         >>> epsetup = EnergyPlusSetup(epmodel, epw="USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
     """
 
-    def __init__(self, epmodel: EnergyPlusModel, epw: str):
+    def __init__(self, epmodel: EnergyPlusModel, weather_file: Optional[str] = None):
         self.api = epmodel.api
-        self.epw = epw
+        self.epw = weather_file
         self.epjs = epmodel.epjs
         self.state = self.api.state_manager.new_state()
         self.handles = Handles()
+        self.actuators = None
+        self._gen_list_of_actuators()
 
         loc = list(self.epjs["Site:Location"].values())[0]
         self.wea_meta = sky.WeaMetaData(
@@ -585,6 +558,28 @@ class EnergyPlusSetup:
 
     def __exit__(self, exc_type, exc_value, exc_tb):
         self.api.state_manager.delete_state(self.state)
+
+    def _actuator_func(self, state):
+        actuators_list = []
+        if self.actuators is None:
+            list = self.api.api.listAllAPIDataCSV(state).decode("utf-8")
+            for line in list.split("\n"):
+                if line.startswith("Actuator"):
+                    actuators_list.append(line.split(",", 1)[1])
+            self.actuators = actuators_list
+        else:
+            self.api.api.stopSimulation(state)
+
+    def _gen_list_of_actuators(self):
+        self.restore_state = True
+        self.set_callback(
+            "callback_begin_system_timestep_before_predictor", self._actuator_func
+        )
+        if self.epw is not None:
+            self.run(silent=True)
+        else:
+            self.run(silent=True, design_day=True)
+        self.restore_state = False
 
     def actuate(self, component_type: str, name: str, key: str, value: float):
         """Set or update the operating value of an actuator in the EnergyPlus model.
@@ -711,25 +706,56 @@ class EnergyPlusSetup:
 
     def run(
         self,
-        output_directory: Optional[str] = None,
+        output_directory: Optional[str] = "./",
         output_prefix: Optional[str] = "eplus",
+        output_suffix: Optional[str] = "L",
         silent: bool = False,
+        annual: bool = False,
+        design_day: bool = False,
     ):
         """Run EnergyPlus simulation.
 
         Args:
-            output_directory: Output directory name.
-            output_prefix: Output file prefix.
-            silent: If True, suppress EnergyPlus output.
+            output_directory: Output directory path. (default: None) \
+                If None, use current directory.
+            output_prefix: Prefix for output files. (default: eplus)
+            output_suffix: Suffix style for output files. (default: L)
+                L: Legacy (e.g., eplustbl.csv)
+                C: Capital (e.g., eplusTable.csv)
+                D: Dash (e.g., eplus-table.csv)
+            silent: If True, do not print EnergyPlus output to console. (default: False)
+            annual: If True, force run annual simulation. (default: False)
+            design_day: If True, force run design-day-only simulation. (default: False)
 
         Example:
             >>> epsetup.run(output_prefix="test1", silent=True)
         """
+        opt = ["-d", output_directory, "-p", output_prefix, "-s", output_suffix]
 
-        options = {"-w": self.epw, "-d": output_directory, "-p": output_prefix}
-        # check if any of options are None, if so, dont pass them to run_energyplus
-        options = {k: v for k, v in options.items() if v is not None}
-        opt = [item for sublist in options.items() for item in sublist]
+        if self.epw is not None:
+            opt.extend(["-w", self.epw])
+        elif design_day:
+            if "SizingPeriod:DesignDay" in self.epjs:
+                opt.append("-D")
+            else:
+                raise ValueError(
+                    "Design day simulation requested, "
+                    "but no design day found in EnergyPlus model"
+                )
+        else:
+            raise ValueError(
+                "Specify weather file in EnergyPlusSetup or "
+                "run with design_day = True for design-day-only simulation"
+            )
+
+        if annual:
+            if self.epw is not None:
+                opt.append("-a")
+            else:
+                raise ValueError(
+                    "Annual simulation requested, "
+                    "but no weather file found in EnergyPlusSetup"
+                )
 
         if "OutputControl:Files" not in self.epjs:
             self.epjs["OutputControl:Files"] = {
@@ -741,7 +767,10 @@ class EnergyPlusSetup:
 
         self.api.runtime.set_console_output_status(self.state, not silent)
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
-        self.api.state_manager.delete_state(self.state)
+        if self.restore_state:
+            self.api.state_manager.reset_state(self.state)
+        else:
+            self.api.state_manager.delete_state(self.state)
 
     def set_callback(self, method_name: str, func: Callable):
         """Set callback function for EnergyPlus runtime API.
