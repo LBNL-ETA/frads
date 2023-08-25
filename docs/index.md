@@ -10,9 +10,8 @@ Version: 1.0.0
 The documentation consists of three parts:
 
 1. [How-To Guides](how-to/index.md): Scenario-based how-to guides
-2. [Usage](usage/config.md): Classes and functions usage.
-3. [CLI Manual](manual/index.md): Manual pages for all the command-line-interfaces.
-4. [Reference](ref/index.md): Code API documentation
+2. [CLI Manual](manual/index.md): Manual pages for all the command-line-interfaces.
+3. [Reference](ref/index.md): Code API documentation
 
 ## Installation
 You can find installation instructions on our [README](https://github.com/LBNL-ETA/frads#installation).
