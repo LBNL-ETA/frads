@@ -439,35 +439,35 @@ class EnergyPlusModel:
             self._add(key, obj)
 
     def add_output(
-        self, opt_name: str, opt_type: str, reporting_frequency: str = "Timestep"
+        self, output_name: str, output_type: str, reporting_frequency: str = "Timestep"
     ):
         """Add an output variable or meter to the epjs dictionary.
 
         Args:
-            opt_name: Name of the output variable or meter.
-            opt_type: Type of the output. "variable" or "meter".
+            output_name: Name of the output variable or meter.
+            output_type: Type of the output. "variable" or "meter".
             reporting_frequency: Reporting frequency of the output variable or meter.
 
         Raises:
-            raise ValueError("opt_type must be 'variable' or 'meter'.")
+            raise ValueError("output_type must be 'variable' or 'meter'.")
 
         Example:
             >>> model.add_output("Zone Mean Air Temperature", "variable")
             >>> model.add_output("Cooling:Electricity", "meter")
         """
 
-        if opt_type == "variable":
-            self._add_output_variable(opt_name, reporting_frequency)
-        elif opt_type == "meter":
-            self._add_output_meter(opt_name, reporting_frequency)
+        if output_type == "variable":
+            self._add_output_variable(output_name, reporting_frequency)
+        elif output_type == "meter":
+            self._add_output_meter(output_name, reporting_frequency)
         else:
-            raise ValueError("opt_type must be 'variable' or 'meter'.")
+            raise ValueError("output_type must be 'variable' or 'meter'.")
 
-    def _add_output_variable(self, opt_name: str, reporting_frequency):
+    def _add_output_variable(self, output_name: str, reporting_frequency):
         """Add an output variable to the epjs dictionary.
 
         Args:
-            opt_name: Name of the output variable.
+            output_name: Name of the output variable.
             reporting_frequency: Reporting frequency of the output variable.
         """
         i = 1
@@ -475,20 +475,20 @@ class EnergyPlusModel:
             self.epjs["Output:Variable"] = {}
         for output in self.epjs["Output:Variable"].values():
             i += 1
-            if output["variable_name"] == opt_name:
+            if output["variable_name"] == output_name:
                 break
         else:
             self.epjs["Output:Variable"][f"Output:Variable {i}"] = {
                 "key_value": "*",
                 "reporting_frequency": reporting_frequency,
-                "variable_name": opt_name,
+                "variable_name": output_name,
             }
 
-    def _add_output_meter(self, opt_name: str, reporting_frequency):
+    def _add_output_meter(self, output_name: str, reporting_frequency):
         """Add an output meter to the epjs dictionary.
 
         Args:
-            opt_name: Name of the output meter.
+            output_name: Name of the output meter.
             reporting_frequency: Reporting frequency of the output meter.
         """
         i = 1
@@ -496,11 +496,11 @@ class EnergyPlusModel:
             self.epjs["Output:Meter"] = {}
         for output in self.epjs["Output:Meter"].values():
             i += 1
-            if output["key_name"] == opt_name:
+            if output["key_name"] == output_name:
                 break
         else:
             self.epjs["Output:Meter"][f"Output:Meter {i}"] = {
-                "key_name": opt_name,
+                "key_name": output_name,
                 "reporting_frequency": reporting_frequency,
             }
 
