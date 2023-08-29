@@ -395,7 +395,7 @@ class EnergyPlusModel:
                         del self.epjs["Lights"][l]
                     else:
                         raise ValueError(
-                            f"Lighting already exists in {zone}. "
+                            f"Lighting already exists in zone = {zone}. "
                             "To replace, set replace=True."
                         )
 
@@ -515,13 +515,6 @@ def ep_datetime_parser(inp: str):
         return datetime(1900, month, day, hr, mi, sc)
 
 
-class Handles:
-    def __init__(self):
-        self.variable = {}
-        self.actuator = {}
-        self.construction = {}
-
-
 class EnergyPlusSetup:
     """Class for setting up and running EnergyPlus simulations.
 
@@ -537,7 +530,9 @@ class EnergyPlusSetup:
         self.epw = weather_file
         self.epjs = epmodel.epjs
         self.state = self.api.state_manager.new_state()
-        self.handles = Handles()
+        self.variable_handles = {}
+        self.actuator_handles = {}
+        self.construction_handles = {}
 
         loc = list(self.epjs["Site:Location"].values())[0]
         self.wea_meta = sky.WeaMetaData(
@@ -591,14 +586,12 @@ class EnergyPlusSetup:
         else:
             raise ValueError(
                 "Specify weather file in EnergyPlusSetup "
-                "or model design day in EnergyPlusModel"
+                "or model design day in EnergyPlusModel."
             )
         self.api.state_manager.delete_state(actuator_state)
 
     def actuate(self, component_type: str, name: str, key: str, value: float):
         """Set or update the operating value of an actuator in the EnergyPlus model.
-
-        Check if actuator is valid, if not raise ValueError.
 
         If actuator has not been requested previously, it will be requested.
         Set the actuator value to the value specified.
@@ -615,24 +608,25 @@ class EnergyPlusSetup:
         Example:
             >>> epsetup.actuate("Weather Data", "Outdoor Dew Point", "Environment", 10)
         """
-        if key not in self.handles.actuator:  # check if key exists in actuator handles
-            self.handles.actuator[key] = {}
+        if key not in self.actuator_handles:  # check if key exists in actuator handles
+            self.actuator_handles[key] = {}
         if (
-            name not in self.handles.actuator[key]
+            name not in self.actuator_handles[key]
         ):  # check if name exists in actuator handles
             handle = self.api.exchange.get_actuator_handle(
                 self.state, component_type, name, key
             )
             if handle == -1:
-                del self.handles.actuator[key]
+                del self.actuator_handles[key]
                 raise ValueError(
-                    f"Actuator: component_type={component_type}, name={name}, key={key} not found."
+                    "Actuator is not found: "
+                    f"component_type = {component_type}, name = {name}, key = {key}."
                 )
-            self.handles.actuator[key][name] = handle
+            self.actuator_handles[key][name] = handle
 
         # set actuator value
         self.api.exchange.set_actuator_value(
-            self.state, self.handles.actuator[key][name], value
+            self.state, self.actuator_handles[key][name], value
         )
 
     def get_variable_value(self, name: str, key: str) -> float:
@@ -652,7 +646,7 @@ class EnergyPlusSetup:
             >>> epsetup.get_variable_value("Outdoor Dew Point", "Environment")
         """
         return self.api.exchange.get_variable_value(
-            self.state, self.handles.variable[key][name]
+            self.state, self.variable_handles[key][name]
         )
 
     def request_variable(self, name: str, key: str):
@@ -665,32 +659,37 @@ class EnergyPlusSetup:
         Example:
             >>> epsetup.request_variable("Outdoor Dew Point", "Environment")
         """
-        if key not in self.handles.variable:
-            self.handles.variable[key] = {}
-        if name in self.handles.variable[key]:
+        if key not in self.variable_handles:
+            self.variable_handles[key] = {}
+        if name in self.variable_handles[key]:
             pass
         else:
             self.api.exchange.request_variable(self.state, name, key)
-            self.handles.variable[key][name] = None
+            self.variable_handles[key][name] = None
 
     def _get_handles(self):
         def callback_function(state):
-            for key in self.handles.variable:
+            for key in self.variable_handles:
                 try:
-                    for name in self.handles.variable[key]:
+                    for name in self.variable_handles[key]:
                         handle = self.api.exchange.get_variable_handle(state, name, key)
                         if handle == -1:
-                            raise ValueError("Variable handle not found", name, key)
-                        self.handles.variable[key][name] = handle
+                            raise ValueError(
+                                "Variable handle not found: "
+                                f"name = {name}, key = {key}"
+                            )
+                        self.variable_handles[key][name] = handle
                 except TypeError:
-                    print("No variables requested for", self.handles.variable, key)
+                    print("No variables requested for", self.variable_handles, key)
 
             if "Construction:ComplexFenestrationState" in self.epjs:
                 for cfs in self.epjs["Construction:ComplexFenestrationState"]:
                     handle = self.api.api.getConstructionHandle(state, cfs.encode())
                     if handle == -1:
-                        raise ValueError("Construction handle not found", cfs)
-                    self.handles.construction[cfs] = handle
+                        raise ValueError(
+                            "Construction handle not found: " f"Construction = {cfs}"
+                        )
+                    self.construction_handles[cfs] = handle
 
         return callback_function
 
@@ -725,6 +724,7 @@ class EnergyPlusSetup:
         output_directory: Optional[str] = "./",
         output_prefix: Optional[str] = "eplus",
         output_suffix: Optional[str] = "L",
+        weather_file: Optional[str] = None,
         silent: bool = False,
         annual: bool = False,
         design_day: bool = False,
@@ -748,29 +748,28 @@ class EnergyPlusSetup:
         """
         opt = ["-d", output_directory, "-p", output_prefix, "-s", output_suffix]
 
-        if self.epw is not None:
-            opt.extend(["-w", self.epw])
+        if weather_file is not None:
+            opt.extend(["-w", weather_file])
         elif design_day:
             if "SizingPeriod:DesignDay" in self.epjs:
                 opt.append("-D")
             else:
                 raise ValueError(
                     "Design day simulation requested, "
-                    "but no design day found in EnergyPlus model"
+                    "but no design day found in EnergyPlus model."
                 )
         else:
             raise ValueError(
                 "Specify weather file in EnergyPlusSetup or "
-                "run with design_day = True for design-day-only simulation"
+                "run with design_day = True for design-day-only simulation."
             )
 
         if annual:
-            if self.epw is not None:
+            if weather_file is not None:
                 opt.append("-a")
             else:
                 raise ValueError(
-                    "Annual simulation requested, "
-                    "but no weather file found in EnergyPlusSetup"
+                    "Annual simulation requested, but no weather file found."
                 )
 
         if "OutputControl:Files" not in self.epjs:
@@ -801,7 +800,7 @@ class EnergyPlusSetup:
             method = getattr(self.api.runtime, method_name)
         except AttributeError:
             raise AttributeError(
-                f"Method {method_name} not found in EnergyPlus runtime API"
+                f"Method {method_name} not found in EnergyPlus runtime API."
             )
         # method(self.state, partial(func, self))
         method(self.state, func)
