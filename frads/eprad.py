@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 from typing import Optional, Callable
 
-
 from frads import sky
 from frads.window import GlazingSystem
 import copy

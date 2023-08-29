@@ -20,6 +20,7 @@ class PaneRGB(NamedTuple):
         glass_rgb: Non-coated side RGB.
         trans_rgb: Transmittance RGB.
     """
+
     measured_data: pwc.ProductData
     coated_rgb: Tuple[float, float, float]
     glass_rgb: Tuple[float, float, float]
@@ -38,6 +39,64 @@ def create_gap(*gases_ratios: Tuple[pwc.PredefinedGasType, float], thickness):
     return pwc.Gap(gases_ratios[0][0], thickness)
 
 
+# class Layer:
+#     def __init__(self, inp):
+#         self.inp = inp
+#         if isinstance(inp, (str, Path)):
+#             self.inp = Path(inp)
+#             if not self.inp.exists():
+#                 raise FileNotFoundError(inp)
+#         self.data = None
+#         self.thickness = 0
+#
+#
+# class Glazing(Layer):
+#     def __init__(self, inp, name=None):
+#         super().__init__(inp)
+#         if isinstance(self.inp, Path):
+#             product_name = self.inp.stem
+#             if self.inp.suffix == ".json":
+#                 self.data = pwc.parse_json_file(str(self.inp))
+#             else:
+#                 self.data = pwc.parse_optics_file(str(self.inp))
+#         else:
+#             self.data = pwc.parse_json(self.inp)
+#             product_name = self.inp["name"] or self.inp["product_name"]
+#         self.data.product_name = (
+#             self.data.product_name or product_name or name or str(inp)[:6]
+#         )
+#         self.thickness = self.data.thickness
+#
+#
+# class Shading(Layer):
+#     def __init__(self, inp, name=None):
+#         super().__init__(inp)
+#         if isinstance(self.inp, Path):
+#             self.data = pwc.parse_bsdf_xml_file(str(self.inp))
+#         else:
+#             self.data = pwc.parse_bsdf_xml_string(self.inp)
+#         self.thickness = self.data.thickness
+#         self.data.product_name = self.data.product_name or name or str(inp)[:6]
+#
+#
+# class AppliedFilm(Glazing):
+#     def __init__(self, inp, name=None):
+#         super().__init__(inp, name=name)
+
+
+# class Gap(Layer):
+#     def __init__(self, *gases_ratios, thickness):
+#         if len(gases_ratios) > 1:
+#             if sum([ratio for _, ratio in gases_ratios]) != 1:
+#                 raise ValueError("The sum of the gas ratios must be 1.")
+#             components = [
+#                 pwc.PredefinedGasMixtureComponent(gas, ratio)
+#                 for gas, ratio in gases_ratios
+#             ]
+#             self.data = pwc.Gap(components, thickness)
+#         self.data = pwc.Gap(gases_ratios[0][0], thickness)
+
+
 class GlazingSystem:
     default_air_gap = (AIR, 1), 0.0127
 
@@ -50,6 +109,12 @@ class GlazingSystem:
         self.photopic_results = None
         self.solar_results = None
         self.updated = True
+
+    @classmethod
+    def from_gls(cls, gls_path):
+        """Create a GlazingSystem from a glazing system file."""
+        # unzip the gls file
+        pass
 
     @property
     def name(self):
@@ -114,6 +179,24 @@ class GlazingSystem:
             self._gaps.append(self.default_air_gap)
             self._thickness += self.default_air_gap[-1]
         self.updated = True
+
+    # def add_film_layer(self, inp, glazing, inside=False):
+    #     """Add a film layer."""
+    #     film = AppliedFilm(inp)
+
+    #     if isinstance(inp, (str, Path)):
+    #         _path = Path(inp)
+    #         if not _path.exists():
+    #             raise FileNotFoundError(inp)
+    #         data = pwc.parse_optics_file(str(_path))
+    #     else:
+    #         data = pwc.parse_json(inp)
+    #     if inside:
+    #         self.layers.append(data)
+    #     else:
+    #         self.layers.insert(0, data)
+    #     self._thickness += data.thickness / 1e3 or 0
+    #     self.updated = True
 
     def build(self):
         """Build the glazing system."""
@@ -218,6 +301,28 @@ class GlazingSystem:
                         t=str(self._thickness),
                     )
                 )
+
+    def save(self):
+        """
+        Compress the glazing system into a .gls file.
+        A .gls file contain individual layer data and gap data.
+        System matrix results are also included.
+        """
+        pass
+
+    def gen_glazing(self):
+        """
+        Generate a brtdfunc for a single or double pane glazing system.
+        """
+        # Check if is more than two layers
+        if len(self.layers) > 2:
+            raise ValueError("Only single and double pane supported")
+        # Check if all layers are glazing
+        for layer in self.layers:
+            if not layer.type == "glazing":
+                raise ValueError("Only glazing layers supported")
+        # Call gen_glaze to generate brtdfunc
+        return
 
 
 def get_glazing_primitive(panes: List[PaneRGB]) -> pr.Primitive:

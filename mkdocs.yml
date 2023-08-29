@@ -79,7 +79,6 @@ nav:
         - view-sun: manual/gen/matrix/view_sun.md
         - ncp: manual/gen/matrix/ncp.md
       - room: manual/gen/room.md
-    - gencolorsky: manual/gencolorsky.md
   - How-To Guides:
     - how-to/index.md
   - Reference:

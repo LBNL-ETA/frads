@@ -3,14 +3,12 @@ This module contains routines to generate sender and receiver objects, generate
 matrices by calling either rfluxmtx or rcontrib.
 """
 
-from __future__ import annotations
-
 import gc
 import logging
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 from frads.utils import parse_polygon, parse_rad_header, random_string
 from frads.geom import Polygon
 import numpy as np
@@ -34,6 +32,7 @@ BASIS_DIMENSION = {
     "sc5": 1024,
     "sc6": 4096,
     "sc7": 16384,
+    "u": 1,
 }
 
 
@@ -63,7 +62,6 @@ class ViewSender:
             view=view.args(), xres=xres, yres=yres, dimensions=True
         ).split()
         new_xres, new_yres = int(res_eval[1]), int(res_eval[3])
-        print(new_xres, new_yres)
         vwrays_proc = pr.vwrays(
             view=view.args(),
             outform="f",
@@ -101,7 +99,7 @@ class SurfaceSender:
     """Sender object as a list of surface primitives."""
 
     def __init__(
-        self, surfaces: List[pr.Primitive], basis, left_hand=False, offset=None
+        self, surfaces: List[pr.Primitive], basis: str, left_hand=False, offset=None
     ):
         self.surfaces = surfaces
         self.basis = basis
@@ -155,9 +153,12 @@ class SurfaceReceiver(Receiver):
 
 
 class SkyReceiver(Receiver):
-    def __init__(self, basis):
+    def __init__(self, basis, out=None):
         super().__init__(basis)
-        self.content = (
+        self.content = ""
+        if out is not None:
+            self.content += f"#@rfluxmtx o={out}\n"
+        self.content += (
             f"#@rfluxmtx h={basis} u=+Y\n"
             "void glow skyglow 0 0 4 1 1 1 0\n"
             "skyglow source skydome 0 0 4 0 0 1 180\n"
@@ -179,7 +180,6 @@ class SunReceiver(Receiver):
         if not basis.startswith("r") and not basis[-1].isdigit():
             raise ValueError("Invalid Reinhart/Treganza basis", basis)
         mf = int(basis[-1])
-        # sundirs, _ = calc_reinsrc_dir(int(basis[-1]))
         nbins = 144 * mf**2 + 1
         res = pr.rcalc(
             inp=pr.cnt(nbins),
@@ -190,7 +190,7 @@ class SunReceiver(Receiver):
         sundirs = np.frombuffer(res, dtype=np.single).reshape(nbins, 3)
         sunvals = np.ones(BASIS_DIMENSION[basis])
         if sun_matrix is not None:
-            sunvals[np.sum(sun_matrix[:, :, 0], axis=1) == 0] = 0
+            sunvals[np.sum(sun_matrix[1:, :, 0], axis=1) == 0] = 0
         if window_normals is not None:
             sunvals[np.dot(sundirs, np.array(window_normals).T).flatten() >= 0] = 0
         self.content = "\n".join(
@@ -209,7 +209,7 @@ class Matrix:
     def __init__(
         self,
         sender: Union[SensorSender, ViewSender, SurfaceSender],
-        receivers: List[Receiver],
+        receivers: Union[List[SkyReceiver], List[SurfaceReceiver], List[SunReceiver]],
         octree,
         surfaces=None,
     ):
@@ -244,11 +244,19 @@ class Matrix:
         self.octree = octree
         self.surfaces = surfaces
 
-    def generate(self, params: List[str], sparse=False, memmap=False):
+    def generate(
+        self, params: List[str], nproc=1, sparse=False, to_file=False, memmap=False
+    ) -> None:
+        """
+        Call rfluxmtx to generate the matrix.
+        """
         surface_file = None
         rays = None
         params.append("-n")
-        params.append("8")
+        params.append(f"{nproc}")
+        logger.info("Generating matrix...")
+        if logger.getEffectiveLevel() > 20:
+            params.append("-w")
         if not isinstance(self.sender, SurfaceSender):
             rays = self.sender.content
             params.append("-y")
@@ -277,60 +285,61 @@ class Matrix:
                 octree=self.octree,
                 scene=self.surfaces,
             )
-        _ncols = sum(self.ncols) if isinstance(self.ncols, list) else self.ncols
-        _array = load_binary_matrix(
-            matrix,
-            self.nrows,
-            _ncols,
-            self.ncomp,
-            self.dtype,
-            header=True,
-        )
-        del matrix
-        gc.collect()
-        if memmap:
-            _dtype = np.float64 if self.dtype.startswith("d") else np.float32
-            self.array = np.memmap(
-                f"{random_string(5)}.dat",
-                dtype=_dtype,
-                shape=(self.nrows, _ncols, self.ncomp),
-                order="F",
-                mode="w+",
+        if not to_file:
+            _ncols = sum(self.ncols) if isinstance(self.ncols, list) else self.ncols
+            _array = load_binary_matrix(
+                matrix,
+                self.nrows,
+                _ncols,
+                self.ncomp,
+                self.dtype,
+                header=True,
             )
-            self.array[:] = _array
-            self.array.flush()
-        else:
-            self.array = _array
-        del _array
-        gc.collect()
-        # If multiple receivers, split the array horizontally
-        if isinstance(self.ncols, list):
-            self.array = np.hsplit(self.array, np.cumsum(self.ncols)[:-1])
-            if sparse:
-                self.array = np.array(
-                    [
-                        np.array(
-                            (
-                                csr_matrix(a[:, :, 0]),
-                                csr_matrix(a[:, :, 1]),
-                                csr_matrix(a[:, :, 2]),
+            del matrix
+            gc.collect()
+            if memmap:
+                _dtype = np.float64 if self.dtype.startswith("d") else np.float32
+                self.array = np.memmap(
+                    f"{random_string(5)}.dat",
+                    dtype=_dtype,
+                    shape=(self.nrows, _ncols, self.ncomp),
+                    order="F",
+                    mode="w+",
+                )
+                self.array[:] = _array
+                self.array.flush()
+            else:
+                self.array = _array
+            del _array
+            gc.collect()
+            # If multiple receivers, split the array horizontally
+            if isinstance(self.ncols, list):
+                self.array = np.hsplit(self.array, np.cumsum(self.ncols)[:-1])
+                if sparse:
+                    self.array = np.array(
+                        [
+                            np.array(
+                                (
+                                    csr_matrix(a[:, :, 0]),
+                                    csr_matrix(a[:, :, 1]),
+                                    csr_matrix(a[:, :, 2]),
+                                )
                             )
-                        )
-                        for a in self.array
-                    ]
+                            for a in self.array
+                        ]
+                    )
+            elif sparse:
+                self.array = np.array(
+                    (
+                        csr_matrix(self.array[:, :, 0]),
+                        csr_matrix(self.array[:, :, 1]),
+                        csr_matrix(self.array[:, :, 2]),
+                    )
                 )
-        elif sparse:
-            self.array = np.array(
-                (
-                    csr_matrix(self.array[:, :, 0]),
-                    csr_matrix(self.array[:, :, 1]),
-                    csr_matrix(self.array[:, :, 2]),
-                )
-            )
 
 
 class SunMatrix(Matrix):
-    def __init__(self, sender, receiver: SunReceiver, octree, surfaces=None):
+    def __init__(self, sender: Union[SensorSender, ViewSender], receiver: SunReceiver, octree: Optional[str], surfaces: Optional[List[str]]=None):
         if isinstance(sender, SurfaceSender):
             raise TypeError("SurfaceSender cannot be used with SunMatrix")
         super().__init__(sender, [receiver], octree, surfaces=surfaces)
@@ -338,15 +347,17 @@ class SunMatrix(Matrix):
         self.receiver = receiver
         self.ncols = BASIS_DIMENSION[receiver.basis] + 1
 
-    def generate(self, parameters: List[str], sparse=False):
+    def generate(self, parameters: List[str], nproc=1, radmtx=False, sparse=False) -> Optional[bytes]:
         if not isinstance(self.receiver, SunReceiver):
             raise TypeError("SunMatrix must have a SunReceiver")
         xres, yres = None, None
         inform = "a"
         parameters.append("-n")
-        parameters.append("8")
+        parameters.append(f"{nproc}")
         parameters.append("-h")
-        print("Generating matrix...")
+        if logger.getEffectiveLevel() > 20:
+            parameters.append("-w")
+        logger.info("Generating matrix...")
         with TemporaryDirectory() as tmpdir:
             octree_file = os.path.join(tmpdir, "octree")
             receiver_file = os.path.join(tmpdir, "receiver")
@@ -376,7 +387,8 @@ class SunMatrix(Matrix):
                 outform="d",
                 params=parameters,
             )
-        print("Loading matrix into array...")
+        if radmtx:
+            return matrix
         _array = load_binary_matrix(
             matrix,
             self.nrows,
@@ -449,21 +461,17 @@ def load_binary_matrix(buffer, nrows, ncols, ncomp, dtype, header=False):
     return np.frombuffer(buffer, dtype=npdtype).reshape(nrows, ncols, ncomp)
 
 
-def array_hdr(array, xres, yres) -> bytes:
-    """
-    Call pvalue to generate a HDR image from a numpy array.
-    Args:
-        array: [[r1, g1, b1], [r2, g2, b2], ...]
-        xres: x resolution
-        yres: y resolution
-    Returns:
-        HDR image in bytes
-    """
-    return pr.pvaluer(array.tobytes(), inform="d", header=False, xres=xres, yres=yres)
-
-
 def matrix_multiply_rgb(*mtx: np.ndarray, weights=None):
-    """Multiply matrices as numpy ndarray."""
+    """
+    Multiply matrices as numpy ndarray.
+    linalg.multi_dot figures out the multiplication order
+    but uses more memory.
+    Args:
+        mtx: matrices to multiply
+        weights: weights for each component
+    Returns:
+        The result as a numpy array
+    """
     resr = np.linalg.multi_dot([m[:, :, 0] for m in mtx])
     resg = np.linalg.multi_dot([m[:, :, 1] for m in mtx])
     resb = np.linalg.multi_dot([m[:, :, 2] for m in mtx])
@@ -471,7 +479,64 @@ def matrix_multiply_rgb(*mtx: np.ndarray, weights=None):
         if len(weights) != 3:
             raise ValueError("Weights should have 3 values")
         return resr * weights[0] + resg * weights[1] + resb * weights[2]
-    return np.array((resr, resg, resb))
+    return np.dstack((resr, resg, resb))
+
+
+def sparse_matrix_multiply_rgb_vtds(
+    vmx: np.ndarray, tmx: np.ndarray, dmx: np.ndarray, smx: np.ndarray, weights=None
+):
+    """
+    Multiply sparse view, transmission, daylight,
+    and sky matrices. (ThreePhaseMethod)
+    Args:
+        vmx: view matrix (sparse)
+        tmx: transmission matrix (non-sparse)
+        dmx: daylight matrix (sparse)
+        smx: sky matrix (sparse)
+        weights: weights for RGB channels
+    Returns:
+        The result as a numpy array (non sparse)
+    """
+    if weights is not None:
+        if len(weights) != vmx.shape[0]:
+            raise ValueError("Mismatch between weights and matrix channels")
+    # Looping through each of the RGB channels
+    _res = []
+    for c in range(vmx.shape[0]):
+        td_mtx = np.dot(csr_matrix(tmx[:, :, c]), dmx[c])
+        tds_mtx = np.dot(td_mtx, smx[c])
+        _res.append(np.dot(vmx[c], tds_mtx))
+    if weights is not None:
+        res = np.zeros((vmx[0].shape[0], smx[0].shape[1]))
+        for i, w in enumerate(weights):
+            res += _res[i] * w
+    else:
+        res = np.dstack(_res)
+    return res
+
+
+def to_sparse_matrix3(mtx, mtype="csr") -> np.ndarray:
+    """
+    Convert a three-channel matrix to sparse matrix.
+    Args:
+        mtx: a three-channel matrix
+        mtype: matrix type
+    Returns:
+        An array of sparse matrix
+    """
+    sparser = {
+        "csr": csr_matrix,
+        "lil": lil_matrix,
+    }
+    if mtx.shape[2] != 3:
+        raise ValueError("Matrix must have 3 channels")
+    return np.array(
+        (
+            sparser[mtype](mtx[:, :, 0]),
+            sparser[mtype](mtx[:, :, 1]),
+            sparser[mtype](mtx[:, :, 2]),
+        )
+    )
 
 
 def rfluxmtx_markup(
@@ -493,6 +558,8 @@ def rfluxmtx_markup(
     Returns:
         Marked up primitives as strings (to be written to a file for rfluxmtx)
     """
+    modifier_set = {p.modifier for p in surfaces}
+    source_modifier = f"rflx{surfaces[0].modifier}{random_string(5)}"
     if left_hand:
         basis = "-" + basis
     if source not in ("glow", "light"):
@@ -504,20 +571,20 @@ def rfluxmtx_markup(
         surface_normal += polygon.normal * polygon.area
     sampling_direction = surface_normal * (1 / len(primitives))
     sampling_direction = sampling_direction / np.linalg.norm(sampling_direction)
-    if not np.array_equal(sampling_direction, np.array([0, 0, 1])):
+    if np.array_equal(sampling_direction, np.array([0, 0, 1])):
+        up_vector = np.array([0, 1, 0])
+    elif np.array_equal(sampling_direction, np.array([0, 0, -1])):
+        up_vector = np.array([0, -1, 0])
+    else:
         up_vector = np.cross(
             sampling_direction, np.cross(np.array([0, 0, 1]), sampling_direction)
         )
         up_vector = up_vector / np.linalg.norm(up_vector)
-    else:
-        up_vector = np.array([0, 1, 0])
     if left_hand:
         up_vector = -up_vector
     up_vector = ",".join(map(str, up_vector.tolist()))
-    modifier_set = {p.modifier for p in surfaces}
     if len(modifier_set) > 1:
         raise ValueError("Multiple modifiers")
-    source_modifier = f"rflx{surfaces[0].modifier}{random_string(5)}"
     header = f"#@rfluxmtx h={basis} u={up_vector}\n"
     if out is not None:
         header += f'#@rfluxmtx o="{out}"\n\n'
@@ -547,3 +614,30 @@ def rfluxmtx_markup(
         content += str(new_prim) + "\n"
 
     return header + content
+
+
+def surfaces_view_factor(
+    surfaces: List[pr.Primitive],
+    env: List[pr.Primitive],
+    ray_count: int = 10000,
+) -> Dict[str, List[float]]:
+    """
+    Calculate surface to surface view factor using rfluxmtx.
+    Args:
+        surfaces: list of surface primitives that we want to calculate view factor for.
+            Surface normal needs to be facing inward.
+        env: list of environment primitives that our surfaces will be exposed to.
+            Surface normal needs to be facing inward.
+        ray_count: number of rays spawned for each surface.
+    Returns:
+        A dictionary of view factors, where the key is the surface identifier.
+    """
+    view_factors = {}
+    surfaces_env = surfaces + env
+    receivers = [SurfaceReceiver([s], basis="u") for s in surfaces_env]
+    for surface in surfaces:
+        sender = SurfaceSender([surface], basis="u")
+        mat = Matrix(sender, receivers, octree=None, surfaces=surfaces_env)
+        mat.generate(params=["-c", f"{ray_count}"])
+        view_factors[surface.identifier] = [[i][0] for i in mat.array]
+    return view_factors
