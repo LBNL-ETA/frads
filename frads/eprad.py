@@ -538,8 +538,6 @@ class EnergyPlusSetup:
         self.epjs = epmodel.epjs
         self.state = self.api.state_manager.new_state()
         self.handles = Handles()
-        self.actuators = None
-        self._gen_list_of_actuators()
 
         loc = list(self.epjs["Site:Location"].values())[0]
         self.wea_meta = sky.WeaMetaData(
@@ -552,6 +550,8 @@ class EnergyPlusSetup:
         )
 
         self.api.runtime.callback_begin_new_environment(self.state, self._get_handles())
+        self.actuators = None
+        self._get_list_of_actuators()
 
     def __enter__(self):
         return self
@@ -565,24 +565,40 @@ class EnergyPlusSetup:
             list = self.api.api.listAllAPIDataCSV(state).decode("utf-8")
             for line in list.split("\n"):
                 if line.startswith("Actuator"):
+                    line = line.replace(";", "")
                     actuators_list.append(line.split(",", 1)[1])
             self.actuators = actuators_list
         else:
             self.api.api.stopSimulation(state)
 
-    def _gen_list_of_actuators(self):
-        self.restore_state = True
-        self.set_callback(
-            "callback_begin_system_timestep_before_predictor", self._actuator_func
+    def _get_list_of_actuators(self):
+        with open("epmodel.json", "w") as wtr:
+            json.dump(self.epjs, wtr)
+
+        actuator_state = self.api.state_manager.new_state()
+        self.api.runtime.set_console_output_status(actuator_state, False)
+        method = getattr(
+            self.api.runtime, "callback_begin_system_timestep_before_predictor"
         )
+        method(actuator_state, self._actuator_func)
+
         if self.epw is not None:
-            self.run(silent=True)
+            self.api.runtime.run_energyplus(
+                actuator_state, ["-p", "actuator", "-w", self.epw, "epmodel.json"]
+            )
+        elif "SizingPeriod:DesignDay" in self.epjs:
+            self.api.runtime.run_energyplus(actuator_state, ["-D", "epmodel.json"])
         else:
-            self.run(silent=True, design_day=True)
-        self.restore_state = False
+            raise ValueError(
+                "Specify weather file in EnergyPlusSetup "
+                "or model design day in EnergyPlusModel"
+            )
+        self.api.state_manager.delete_state(actuator_state)
 
     def actuate(self, component_type: str, name: str, key: str, value: float):
         """Set or update the operating value of an actuator in the EnergyPlus model.
+
+        Check if actuator is valid, if not raise ValueError.
 
         If actuator has not been requested previously, it will be requested.
         Set the actuator value to the value specified.
@@ -599,7 +615,6 @@ class EnergyPlusSetup:
         Example:
             >>> epsetup.actuate("Weather Data", "Outdoor Dew Point", "Environment", 10)
         """
-
         if key not in self.handles.actuator:  # check if key exists in actuator handles
             self.handles.actuator[key] = {}
         if (
@@ -610,7 +625,9 @@ class EnergyPlusSetup:
             )
             if handle == -1:
                 del self.handles.actuator[key]
-                raise ValueError(f"Actuator {component_type} {name} {key} not found")
+                raise ValueError(
+                    f"Actuator: component_type={component_type}, name={name}, key={key} not found."
+                )
             self.handles.actuator[key][name] = handle
 
         # set actuator value
@@ -648,13 +665,12 @@ class EnergyPlusSetup:
         Example:
             >>> epsetup.request_variable("Outdoor Dew Point", "Environment")
         """
-        if (key, name) in self.handles.actuator.items():
+        if key not in self.handles.variable:
+            self.handles.variable[key] = {}
+        if name in self.handles.variable[key]:
             pass
         else:
             self.api.exchange.request_variable(self.state, name, key)
-            # check key exists
-            if key not in self.handles.variable:
-                self.handles.variable[key] = {}
             self.handles.variable[key][name] = None
 
     def _get_handles(self):
@@ -767,10 +783,6 @@ class EnergyPlusSetup:
 
         self.api.runtime.set_console_output_status(self.state, not silent)
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
-        if self.restore_state:
-            self.api.state_manager.reset_state(self.state)
-        else:
-            self.api.state_manager.delete_state(self.state)
 
     def set_callback(self, method_name: str, func: Callable):
         """Set callback function for EnergyPlus runtime API.
