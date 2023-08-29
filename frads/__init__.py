@@ -51,7 +51,7 @@ or on a time-step basis.
 import logging
 import shutil
 
-from .epjson2rad import epjson2rad
+from .epjson2rad import epjson_to_rad
 
 from .eprad import EnergyPlusModel, EnergyPlusSetup, ep_datetime_parser
 
@@ -112,7 +112,7 @@ __all__ = [
     # "basis_glow",
     "EnergyPlusSetup",
     "ep_datetime_parser",
-    "epjson2rad",
+    "epjson_to_rad",
     "GlazingSystem",
     "gen_perez_sky",
     "gen_grid",
