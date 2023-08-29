@@ -51,7 +51,9 @@ class EnergyPlusModel:
         Example:
             >>> model.complex_fenestration_states
         """
-        return list(self.epjs["Construction:ComplexFenestrationState"].keys())
+        if "Construction:ComplexFenestrationState" in self.epjs:
+            return list(self.epjs["Construction:ComplexFenestrationState"].keys())
+        return []
 
     @property
     def windows(self):
@@ -59,7 +61,9 @@ class EnergyPlusModel:
         Example:
             >>> model.windows
         """
-        return list(self.epjs["FenestrationSurface:Detailed"].keys())
+        if "FenestrationSurface:Detailed" in self.epjs:
+            return list(self.epjs["FenestrationSurface:Detailed"].keys())
+        return []
 
     @property
     def window_walls(self):
@@ -68,8 +72,9 @@ class EnergyPlusModel:
             >>> model.window_walls
         """
         wndo_walls = []
-        for k, v in self.epjs["FenestrationSurface:Detailed"].items():
-            wndo_walls.append(v["building_surface_name"])
+        if "FenestrationSurface:Detailed" in self.epjs:
+            for k, v in self.epjs["FenestrationSurface:Detailed"].items():
+                wndo_walls.append(v["building_surface_name"])
         return wndo_walls
 
     @property
@@ -79,9 +84,10 @@ class EnergyPlusModel:
             >>> model.floors
         """
         floors = []
-        for k, v in self.epjs["BuildingSurface:Detailed"].items():
-            if v["surface_type"] == "Floor":
-                floors.append(k)
+        if "BuildingSurface:Detailed" in self.epjs:
+            for k, v in self.epjs["BuildingSurface:Detailed"].items():
+                if v["surface_type"] == "Floor":
+                    floors.append(k)
         return floors
 
     @property
@@ -92,7 +98,7 @@ class EnergyPlusModel:
         """
         if "Lights" in self.epjs:
             return list(self.epjs["Lights"].keys())
-        return "No Lights"
+        return []
 
     @property
     def zones(self):
@@ -100,7 +106,9 @@ class EnergyPlusModel:
         Example:
             >>> model.zones
         """
-        return list(self.epjs["Zone"].keys())
+        if "Zone" in self.epjs:
+            return list(self.epjs["Zone"].keys())
+        return []
 
     def _add(self, key: str, obj: dict or str):
         """Add an object to the epjs dictionary.
@@ -137,7 +145,7 @@ class EnergyPlusModel:
             solar_results = glazing_system.solar_results
             photopic_results = glazing_system.photopic_results
 
-        # Initialize Contruction:ComplexFenestrationState dictionary with system and outer layer names
+        # Initialize Construction:ComplexFenestrationState dictionary with system and outer layer names
 
         construction_complex_fenestration_state = {}
 
