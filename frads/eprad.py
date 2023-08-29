@@ -438,12 +438,15 @@ class EnergyPlusModel:
         for key, obj in mappings.items():
             self._add(key, obj)
 
-    def add_output(self, opt_name: str, opt_type: str):
+    def add_output(
+        self, opt_name: str, opt_type: str, reporting_frequency: str = "Timestep"
+    ):
         """Add an output variable or meter to the epjs dictionary.
 
         Args:
             opt_name: Name of the output variable or meter.
             opt_type: Type of the output. "variable" or "meter".
+            reporting_frequency: Reporting frequency of the output variable or meter.
 
         Raises:
             raise ValueError("opt_type must be 'variable' or 'meter'.")
@@ -454,17 +457,18 @@ class EnergyPlusModel:
         """
 
         if opt_type == "variable":
-            self._add_output_variable(opt_name)
+            self._add_output_variable(opt_name, reporting_frequency)
         elif opt_type == "meter":
-            self._add_output_meter(opt_name)
+            self._add_output_meter(opt_name, reporting_frequency)
         else:
             raise ValueError("opt_type must be 'variable' or 'meter'.")
 
-    def _add_output_variable(self, opt_name: str):
+    def _add_output_variable(self, opt_name: str, reporting_frequency):
         """Add an output variable to the epjs dictionary.
 
         Args:
             opt_name: Name of the output variable.
+            reporting_frequency: Reporting frequency of the output variable.
         """
         i = 1
         if "Output:Variable" not in self.epjs:
@@ -476,15 +480,16 @@ class EnergyPlusModel:
         else:
             self.epjs["Output:Variable"][f"Output:Variable {i}"] = {
                 "key_value": "*",
-                "reporting_frequency": "Timestep",
+                "reporting_frequency": reporting_frequency,
                 "variable_name": opt_name,
             }
 
-    def _add_output_meter(self, opt_name: str):
+    def _add_output_meter(self, opt_name: str, reporting_frequency):
         """Add an output meter to the epjs dictionary.
 
         Args:
             opt_name: Name of the output meter.
+            reporting_frequency: Reporting frequency of the output meter.
         """
         i = 1
         if "Output:Meter" not in self.epjs:
@@ -496,7 +501,7 @@ class EnergyPlusModel:
         else:
             self.epjs["Output:Meter"][f"Output:Meter {i}"] = {
                 "key_name": opt_name,
-                "reporting_frequency": "Timestep",
+                "reporting_frequency": reporting_frequency,
             }
 
 
