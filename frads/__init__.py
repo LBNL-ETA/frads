@@ -50,9 +50,9 @@ or on a time-step basis.
 
 import logging
 
-from .epjson2rad import epjson2rad
+from .epjson2rad import epjson_to_rad
 
-from .eprad import EPModel, EnergyPlusSetup, ep_datetime_parser
+from .eprad import EnergyPlusModel, EnergyPlusSetup, ep_datetime_parser
 
 from .matrix import (
     load_matrix,
@@ -88,11 +88,20 @@ logger: logging.Logger = logging.getLogger(__name__)
 __all__ = [
     "AIR",
     "ARGON",
-    "EPModel",
+    "EnergyPlusModel",
     "EnergyPlusSetup",
+    "ep_datetime_parser",
+    "epjson_to_rad",
     "FivePhaseMethod",
+    "gen_grid",
+    "gen_perez_sky",
+    "genskymtx",
     "GlazingSystem",
     "KRYPTON",
+    "load_matrix",
+    "matrix_multiply_rgb",
+    "parse_epw",
+    "parse_wea",
     "SensorSender",
     "SkyReceiver",
     "SunReceiver",
@@ -100,19 +109,10 @@ __all__ = [
     "SurfaceSender",
     "ThreePhaseMethod",
     "TwoPhaseMethod",
+    "unpack_primitives",
     "ViewSender",
     "WeaData",
     "WeaMetaData",
     "WorkflowConfig",
     "XENON",
-    "ep_datetime_parser",
-    "epjson2rad",
-    "gen_grid",
-    "gen_perez_sky",
-    "genskymtx",
-    "load_matrix",
-    "matrix_multiply_rgb",
-    "parse_epw",
-    "parse_wea",
-    "unpack_primitives",
 ]

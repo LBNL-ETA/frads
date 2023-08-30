@@ -587,7 +587,7 @@ def parse_epjson(epjs: dict) -> tuple:
     return site, zones, constructions, materials, matrices
 
 
-def epjson2rad(epmodel, epw=None) -> dict:
+def epjson_to_rad(epmodel, epw=None) -> dict:
     """Command-line program to convert a energyplus model into a Radiance model."""
     site, zones, constructions, materials, matrices = parse_epjson(epmodel.epjs)
     # building_name = epjs["Building"].popitem()[0].replace(" ", "_")

@@ -1,0 +1,11 @@
+void aBSDF ec_60
+5 Resources/ec60.xml 0 0 1 .
+0
+0
+
+ec_60 polygon Perimeter_bot_ZN_1_Wall_South_Window
+0 
+0
+12 10.5 0.0 2.3293 10.5 0.0 1.0213 1.5 0.0 1.0213 1.5 0.0 2.3293
+
+
