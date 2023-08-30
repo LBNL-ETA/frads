@@ -384,67 +384,69 @@ class EnergyPlusModel:
             replace: If True, replace existing lighting object in zone.
 
         Raises:
+            ValueError: If zone not found in model.
             ValueError: If lighting already exists in zone and replace is False.
 
         Example:
             >>> model.add_lighting("Zone1")
         """
+        if zone in self.zones:
+            pass
+        else:
+            raise ValueError(f"Zone = {zone} not found in model.")
+
         dict2 = copy.deepcopy(self.epjs["Lights"])
 
         if self.epjs["Lights"] is not None:
-            for l in dict2:
+            for light in dict2:
                 if (
-                    self.epjs["Lights"][l][
+                    self.epjs["Lights"][light][
                         "zone_or_zonelist_or_space_or_spacelist_name"
                     ]
                     == zone
                 ):
-                    if replace == True:
-                        del self.epjs["Lights"][l]
+                    if replace:
+                        del self.epjs["Lights"][light]
                     else:
                         raise ValueError(
                             f"Lighting already exists in zone = {zone}. "
                             "To replace, set replace=True."
                         )
 
-        # Initialize lighting schedule type limit dictionary
-        schedule_type_limit = {}
-        schedule_type_limit["on_off"] = {
-            "lower_limit_value": 0,
-            "upper_limit_value": 1,
-            "numeric_type": "Discrete",
-            "unit_type": "Availability",
+        # Add lighting schedule type limit to epjs dictionary
+        schedule_type_limit = {
+            "on_off": {
+                "lower_limit_value": 0,
+                "upper_limit_value": 1,
+                "numeric_type": "Discrete",
+                "unit_type": "Availability",
+            }
         }
+        self._add("ScheduleTypeLimits", schedule_type_limit)
 
-        # Initialize lighting schedule dictionary
-        lighting_schedule = {}
-        lighting_schedule["constant_off"] = {
-            "schedule_type_limits_name": "on_off",
-            "hourly_value": 0,
+        # Add lighting schedule to epjs dictionary
+        lighting_schedule = {
+            "constant_off": {
+                "schedule_type_limits_name": "on_off",
+                "hourly_value": 0,
+            }
         }
+        self._add("Schedule:Constant", lighting_schedule)
 
-        # Initialize lights dictionary with a constant-off schedule for each zone
-
-        lights = {}
-        lights[f"Light_{zone}"] = {
-            "design_level_calculation_method": "LightingLevel",
-            "fraction_radiant": 0,
-            "fraction_replaceable": 1,
-            "fraction_visible": 1,
-            "lighting_level": 0,
-            "return_air_fraction": 0,
-            "schedule_name": "constant_off",
-            "zone_or_zonelist_or_space_or_spacelist_name": zone,
+        # Add lighting to epjs dictionary
+        lights = {
+            f"Light_{zone}": {
+                "design_level_calculation_method": "LightingLevel",
+                "fraction_radiant": 0,
+                "fraction_replaceable": 1,
+                "fraction_visible": 1,
+                "lighting_level": 0,
+                "return_air_fraction": 0,
+                "schedule_name": "constant_off",
+                "zone_or_zonelist_or_space_or_spacelist_name": zone,
+            }
         }
-
-        mappings = {
-            "ScheduleTypeLimits": schedule_type_limit,
-            "Schedule:Constant": lighting_schedule,
-            "Lights": lights,
-        }
-
-        for key, obj in mappings.items():
-            self._add(key, obj)
+        self._add("Lights", lights)
 
     def add_output(
         self, output_name: str, output_type: str, reporting_frequency: str = "Timestep"
