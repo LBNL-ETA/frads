@@ -588,7 +588,15 @@ def parse_epjson(epjs: dict) -> tuple:
 
 
 def epjson2rad(epmodel, epw=None) -> dict:
-    """Command-line program to convert a energyplus model into a Radiance model."""
+    """Command-line program to convert a energyplus model into a Radiance model.
+
+    Args:
+        epmodel (str): EnergyPlusModel file path.
+        epw (str, optional): EnergyPlus weather file path. Defaults to None.
+
+    Returns:
+        A dictionary of Radiance model for each exterior zone.
+    """
     site, zones, constructions, materials, matrices = parse_epjson(epmodel.epjs)
     # building_name = epjs["Building"].popitem()[0].replace(" ", "_")
     building_name = list(epmodel.epjs["Building"].keys())[0].replace(" ", "_")
