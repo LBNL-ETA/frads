@@ -135,8 +135,12 @@ def parse_mrad_config(cfg_path: Path) -> Dict[str, dict]:
     config_dict["settings"]["separate_direct"] = config["SimControl"].getboolean(
         "separate_direct"
     )
-    config_dict["settings"]["overwrite"] = config["SimControl"].getboolean("overwrite", False)
-    config_dict["settings"]["save_matrices"] = config["SimControl"].getboolean("save_matrices", True)
+    config_dict["settings"]["overwrite"] = config["SimControl"].getboolean(
+        "overwrite", False
+    )
+    config_dict["settings"]["save_matrices"] = config["SimControl"].getboolean(
+        "save_matrices", True
+    )
     config_dict["model"] = {
         "scene": {},
         "materials": {},
@@ -484,7 +488,7 @@ def genmtx_pts_sky(args) -> None:
     del args.pts, args.basis, args.sys, args.verbose, args.func
     mat = Matrix(sender, [receiver], octree=None, surfaces=sys_paths)
     sparams = SamplingParameters()
-    sparams_dict = {k:v for k,v in vars(args) if v is not None}
+    sparams_dict = {k: v for k, v in vars(args) if v is not None}
     sparams.update_from_dict(sparams_dict)
     mat.generate(params=sparams.args(), to_file=True)
 
@@ -505,7 +509,7 @@ def genmtx_vu_sky(args) -> None:
     del args.vu, args.basis, args.sys, args.resolu, args.verbose, args.func
     mat = Matrix(sender, [receiver], octree=None, surfaces=sys_paths)
     sparams = SamplingParameters()
-    sparams_dict = {k:v for k,v in vars(args) if v is not None}
+    sparams_dict = {k: v for k, v in vars(args) if v is not None}
     sparams.update_from_dict(sparams_dict)
     mat.generate(params=sparams.args(), to_file=True)
 
@@ -523,7 +527,7 @@ def genmtx_srf_sky(args) -> None:
     del args.srf, args.basis, args.sys, args.offset, args.verbose, args.func
     mat = Matrix(sender, [receiver], octree=None, surfaces=sys_paths)
     sparams = SamplingParameters()
-    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams_dict = {k: v for k, v in vars(args).items() if v is not None}
     sparams.update_from_dict(sparams_dict)
     mat.generate(params=sparams.args(), to_file=True)
 
@@ -558,7 +562,7 @@ def genmtx_pts_srf(args) -> None:
     del args.pts, args.srf, args.sys, args.basis, args.offset, args.verbose, args.func
     mat = Matrix(sender, receivers, octree=None, surfaces=sys_paths)
     sparams = SamplingParameters()
-    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams_dict = {k: v for k, v in vars(args).items() if v is not None}
     sparams.update_from_dict(sparams_dict)
     mat.generate(params=sparams.args(), to_file=True)
 
@@ -595,10 +599,19 @@ def genmtx_vu_srf(args) -> None:
                     out=outpath / "%04d.hdr",
                 )
             )
-    del args.vu, args.srf, args.sys, args.basis, args.offset, args.resolu, args.verbose, args.func
+    del (
+        args.vu,
+        args.srf,
+        args.sys,
+        args.basis,
+        args.offset,
+        args.resolu,
+        args.verbose,
+        args.func,
+    )
     mat = Matrix(sender, receivers, octree=None, surfaces=sys_paths)
     sparams = SamplingParameters()
-    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams_dict = {k: v for k, v in vars(args).items() if v is not None}
     sparams.update_from_dict(sparams_dict)
     mat.generate(params=sparams.args(), to_file=True)
 
@@ -635,7 +648,7 @@ def genmtx_srf_srf(args) -> None:
     del args.ssrf, args.rsrf, args.sys, args.basis, args.offset, args.verbose, args.func
     mat = Matrix(sender, receivers, octree=None, surfaces=sys_paths)
     sparams = SamplingParameters()
-    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams_dict = {k: v for k, v in vars(args).items() if v is not None}
     sparams.update_from_dict(sparams_dict)
     mat.generate(params=sparams.args(), to_file=True)
 
@@ -663,9 +676,9 @@ def genmtx_pts_sun(args) -> None:
         surfaces=sys_paths,
     )
     sparams = SamplingParameters()
-    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams_dict = {k: v for k, v in vars(args).items() if v is not None}
     sparams.update_from_dict(sparams_dict)
-    with open(out, 'wb') as f:
+    with open(out, "wb") as f:
         f.write(mat.generate(parameters=sparams.args(), radmtx=True))
 
 
@@ -701,7 +714,7 @@ def genmtx_vu_sun(args) -> None:
         args.resolu,
         args.smx_path,
         args.verbose,
-        args.func
+        args.func,
     )
     mtx = SunMatrix(
         sender,
@@ -710,7 +723,7 @@ def genmtx_vu_sun(args) -> None:
         surfaces=sys_paths,
     )
     sparams = SamplingParameters()
-    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams_dict = {k: v for k, v in vars(args).items() if v is not None}
     sparams.update_from_dict(sparams_dict)
     mtx.generate(parameters=sparams.args())
     write_hdrs(mtx.array, xres=xres, yres=yres, outdir=str(outpath))
@@ -728,7 +741,7 @@ def genmtx_ncp(args: argparse.Namespace) -> None:
     out = Path(f"{args.window.stem}_{args.ncp.stem}.mtx")
     del args.window, args.ncp, args.basis, args.sys, args.verbose, args.wrap
     sparams = SamplingParameters()
-    sparams_dict = {k:v for k,v in vars(args).items() if v is not None}
+    sparams_dict = {k: v for k, v in vars(args).items() if v is not None}
     sparams.update_from_dict(sparams_dict)
     ncp.gen_ncp_mtx(nmodel, out, sparams.args(), wrap=wrap)
 
