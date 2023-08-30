@@ -4,11 +4,11 @@
 # _frads_: Framework for lighting and energy simulation
 
 This is the repository for _frads_ development. _frads_ faciliates lighting and energy simulation by calling Radiance and EnergyPlus
-within the Python environment. Radiance is a free and open-source, raytracing-based lighting engine that is used extensively 
-by engineering firms for innovative solar control, lighting, and daylighting design to improve the energy efficiency of buildings. 
-With matrix algebraic methods, climate-based annual simulations can now be conducted in less than two minutes. _frads_ automates setup 
-of these simulations by providing end users with an open-source, high-level abstraction of the Radiance command-line workflow (Unix toolbox model), 
-helping to reduce the steep learning curve and associated user errors. _frads_ also provides the necessary infrastructure needed for seamless 
+within the Python environment. Radiance is a free and open-source, raytracing-based lighting engine that is used extensively
+by engineering firms for innovative solar control, lighting, and daylighting design to improve the energy efficiency of buildings.
+With matrix algebraic methods, climate-based annual simulations can now be conducted in less than two minutes. _frads_ automates setup
+of these simulations by providing end users with an open-source, high-level abstraction of the Radiance command-line workflow (Unix toolbox model),
+helping to reduce the steep learning curve and associated user errors. _frads_ also provides the necessary infrastructure needed for seamless
 integration of Radiance and other modeling tools, such as EnergyPlus.
 
 ## [Documentation](https://lbnl-eta.github.io/frads/)
@@ -45,13 +45,6 @@ You can verify that Python is installed by typing python from your cmd/powershel
 	>>>
 
 After you have Python installed, you should have `pip` command available in your shell environment as well. You can then use `pip` to install `frads`:
-
-### Install pyenergyplus
-frads relies on pyenergyplus for running and interacting with EnergyPlus in Python.
-pyenergyplus (unofficial) can be installed by running
-
-    $ pip install git+https://github.com/taoning/pyenergyplus_wheels
-
 
 ### Install frads
 
