@@ -2,7 +2,7 @@ from pathlib import Path
 from datetime import datetime
 from frads.methods import TwoPhaseMethod, ThreePhaseMethod, WorkflowConfig
 from frads.window import GlazingSystem
-from frads.epjson2rad import epjson2rad
+from frads.epjson2rad import epjson_to_rad
 from frads.eprad import EnergyPlusModel
 import frads as fr
 import numpy as np
@@ -116,8 +116,8 @@ def test_eprad_threephase():
     gs_ec60.add_glazing_layer(clear_glass_path)
     gs_ec60.gaps = [((fr.AIR, 0.1), (fr.ARGON, 0.9), 0.0127)]
     gs_ec60.name = "ec60"
-    epmodel.add_cfs(gs_ec60)
-    rad_models = epjson2rad(epmodel, epw=epw_path)
+    epmodel.add_glazing_system(gs_ec60)
+    rad_models = epjson_to_rad(epmodel, epw=epw_path)
     zone = "Perimeter_bot_ZN_1"
     zone_dict = rad_models[zone]
     zone_dict["model"]["views"]["view1"] = {"file": view_path, "xres": 16, "yres": 16}
