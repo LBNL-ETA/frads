@@ -4,10 +4,14 @@ from frads.eprad import EnergyPlusModel, EnergyPlusSetup
 from frads.window import GlazingSystem
 
 test_dir = Path(__file__).resolve().parent
+resource_dir = test_dir / "Resources"
+
+idf_path = resource_dir / "RefBldgMediumOfficeNew2004_southzone.idf"
+glazing_path = resource_dir / "igsdb_product_7406.json"
 
 
 def test_energyplusmodel():
-    epmodel = EnergyPlusModel(Path("Resources/RefBldgMediumOfficeNew2004_Chicago.idf"))
+    epmodel = EnergyPlusModel(idf_path)
     assert isinstance(epmodel.epjs, dict)
     assert isinstance(epmodel.floors, list)
     assert isinstance(epmodel.zones, list)
@@ -18,9 +22,9 @@ def test_energyplusmodel():
 
 
 def test_add_glazingsystem():
-    epmodel = EnergyPlusModel(Path("Resources/RefBldgMediumOfficeNew2004_Chicago.idf"))
+    epmodel = EnergyPlusModel(idf_path)
     gs = GlazingSystem()
-    gs.add_glazing_layer("test/Resources/igsdb_product_7406.json")
+    gs.add_glazing_layer(glazing_path)
     epmodel.add_glazing_system(gs)
     assert isinstance(epmodel.complex_fenestration_states, list)
     assert epmodel.complex_fenestration_states != []
@@ -34,7 +38,7 @@ def test_add_glazingsystem():
 
 
 def test_add_lighting():
-    epmodel = EnergyPlusModel(Path("Resources/RefBldgMediumOfficeNew2004_Chicago.idf"))
+    epmodel = EnergyPlusModel(idf_path)
     try:
         epmodel.add_lighting("z1")  # zone does not exist
         assert False
@@ -43,7 +47,7 @@ def test_add_lighting():
 
 
 def test_add_lighting1():
-    epmodel = EnergyPlusModel(Path("Resources/RefBldgMediumOfficeNew2004_Chicago.idf"))
+    epmodel = EnergyPlusModel(idf_path)
     try:
         epmodel.add_lighting("Perimeter_bot_ZN_1")  # zone already has lighting
         assert False
@@ -52,7 +56,7 @@ def test_add_lighting1():
 
 
 def test_add_lighting2():
-    epmodel = EnergyPlusModel(Path("Resources/RefBldgMediumOfficeNew2004_Chicago.idf"))
+    epmodel = EnergyPlusModel(idf_path)
     epmodel.add_lighting("Perimeter_bot_ZN_1", replace=True)
 
     assert isinstance(epmodel.epjs["Lights"], dict)
@@ -62,7 +66,7 @@ def test_add_lighting2():
 
 def test_output_variable():
     """Test adding output variable to an EnergyPlusModel."""
-    epmodel = EnergyPlusModel(Path("Resources/RefBldgMediumOfficeNew2004_Chicago.idf"))
+    epmodel = EnergyPlusModel(idf_path)
     epmodel.add_output(output_name="Zone Mean Air Temperature", output_type="variable")
 
     assert "Zone Mean Air Temperature" in [
@@ -72,7 +76,7 @@ def test_output_variable():
 
 def test_output_meter():
     """Test adding output meter to an EnergyPlusModel."""
-    epmodel = EnergyPlusModel(Path("Resources/RefBldgMediumOfficeNew2004_Chicago.idf"))
+    epmodel = EnergyPlusModel(idf_path)
     epmodel.add_output(
         output_name="CO2:Facility",
         output_type="meter",
@@ -89,9 +93,7 @@ def test_output_meter():
 
 def test_energyplussetup():
     """Test running EnergyPlusSetup."""
-    epmodel = EnergyPlusModel(
-        Path("RefBldgMediumOfficeNew2004_southzone.idf")
-    )  # file with Design Day
+    epmodel = EnergyPlusModel(idf_path)  # file with Design Day
 
     ep = EnergyPlusSetup(epmodel)
     ep.run(design_day=True)
