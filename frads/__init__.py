@@ -56,13 +56,17 @@ from .eprad import EPModel, EnergyPlusSetup, ep_datetime_parser
 
 from .matrix import (
     load_matrix,
+    load_binary_matrix,
     matrix_multiply_rgb,
+    Matrix,
+    SunMatrix,
     SensorSender,
     SurfaceSender,
     SkyReceiver,
     SurfaceReceiver,
     ViewSender,
     SunReceiver,
+    surfaces_view_factor,
 )
 
 from .methods import WorkflowConfig, TwoPhaseMethod, ThreePhaseMethod, FivePhaseMethod
@@ -93,9 +97,11 @@ __all__ = [
     "FivePhaseMethod",
     "GlazingSystem",
     "KRYPTON",
+    "Matrix",
     "SensorSender",
     "SkyReceiver",
     "SunReceiver",
+    "SunMatrix",
     "SurfaceReceiver",
     "SurfaceSender",
     "ThreePhaseMethod",
@@ -111,8 +117,10 @@ __all__ = [
     "gen_perez_sky",
     "genskymtx",
     "load_matrix",
+    "load_binary_matrix",
     "matrix_multiply_rgb",
     "parse_epw",
     "parse_wea",
+    "surfaces_view_factor",
     "unpack_primitives",
 ]
