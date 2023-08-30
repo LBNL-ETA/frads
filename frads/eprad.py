@@ -5,15 +5,31 @@ Class and functions for accessing EnergyPlus Python API
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
+from build.lib.frads.window import GlazingSystem
 
 from frads import sky
+from frads.window import GlazingSystem
 import copy
 from pyenergyplus.api import EnergyPlusAPI
 
 
 class EPModel:
-    def __init__(self, fpath: Path):
+    """EnergyPlus Model object
+
+    Attributes:
+        api: EnergyPlus runtime API object
+        epjs: EnergyPlus JSON object
+        actuators_list: list of actuators available for this model
+        cfs: list of complex fenestration states
+        windows: list of windows
+        walls_window: list of walls with windows
+        floors: list of floors
+        lighting_zone: list of lighting zones
+        zones: list of zones
+    """
+
+    def __init__(self, fpath: Union[str, Path]):
         """Load and parse input file into a JSON object.
         If the input file is in .idf format, use command-line
         energyplus program to convert it to epJSON format
@@ -21,6 +37,7 @@ class EPModel:
             fpath: input file path
         """
         self.api = EnergyPlusAPI()
+        fpath = Path(fpath)
         epjson_path: Path
         if fpath.suffix == ".idf":
             state = self.api.state_manager.new_state()
@@ -40,18 +57,12 @@ class EPModel:
 
     @property
     def cfs(self):
-        """
-        Example:
-            >>> model.cfs
-        """
+        """ """
         return list(self.epjs["Construction:ComplexFenestrationState"].keys())
 
     @property
     def windows(self):
-        """
-        Example:
-            >>> model.windows
-        """
+        """ """
         return list(self.epjs["FenestrationSurface:Detailed"].keys())
 
     @property
@@ -87,15 +98,12 @@ class EPModel:
             # add
             self.epjs[key] = obj
 
-    def add_cfs(self, glazing_system) -> None:
+    def add_cfs(self, glazing_system: GlazingSystem) -> None:
         """
         Add CFS to an EnergyPlus JSON file.
 
         Args:
-            solar_results: Solar results from pywincalc.
-            photopic_results: Photopic results from pywincalc.
             glazing_system: Glazing system from pywincalc.
-            epjs: EnergyPlus JSON file.
         Returns:
             None
         """
@@ -342,9 +350,14 @@ class EPModel:
                 "construction_name"
             ] = cfs
 
-    def add_lighting(self, zone, replace=False) -> None:
-        """Add lighting objects to the epjs dictionary."""
+    def add_lighting(self, zone: str, replace: bool = False) -> None:
+        """Add lighting objects to the epjs dictionary.
 
+        Args:
+            zone: zone name
+            replace: if True, replace existing lighting object in the
+                zone. Default is False.
+        """
         dict2 = copy.deepcopy(self.epjs["Lights"])
 
         if self.epjs["Lights"] is not None:
@@ -470,6 +483,15 @@ class Handles:
 
 
 class EnergyPlusSetup:
+    """EnergyPlus Simulation Setup.
+    Attributes:
+        api: EnergyPlusAPI object
+        epjs: EnergyPlusJSON object
+        state: EnergyPlusState object
+        handles: Handles object
+        wea_meta: WeaMetaData object
+    """
+
     def __init__(self, epmodel):
         self.api = epmodel.api
         self.epjs = epmodel.epjs
@@ -499,7 +521,6 @@ class EnergyPlusSetup:
         :param component_type: The actuator category, e.g. "Weather Data"
         :param name: The name of the actuator to retrieve, e.g. "Outdoor Dew Point"
         :param key: The instance of the variable to retrieve, e.g. "Environment"
-
         """
         if key not in self.handles.actuator:
             raise ValueError("Actuator not found", name, key)
