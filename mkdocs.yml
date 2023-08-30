@@ -65,7 +65,7 @@ plugins:
 
 nav:
   - Get Started:
-    - Welcome to frads: index.md 
+    - Welcome to frads: index.md
     - Why frads: why.md
     - Installation: install.md
     # - Usage:
@@ -75,17 +75,17 @@ nav:
     #     - Five Phase Method: usage/phase/fivephase.md
   - How-To Guides:
     - how-to/index.md
-  - Manual:
+  - CLI Manual:
     - manual/index.md
     - mrad:
       - manual/mrad/index.md
       - mrad init: manual/mrad/init.md
       - mrad run: manual/mrad/run.md
-    - gen: 
+    - gen:
       - manual/gen/index.md
       - glaze: manual/gen/glaze.md
       - grid: manual/gen/grid.md
-      - matrix: 
+      - matrix:
         - manual/gen/matrix/index.md
         - point-sky: manual/gen/matrix/point_sky.md
         - view-sky: manual/gen/matrix/view_sky.md
@@ -105,4 +105,6 @@ nav:
     - matrix: ref/matrix.md
     - EPModel: ref/epmodel.md
     - EnergyPlusSetup: ref/epsetup.md
+    - GlazingSystem: ref/window.md
+    - Sky: ref/sky.md
 
