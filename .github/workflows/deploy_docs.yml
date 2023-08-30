@@ -1,9 +1,9 @@
-name: Deploy MkDocs to GitHub Pages
+name: Deploy Docs to GitHub Page
 
 on:
-  push:
-    branches:
-      - main # trigger on push to main branch
+  release:
+    types: [published]
+
 
 jobs:
   deploy:
@@ -16,12 +16,12 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.x'
+          python-version: '3.11'
 
       - name: Install MkDocs and Extensions
         run: |
           python -m pip install --upgrade pip
-          pip install mkdocs 
+          pip install mkdocs
           pip install "mkdocstrings[python]"
           pip install mkdocs-material
 
