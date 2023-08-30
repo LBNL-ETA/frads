@@ -3,9 +3,11 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+import hashlib
 import logging
+import os
 from pathlib import Path
-from typing import Any, ByteString, Dict, List, Union
+from typing import Any, ByteString, Dict, List, Optional, Union
 from shutil import rmtree
 
 from frads.matrix import (
@@ -21,6 +23,8 @@ from frads.matrix import (
     SurfaceSender,
     SurfaceReceiver,
     ViewSender,
+    sparse_matrix_multiply_rgb_vtds,
+    to_sparse_matrix3,
 )
 from frads.sky import (
     WeaData,
@@ -37,6 +41,7 @@ from frads.utils import (
 )
 import numpy as np
 import pyradiance as pr
+from pyradiance.model import parse_view
 from scipy.sparse import csr_matrix
 
 
@@ -54,31 +59,54 @@ class SceneConfig:
 
     files: List[Path] = field(default_factory=list)
     bytes: ByteString = b""
+    files_mtime: List[float] = field(init=False, default_factory=list)
+
+    def __post_init__(self):
+        if len(self.files) > 0:
+            for fpath in self.files:
+                self.files_mtime.append(os.path.getmtime(fpath))
 
 
 @dataclass
 class MaterialConfig:
     files: List[Path] = field(default_factory=list)
     bytes: ByteString = b""
+    files_mtime: List[float] = field(init=False, default_factory=list)
+
+    def __post_init__(self):
+        if len(self.files) > 0:
+            for fpath in self.files:
+                self.files_mtime.append(os.path.getmtime(fpath))
 
 
 @dataclass
 class WindowConfig:
-    file: Path = Path()
+    file: Union[str, Path] = ""
     bytes: ByteString = b""
-    matrix_file: str = ""
-    matrix_data: List[List[float]] = field(default_factory=list)
-    shading_geometry_file: Path = Path()
-    shading_geometry_bytes: ByteString = b""
-    tensor_tree_file: Path = Path()
+    matrix_file: Union[str, Path] = ""
+    matrix_data: Optional[List[List[float]]] = field(default_factory=list)
+    shading_geometry_file: Union[str, Path] = ""
+    shading_geometry_bytes: Optional[ByteString] = None
+    tensor_tree_file: Union[str, Path] = ""
+    files_mtime: List[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
-        if not isinstance(self.file, Path):
-            self.file = Path(self.file)
-        if not isinstance(self.shading_geometry_file, Path):
-            self.shading_geometry_file = Path(self.shading_geometry_file)
-        if not isinstance(self.tensor_tree_file, Path):
-            self.tensor_tree_file = Path(self.tensor_tree_file)
+        if os.path.exists(self.file):
+            self.files_mtime.append(os.path.getmtime(self.file))
+            if not isinstance(self.file, Path):
+                self.file = Path(self.file)
+        if os.path.exists(self.matrix_file): 
+            self.files_mtime.append(os.path.getmtime(self.matrix_file))
+            if not isinstance(self.matrix_file, Path):
+                self.matrix_file = Path(self.matrix_file)
+        if os.path.exists(self.shading_geometry_file): 
+            self.files_mtime.append(os.path.getmtime(self.shading_geometry_file))
+            if not isinstance(self.shading_geometry_file, Path):
+                self.shading_geometry_file = Path(self.shading_geometry_file)
+        if os.path.exists(self.tensor_tree_file):
+            self.files_mtime.append(os.path.getmtime(self.tensor_tree_file))
+            if not isinstance(self.tensor_tree_file, Path):
+                self.tensor_tree_file = Path(self.tensor_tree_file)
         if self.bytes == b"":
             with open(self.file, "rb") as f:
                 self.bytes = f.read()
@@ -88,8 +116,11 @@ class WindowConfig:
 class SensorConfig:
     file: str = ""
     data: List[List[float]] = field(default_factory=list)
+    file_mtime: float = field(init=False, default=0.0)
 
     def __post_init__(self):
+        if self.file != "":
+            self.file_mtime = os.path.getmtime(self.file)
         if len(self.data) == 0:
             if self.file != "":
                 with open(self.file) as f:
@@ -102,31 +133,76 @@ class SensorConfig:
 
 @dataclass
 class ViewConfig:
-    file: Path = Path()
-    data: str = ""
+    file: Union[str, Path] = ""
+    view: Union[pr.View, str] = field(default_factory=str)
     xres: int = 512
     yres: int = 512
+    file_mtime: float = field(init=False, default=0.0)
 
     def __post_init__(self):
+        if self.file != "":
+            self.file_mtime = os.path.getmtime(self.file)
         if not isinstance(self.file, Path):
             self.file = Path(self.file)
+        if self.file.exists() and self.view == "":
+            self.view = pr.load_views(self.file)[0]
+        elif not isinstance(self.view, pr.View):
+            self.view = parse_view(self.view)
 
 
 @dataclass
 class Settings:
+    name: str = field(default="")
+    num_processors: int = 1
     method: str = field(default="3phase")
+    overwrite: bool = False
+    save_matrices: bool = False
     sky_basis: str = field(default="r1")
     window_basis: str = field(default="kf")
+    non_coplanar_basis: str = field(default="kf")
     sun_basis: str = field(default="r6")
     sun_culling: bool = field(default=True)
+    separate_direct: bool = field(default=False)
     epw_file: str = field(default="")
     wea_file: str = field(default="")
+    start_hour: int = field(default=8)
+    end_hour: int = field(default=18)
+    daylight_hours_only: bool = True
     latitude: int = field(default=37)
     longitude: int = field(default=122)
     time_zone: int = field(default=120)
+    orientation: int = field(default=0)
     site_elevation: int = field(default=100)
     sensor_sky_matrix: List[str] = field(
         default_factory=lambda: ["-ab", "6", "-ad", "8192", "-lw", "5e-5"]
+    )
+    sensor_sun_matrix: List[str] = field(
+        default_factory=lambda: [
+            "-ab",
+            "1",
+            "-ad",
+            "256",
+            "-lw",
+            "1e-3",
+            "-dj",
+            "0",
+            "-st",
+            "0",
+        ]
+    )
+    view_sun_matrix: List[str] = field(
+        default_factory=lambda: [
+            "-ab",
+            "1",
+            "-ad",
+            "256",
+            "-lw",
+            "1e-3",
+            "-dj",
+            "0",
+            "-st",
+            "0",
+        ]
     )
     view_sky_matrix: List[str] = field(
         default_factory=lambda: ["-ab", "6", "-ad", "8192", "-lw", "5e-5"]
@@ -140,6 +216,13 @@ class Settings:
     view_window_matrix: List[str] = field(
         default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
     )
+    files_mtime: List[float] = field(init=False, default_factory=list)
+
+    def __post_init__(self):
+        if self.wea_file != "":
+            self.files_mtime.append(os.path.getmtime(self.wea_file))
+        if self.epw_file != "":
+            self.files_mtime.append(os.path.getmtime(self.epw_file))
 
 
 @dataclass
@@ -171,12 +254,14 @@ class Model:
 class WorkflowConfig:
     settings: "Settings"
     model: "Model"
+    hash_str: str = field(init=False)
 
     def __post_init__(self):
         if isinstance(self.settings, dict):
             self.settings = Settings(**self.settings)
         if isinstance(self.model, dict):
             self.model = Model(**self.model)
+        self.hash_str = hashlib.md5(str(self.__dict__).encode()).hexdigest()[:16]
 
     @staticmethod
     def from_dict(obj: Dict[str, Any]) -> "WorkflowConfig":
@@ -208,7 +293,7 @@ class PhaseMethod:
             self.sensor_senders[name] = SensorSender(sensors.data)
         for name, view in self.config.model.views.items():
             self.view_senders[name] = ViewSender(
-                pr.load_views(view.file)[0], xres=view.xres, yres=view.yres
+                view.view, xres=view.xres, yres=view.yres
             )
 
         # Setup the sky receiver object
@@ -255,6 +340,9 @@ class PhaseMethod:
         self.tmpdir.mkdir(exist_ok=True)
         self.octdir = Path("Octrees")
         self.octdir.mkdir(exist_ok=True)
+        self.mtxdir = Path("Matrices")
+        self.mtxdir.mkdir(exist_ok=True)
+        self.mfile = (self.mtxdir / self.config.hash_str).with_suffix(".npz")
 
         # Generate a base octree
         self.octree = self.octdir / f"{random_string(5)}.oct"
@@ -274,6 +362,7 @@ class PhaseMethod:
         Temp and Octrees directory.
         """
         rmtree("Octrees")
+        rmtree("Matrices")
         rmtree("Temp")
 
     def generate_matrices(self):
@@ -345,6 +434,11 @@ class TwoPhaseMethod(PhaseMethod):
     """
 
     def __init__(self, config):
+        """
+        Initializes the two phase method
+        Args:
+            config: A WorkflowConfig object
+        """
         super().__init__(config)
         oct_stdin = config.model.materials.bytes + config.model.scene.bytes
         for window in config.model.windows.values():
@@ -368,11 +462,43 @@ class TwoPhaseMethod(PhaseMethod):
                 self.sensor_senders[ss], [self.sky_receiver], self.octree
             )
 
-    def generate_matrices(self):
+    def generate_matrices(self) -> None:
+        """
+        Generate matrices for all view and sensor points
+        Args:
+            save: Save matrices to a .npz file
+            overwrite: Overwrite existing matrices
+        """
+        # First check if matrices files already exist
+        if self.mfile.exists() and (not self.config.settings.overwrite):
+            self.load_matrices()
+            return
+        # Then check if overwrite is set to True
         for _, mtx in self.view_sky_matrices.items():
-            mtx.generate(self.config.settings.view_sky_matrix)
+            mtx.generate(
+                self.config.settings.view_sky_matrix,
+                nproc=self.config.settings.num_processors,
+            )
         for _, mtx in self.sensor_sky_matrices.items():
-            mtx.generate(self.config.settings.sensor_sky_matrix)
+            mtx.generate(
+                self.config.settings.sensor_sky_matrix,
+                nproc=self.config.settings.num_processors,
+            )
+        if self.config.settings.save_matrices:
+            self.save_matrices()
+
+    def load_matrices(self):
+        """
+        Load matrices from a .npz file
+        """
+        logger.info(f"Loading matrices from {self.mfile}")
+        if not self.mfile.exists():
+            raise FileNotFoundError("Matrices file not found")
+        mdata = np.load(self.mfile)
+        for view, mtx in self.view_sky_matrices.items():
+            mtx.array = mdata[f"{view}_sky_matrix"]
+        for sensor, mtx in self.sensor_sky_matrices.items():
+            mtx.array = mdata[f"{sensor}_sky_matrix"]
 
     def calculate_view(self, view, time, dni, dhi):
         sky_matrix = self.get_sky_matrix(time, dni, dhi)
@@ -424,13 +550,15 @@ class TwoPhaseMethod(PhaseMethod):
             weights=[47.4, 119.9, 11.6],
         )
 
-    def save_matrices(self, file):
+    def save_matrices(self):
+        """
+        """
         matrices = {}
         for view, mtx in self.view_sky_matrices.items():
             matrices[f"{view}_sky_matrix"] = mtx.array
         for sensor, mtx in self.sensor_sky_matrices.items():
             matrices[f"{sensor}_sky_matrix"] = mtx.array
-        np.savez(file, **matrices)
+        np.savez(self.mtxdir / self.config.hash_str, **matrices)
 
 
 class ThreePhaseMethod(PhaseMethod):
@@ -461,7 +589,7 @@ class ThreePhaseMethod(PhaseMethod):
                 self.window_bsdfs[_name] = np.array(window.matrix_data)
             else:
                 # raise ValueError("No matrix data or file available", _name)
-                print("No matrix data or file available", _name)
+                logger.warning("No matrix data or file available", _name)
             if _name in self.window_bsdfs:
                 window_basis = [
                     k
@@ -497,6 +625,9 @@ class ThreePhaseMethod(PhaseMethod):
         not needing the view matrices but still need the view data for things like
         edgps calculation.
         """
+        if self.mfile.exists() and (not self.config.settings.overwrite):
+            self.load_matrices()
+            return
         if view_matrices:
             for _, mtx in self.view_window_matrices.items():
                 mtx.generate(self.config.settings.view_window_matrix)
@@ -504,6 +635,22 @@ class ThreePhaseMethod(PhaseMethod):
             mtx.generate(self.config.settings.sensor_window_matrix)
         for _, mtx in self.daylight_matrices.items():
             mtx.generate(self.config.settings.daylight_matrix)
+        if self.config.settings.save_matrices:
+            self.save_matrices()
+
+    def load_matrices(self):
+        """
+        """
+        logger.info(f"Loading matrices from {self.mfile}")
+        mdata = np.load(self.mfile)
+        for view, mtx in self.view_window_matrices.items():
+            if (key := f"{view}_window_matrix") in mdata:
+                mtx.array = mdata[key]
+        for sensor, mtx in self.sensor_window_matrices.items():
+            mtx.array = mdata[f"{sensor}_window_matrix"]
+        for name, mtx in self.daylight_matrices.items():
+            mtx.array = mdata[f"{name}_daylight_matrix"]
+
 
     def calculate_view(
         self,
@@ -679,7 +826,7 @@ class ThreePhaseMethod(PhaseMethod):
         edgps = float(res.split(b":")[1].split()[0])
         return edgps
 
-    def save_matrices(self, file):
+    def save_matrices(self):
         matrices = {}
         for view, mtx in self.view_window_matrices.items():
             matrices[f"{view}_window_matrix"] = mtx.array
@@ -687,7 +834,7 @@ class ThreePhaseMethod(PhaseMethod):
             matrices[f"{sensor}_window_matrix"] = mtx.array
         for window, mtx in self.daylight_matrices.items():
             matrices[f"{window}_daylight_matrix"] = mtx.array
-        np.savez(file, **matrices)
+        np.savez(self.mfile, **matrices)
 
 
 class FivePhaseMethod(PhaseMethod):
@@ -698,9 +845,7 @@ class FivePhaseMethod(PhaseMethod):
                 pr.oconv(
                     *config.model.materials.files,
                     *config.model.scene.files,
-                    stdin=(
-                        config.model.materials.data + config.model.scene.data
-                    ).encode(),
+                    stdin=(config.model.materials.bytes + config.model.scene.bytes),
                 )
             )
         self.blacked_out_octree = self.octdir / f"{random_string(5)}.oct"
@@ -725,13 +870,7 @@ class FivePhaseMethod(PhaseMethod):
         )
         self._prepare_window_objects()
         self._prepare_sun_receivers()
-        self.direct_sun_matrix = np.array(
-            (
-                csr_matrix(self.direct_sun_matrix[:, :, 0]),
-                csr_matrix(self.direct_sun_matrix[:, :, 1]),
-                csr_matrix(self.direct_sun_matrix[:, :, 2]),
-            )
-        )
+        self.direct_sun_matrix = to_sparse_matrix3(self.direct_sun_matrix)
         self._gen_blacked_out_octree()
         self._prepare_mapping_octrees()
         self._prepare_view_sender_objects()
@@ -741,7 +880,7 @@ class FivePhaseMethod(PhaseMethod):
         black_scene = b"\n".join(
             pr.xform(s, modifier="black") for s in self.config.model.scene.files
         )
-        if self.config.model.scene.data != "":
+        if self.config.model.scene.bytes != b"":
             black_scene += pr.xform(
                 self.config.model.scene.data.encode(), modifier="black"
             )
@@ -752,7 +891,7 @@ class FivePhaseMethod(PhaseMethod):
                 pr.oconv(
                     *self.config.model.materials.files,
                     # *self.config.model.windows,
-                    stdin=self.config.model.materials.data.encode()
+                    stdin=self.config.model.materials.bytes
                     + str(glow).encode()
                     + str(black).encode()
                     + black_scene,
@@ -761,7 +900,7 @@ class FivePhaseMethod(PhaseMethod):
 
     def _prepare_window_objects(self):
         for _name, window in self.config.model.windows.items():
-            _prims = pr.parse_primitive(window.data)
+            _prims = pr.parse_primitive(window.bytes.decode())
             self.window_receivers[_name] = SurfaceReceiver(
                 _prims, self.config.settings.window_basis
             )
@@ -900,49 +1039,73 @@ class FivePhaseMethod(PhaseMethod):
             wtr.write(pr.oconv(stdin=blacked_out_windows.encode(), octree=self.octree))
 
     def generate_matrices(self):
-        print("Generating matrices...")
-        print("Step 1/5: Generating view matrices...")
+        if self.mfile.exists():
+            if not self.config.settings.overwrite:
+                self.load_matrices()
+                return
+        logger.info("Generating matrices...")
+        logger.info("Step 1/5: Generating view matrices...")
         for mtx in self.view_window_matrices.values():
             mtx.generate(self.config.settings.view_window_matrix, memmap=True)
         for mtx in self.sensor_window_matrices.values():
             mtx.generate(self.config.settings.sensor_window_matrix)
-        print("Step 2/5: Generating daylight matrices...")
+        logger.info("Step 2/5: Generating daylight matrices...")
         for mtx in self.daylight_matrices.values():
             mtx.generate(self.config.settings.daylight_matrix)
-        print("Step 3/5: Generating direct view matrices...")
+        logger.info("Step 3/5: Generating direct view matrices...")
         for _, mtx in self.view_window_direct_matrices.items():
             mtx.generate(["-ab", "1"], sparse=True)
         for _, mtx in self.sensor_window_direct_matrices.items():
             mtx.generate(["-ab", "1"], sparse=True)
-        print("Step 4/5: Generating direct daylight matrices...")
+        logger.info("Step 4/5: Generating direct daylight matrices...")
         for _, mtx in self.daylight_direct_matrices.items():
             mtx.generate(["-ab", "0"], sparse=True)
-        print("Step 5/5: Generating direct sun matrices...")
+        logger.info("Step 5/5: Generating direct sun matrices...")
         for _, mtx in self.sensor_sun_direct_matrices.items():
             mtx.generate(["-ab", "0"])
         for _, mtx in self.view_sun_direct_matrices.items():
             mtx.generate(["-ab", "0"])
         for _, mtx in self.view_sun_direct_illuminance_matrices.items():
             mtx.generate(["-ab", "0", "-i+"])
-        print("Done!")
+        logger.info("Done!")
+        if self.config.settings.save_matrices:
+            self.save_matrices()
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        super().__exit__(exc_type, exc_value, traceback)
+    def load_matrices(self):
+        """
+        """
+        logger.info(f"Loading matrices from {self.mfile}")
+        mdata = np.load(self.mfile, allow_pickle=True)
+        for view, mtx in self.view_window_matrices.items():
+            mtx.array = mdata[f"{view}_window_matrix"] 
+        for sensor, mtx in self.sensor_window_matrices.items():
+            mtx.array = mdata[f"{sensor}_window_matrix"] 
+        for window, mtx in self.daylight_matrices.items():
+            mtx.array = mdata[f"{window}_daylight_matrix"] 
+        for view, mtx in self.view_window_direct_matrices.items():
+            mtx.array = mdata[f"{view}_window_direct_matrix"] 
+        for sensor, mtx in self.sensor_window_direct_matrices.items():
+            mtx.array = mdata[f"{sensor}_window_direct_matrix"] 
+        for window, mtx in self.daylight_direct_matrices.items():
+            mtx.array = mdata[f"{window}_daylight_direct_matrix"] 
+        for sensor, mtx in self.sensor_sun_direct_matrices.items():
+            mtx.array = mdata[f"{sensor}_sun_direct_matrix"] 
+        for view, mtx in self.view_sun_direct_matrices.items():
+            mtx.array = mdata[f"{view}_sun_direct_matrix"] 
+        for view, mtx in self.view_sun_direct_illuminance_matrices.items():
+            mtx.array = mdata[f"{view}_sun_direct_illuminance_matrix"] 
+
 
     def calculate_view_from_wea(self, view: str):
-        print("Step 1/2: Generating sky matrix from wea")
+        logger.info("Step 1/2: Generating sky matrix from wea")
         sky_matrix = self.get_sky_matrix_from_wea(
             int(self.config.settings.sky_basis[-1])
         )
         direct_sky_matrix = self.get_sky_matrix_from_wea(
             int(self.config.settings.sky_basis[-1]), sun_only=True
         )
-        direct_sky_matrix = [
-            csr_matrix(direct_sky_matrix[:, :, 0]),
-            csr_matrix(direct_sky_matrix[:, :, 1]),
-            csr_matrix(direct_sky_matrix[:, :, 2]),
-        ]
-        print("Step 2/2: Multiplying matrices...")
+        direct_sky_matrix = to_sparse_matrix3(direct_sky_matrix)
+        logger.info("Step 2/2: Multiplying matrices...")
         chunksize = 300
         shape = (
             self.view_window_matrices[view].nrows,
@@ -953,9 +1116,7 @@ class FivePhaseMethod(PhaseMethod):
             f"{view}_5ph.dat", shape=shape, dtype=np.float64, mode="w+", order="F"
         )
         for idx in range(0, sky_matrix.shape[1], chunksize):
-            print(idx)
             end = min(idx + chunksize, sky_matrix.shape[1])
-            _chunksize = end - idx
             _res = [[], [], []]
             for widx, _name in enumerate(self.config.model.windows):
                 for c in range(3):
@@ -998,35 +1159,33 @@ class FivePhaseMethod(PhaseMethod):
         direct_sky_matrix = self.get_sky_matrix_from_wea(
             int(self.config.settings.sky_basis[-1]), sun_only=True
         )
-        res3 = []
-        res3d = []
+        direct_sky_matrix = to_sparse_matrix3(direct_sky_matrix)
+        res3 = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
+        res3d = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
         for idx, _name in enumerate(self.config.model.windows):
-            res3.append(
-                matrix_multiply_rgb(
-                    self.sensor_window_matrices[sensor].array[idx],
-                    self.window_bsdfs[_name],
-                    self.daylight_matrices[_name].array,
-                    sky_matrix,
-                    weights=[47.4, 119.9, 11.6],
-                )
+            res3 += matrix_multiply_rgb(
+                self.sensor_window_matrices[sensor].array[idx],
+                self.window_bsdfs[_name],
+                self.daylight_matrices[_name].array,
+                sky_matrix,
+                weights=[47.4, 119.9, 11.6],
             )
-            res3d.append(
-                matrix_multiply_rgb(
-                    self.sensor_window_direct_matrices[sensor].array[idx],
-                    self.window_bsdfs[_name],
-                    self.daylight_direct_matrices[_name].array,
-                    direct_sky_matrix,
-                    weights=[47.4, 119.9, 11.6],
-                )
+            res3d += sparse_matrix_multiply_rgb_vtds(
+                self.sensor_window_direct_matrices[sensor].array[idx],
+                self.window_bsdfs[_name],
+                self.daylight_direct_matrices[_name].array,
+                direct_sky_matrix,
+                weights=[47.4, 119.9, 11.6],
             )
-        rescd = matrix_multiply_rgb(
-            self.sensor_sun_direct_matrices[sensor].array,
-            self.direct_sun_matrix,
-            weights=[47.4, 119.9, 11.6],
-        )
-        return np.sum(res3, axis=0) - np.sum(res3d, axis=0) + rescd
+        rescd = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
+        for c, w in enumerate([47.4, 119.9, 11.6]):
+            rescd += w * np.dot(
+                self.sensor_sun_direct_matrices[sensor].array[c],
+                self.direct_sun_matrix[c],
+            )
+        return res3 - res3d + rescd
 
-    def save_matrices(self, file):
+    def save_matrices(self):
         matrices = {}
         for view, mtx in self.view_window_matrices.items():
             matrices[f"{view}_window_matrix"] = mtx.array
@@ -1046,7 +1205,7 @@ class FivePhaseMethod(PhaseMethod):
             matrices[f"{view}_sun_direct_matrix"] = mtx.array
         for view, mtx in self.view_sun_direct_illuminance_matrices.items():
             matrices[f"{view}_sun_direct_illuminance_matrix"] = mtx.array
-        np.savez_compressed(file, **matrices)
+        np.savez_compressed(self.mfile, **matrices)
 
 
 def get_workflow(config):

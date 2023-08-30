@@ -3,34 +3,30 @@ This reference guide contains a detailed description of the `frads` API.
 It describes how the functions and methods work and which parameter can be used.
 It assumes that you have an understanding of the key concepts.
 
-1. [Color](#frads.color)
-1. [Parsers](#frads.parsers)
-3. [Sky](#frads.sky)
-4. [Data types and containers](#frads.types)
-2. [Geometry](#frads.geom)
-2. [Utility](#frads.utils)
-5. [Matrix](#frads.matrix)
+1. [Methods](#frads.methods)
+2. [Matrix](#frads.matrix)
+3. [EnergyPlusModel](#frads.eprad)
+4. [EnergyPlus To Radiance](#frads.epjson2rad)
+5. [Window](#frads.window)
+3. [Utility](#frads.utils)
+4. [Geometry](#frads.geom)
+5. [Sky](#frads.sky)
 
-::: frads.color
+::: frads.methods.TwoPhaseMethod
+::: frads.methods.ThreePhaseMethod
+::: frads.methods.FivePhaseMethod
 
-::: frads.parsers
+::: frads.matrix
 
-::: frads.sky
+::: frads.eprad
 
-::: frads.types
-    options:
-      members:
-        - Primitive
-        - Sender
-        - Receiver
-        - PaneProperty
-        - WeaMetaData
-        - WeaData
-        - MradModel
-        - MradPath
+::: frads.epjson2rad
 
-::: frads.geom
+::: frads.window
 
 ::: frads.utils
 
-::: frads.matrix
+::: frads.geom
+
+::: frads.sky
+

@@ -188,7 +188,9 @@ def eplus_surface2primitive(
             if check_outward(fen.polygon, zone_center):
                 window_polygon = window_polygon.flip()
             window_polygons.append(window_polygon)
-            _fen["data"] = utils.polygon2prim(window_polygon, window_material, fen.name)
+            _fen["data"] = utils.polygon_primitive(
+                window_polygon, window_material, fen.name
+            )
             surface_primitives[name]["window"][fen.name] = _fen
         surface_primitives[name]["surface"] = []
         surface_construction_layers = constructions[surface.construction].layers
@@ -197,7 +199,7 @@ def eplus_surface2primitive(
             -min(2, len(surface_construction_layers))
         ].replace(" ", "_")
         surface_primitives[name]["surface"].append(
-            utils.polygon2prim(surface_polygon, inner_material, surface.name)
+            utils.polygon_primitive(surface_polygon, inner_material, surface.name)
         )
         if surface.sun_exposed:
             outer_material = surface_construction_layers[-1].replace(" ", "_")
@@ -206,11 +208,13 @@ def eplus_surface2primitive(
             )
             facade = thicken(surface_polygon, window_polygons, thickness)
             surface_primitives[name]["surface"].append(
-                utils.polygon2prim(facade[1], outer_material, f"ext_{surface.name}")
+                utils.polygon_primitive(
+                    facade[1], outer_material, f"ext_{surface.name}"
+                )
             )
             for idx in range(2, len(facade)):
                 surface_primitives[name]["surface"].append(
-                    utils.polygon2prim(
+                    utils.polygon_primitive(
                         facade[idx], inner_material, f"sill_{surface.name}.{idx}"
                     )
                 )
@@ -585,12 +589,6 @@ def parse_epjson(epjs: dict) -> tuple:
 
 def epjson_to_rad(epmodel, epw=None) -> dict:
     """Command-line program to convert a energyplus model into a Radiance model."""
-    # Setup file structure
-    # objdir = Path("Objects")
-    # objdir.mkdir(exist_ok=True)
-    # mtxdir = Path("Matrices")
-    # mtxdir.mkdir(exist_ok=True)
-
     site, zones, constructions, materials, matrices = parse_epjson(epmodel.epjs)
     # building_name = epjs["Building"].popitem()[0].replace(" ", "_")
     building_name = list(epmodel.epjs["Building"].keys())[0].replace(" ", "_")
