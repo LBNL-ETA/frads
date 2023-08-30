@@ -5,8 +5,7 @@ Class and functions for accessing EnergyPlus Python API
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
-from typing import Optional, Union
-from build.lib.frads.window import GlazingSystem
+from typing import Optional, Callable
 
 from frads import sky
 from frads.window import GlazingSystem
@@ -14,7 +13,7 @@ import copy
 from pyenergyplus.api import EnergyPlusAPI
 
 
-class EPModel:
+class EnergyPlusModel:
     """EnergyPlus Model object
 
     Attributes:
@@ -27,9 +26,15 @@ class EPModel:
         floors: list of floors
         lighting_zone: list of lighting zones
         zones: list of zones
+
+    If the input file is in .idf format, use command-line EnergyPlus program \
+        to convert it to epJSON format
+
+    Example:
+        >>> model = EnergyPlusModel(Path("model.idf"))
     """
 
-    def __init__(self, fpath: Union[str, Path]):
+    def __init__(self, fpath: Path):
         """Load and parse input file into a JSON object.
         If the input file is in .idf format, use command-line
         energyplus program to convert it to epJSON format
@@ -53,44 +58,79 @@ class EPModel:
             raise Exception(f"Unknown file type {fpath}")
         with open(epjson_path) as rdr:
             self.epjs = json.load(rdr)
-        self.actuators_list = None
 
     @property
-    def cfs(self):
-        """ """
-        return list(self.epjs["Construction:ComplexFenestrationState"].keys())
+    def complex_fenestration_states(self):
+        """
+        Example:
+            >>> model.complex_fenestration_states
+        """
+        if "Construction:ComplexFenestrationState" in self.epjs:
+            return list(self.epjs["Construction:ComplexFenestrationState"].keys())
+        return []
 
     @property
     def windows(self):
-        """ """
-        return list(self.epjs["FenestrationSurface:Detailed"].keys())
+        """
+        Example:
+            >>> model.windows
+        """
+        if "FenestrationSurface:Detailed" in self.epjs:
+            return list(self.epjs["FenestrationSurface:Detailed"].keys())
+        return []
 
     @property
-    def walls_window(self):
-        walls_wndo = []
-        for k, v in self.epjs["FenestrationSurface:Detailed"].items():
-            walls_wndo.append(v["building_surface_name"])
-        return walls_wndo
+    def window_walls(self):
+        """
+        Example:
+            >>> model.window_walls
+        """
+        wndo_walls = []
+        if "FenestrationSurface:Detailed" in self.epjs:
+            for k, v in self.epjs["FenestrationSurface:Detailed"].items():
+                wndo_walls.append(v["building_surface_name"])
+        return wndo_walls
 
     @property
     def floors(self):
-        floor = []
-        for k, v in self.epjs["BuildingSurface:Detailed"].items():
-            if v["surface_type"] == "Floor":
-                floor.append(k)
-        return floor
+        """
+        Example:
+            >>> model.floors
+        """
+        floors = []
+        if "BuildingSurface:Detailed" in self.epjs:
+            for k, v in self.epjs["BuildingSurface:Detailed"].items():
+                if v["surface_type"] == "Floor":
+                    floors.append(k)
+        return floors
 
     @property
-    def lighting_zone(self):
+    def lighting_zones(self):
+        """
+        Example:
+            >>> model.lighting_zones
+        """
         if "Lights" in self.epjs:
             return list(self.epjs["Lights"].keys())
-        return "No Lights"
+        return []
 
     @property
     def zones(self):
-        return list(self.epjs["Zone"].keys())
+        """
+        Example:
+            >>> model.zones
+        """
+        if "Zone" in self.epjs:
+            return list(self.epjs["Zone"].keys())
+        return []
 
-    def _add(self, key, obj):
+    def _add(self, key: str, obj: dict or str):
+        """Add an object to the epjs dictionary.
+
+        Args:
+            key: Key of the object to be added.
+            obj: Object to be added.
+        """
         if key in self.epjs:
             # merge
             self.epjs[key] = {**self.epjs[key], **obj}
@@ -98,14 +138,14 @@ class EPModel:
             # add
             self.epjs[key] = obj
 
-    def add_cfs(self, glazing_system: GlazingSystem) -> None:
-        """
-        Add CFS to an EnergyPlus JSON file.
+    def add_glazing_system(self, glazing_system: GlazingSystem):
+        """Add glazing system to EnergyPlusModel's epjs dictionary.
 
         Args:
-            glazing_system: Glazing system from pywincalc.
-        Returns:
-            None
+            glazing_system: GlazingSystem object
+
+        Example:
+            >>> model.add_glazing_system(glazing_system1)
         """
         name = glazing_system.name
         if (
@@ -119,7 +159,7 @@ class EPModel:
             solar_results = glazing_system.solar_results
             photopic_results = glazing_system.photopic_results
 
-        # Initialize Contruction:ComplexFenestrationState dictionary with system and outer layer names
+        # Initialize Construction:ComplexFenestrationState dictionary with system and outer layer names
 
         construction_complex_fenestration_state = {}
 
@@ -350,122 +390,151 @@ class EPModel:
                 "construction_name"
             ] = cfs
 
-    def add_lighting(self, zone: str, replace: bool = False) -> None:
-        """Add lighting objects to the epjs dictionary.
+    def add_lighting(self, zone: str, replace: bool = False):
+        """Add lighting object to EnergyPlusModel's epjs dictionary.
 
         Args:
-            zone: zone name
-            replace: if True, replace existing lighting object in the
-                zone. Default is False.
+            zone: Zone name to add lighting to.
+            replace: If True, replace existing lighting object in zone.
+
+        Raises:
+            ValueError: If zone not found in model.
+            ValueError: If lighting already exists in zone and replace is False.
+
+        Example:
+            >>> model.add_lighting("Zone1")
         """
+        if zone in self.zones:
+            pass
+        else:
+            raise ValueError(f"Zone = {zone} not found in model.")
+
         dict2 = copy.deepcopy(self.epjs["Lights"])
 
         if self.epjs["Lights"] is not None:
-            for l in dict2:
+            for light in dict2:
                 if (
-                    self.epjs["Lights"][l][
+                    self.epjs["Lights"][light][
                         "zone_or_zonelist_or_space_or_spacelist_name"
                     ]
                     == zone
                 ):
-                    if replace == True:
-                        del self.epjs["Lights"][l]
+                    if replace:
+                        del self.epjs["Lights"][light]
                     else:
                         raise ValueError(
-                            "Lighting already exists in this zone. If want to replace, set replace=True."
+                            f"Lighting already exists in zone = {zone}. "
+                            "To replace, set replace=True."
                         )
 
-        # Initialize lighting schedule type limit dictionary
-        schedule_type_limit = {}
-        schedule_type_limit["on_off"] = {
-            "lower_limit_value": 0,
-            "upper_limit_value": 1,
-            "numeric_type": "Discrete",
-            "unit_type": "Availability",
+        # Add lighting schedule type limit to epjs dictionary
+        schedule_type_limit = {
+            "on_off": {
+                "lower_limit_value": 0,
+                "upper_limit_value": 1,
+                "numeric_type": "Discrete",
+                "unit_type": "Availability",
+            }
         }
+        self._add("ScheduleTypeLimits", schedule_type_limit)
 
-        # Initialize lighting schedule dictionary
-        lighting_schedule = {}
-        lighting_schedule["constant_off"] = {
-            "schedule_type_limits_name": "on_off",
-            "hourly_value": 0,
+        # Add lighting schedule to epjs dictionary
+        lighting_schedule = {
+            "constant_off": {
+                "schedule_type_limits_name": "on_off",
+                "hourly_value": 0,
+            }
         }
+        self._add("Schedule:Constant", lighting_schedule)
 
-        # Initialize lights dictionary with a constant-off schedule for each zone
-
-        lights = {}
-        lights[f"Light_{zone}"] = {
-            "design_level_calculation_method": "LightingLevel",
-            "fraction_radiant": 0,
-            "fraction_replaceable": 1,
-            "fraction_visible": 1,
-            "lighting_level": 0,
-            "return_air_fraction": 0,
-            "schedule_name": "constant_off",
-            "zone_or_zonelist_or_space_or_spacelist_name": zone,
+        # Add lighting to epjs dictionary
+        lights = {
+            f"Light_{zone}": {
+                "design_level_calculation_method": "LightingLevel",
+                "fraction_radiant": 0,
+                "fraction_replaceable": 1,
+                "fraction_visible": 1,
+                "lighting_level": 0,
+                "return_air_fraction": 0,
+                "schedule_name": "constant_off",
+                "zone_or_zonelist_or_space_or_spacelist_name": zone,
+            }
         }
+        self._add("Lights", lights)
 
-        mappings = {
-            "ScheduleTypeLimits": schedule_type_limit,
-            "Schedule:Constant": lighting_schedule,
-            "Lights": lights,
-        }
+    def add_output(
+        self, output_name: str, output_type: str, reporting_frequency: str = "Timestep"
+    ):
+        """Add an output variable or meter to the epjs dictionary.
 
-        for key, obj in mappings.items():
-            self._add(key, obj)
+        Args:
+            output_name: Name of the output variable or meter.
+            output_type: Type of the output. "variable" or "meter".
+            reporting_frequency: Reporting frequency of the output variable or meter.
 
-    def request_ep_output_variable(self, opt_name: str):
+        Raises:
+            raise ValueError("output_type must be 'variable' or 'meter'.")
+
+        Example:
+            >>> model.add_output("Zone Mean Air Temperature", "variable")
+            >>> model.add_output("Cooling:Electricity", "meter")
+        """
+
+        if output_type == "variable":
+            self._add_output_variable(output_name, reporting_frequency)
+        elif output_type == "meter":
+            self._add_output_meter(output_name, reporting_frequency)
+        else:
+            raise ValueError("output_type must be 'variable' or 'meter'.")
+
+    def _add_output_variable(self, output_name: str, reporting_frequency):
+        """Add an output variable to the epjs dictionary.
+
+        Args:
+            output_name: Name of the output variable.
+            reporting_frequency: Reporting frequency of the output variable.
+        """
         i = 1
         if "Output:Variable" not in self.epjs:
             self.epjs["Output:Variable"] = {}
         for output in self.epjs["Output:Variable"].values():
             i += 1
-            if output["variable_name"] == opt_name:
+            if output["variable_name"] == output_name:
                 break
         else:
             self.epjs["Output:Variable"][f"Output:Variable {i}"] = {
                 "key_value": "*",
-                "reporting_frequency": "Timestep",
-                "variable_name": opt_name,
+                "reporting_frequency": reporting_frequency,
+                "variable_name": output_name,
             }
 
-    def request_ep_output_meter(self, opt_name: str):
+    def _add_output_meter(self, output_name: str, reporting_frequency):
+        """Add an output meter to the epjs dictionary.
+
+        Args:
+            output_name: Name of the output meter.
+            reporting_frequency: Reporting frequency of the output meter.
+        """
         i = 1
         if "Output:Meter" not in self.epjs:
             self.epjs["Output:Meter"] = {}
         for output in self.epjs["Output:Meter"].values():
             i += 1
-            if output["key_name"] == opt_name:
+            if output["key_name"] == output_name:
                 break
         else:
             self.epjs["Output:Meter"][f"Output:Meter {i}"] = {
-                "key_name": opt_name,
-                "reporting_frequency": "Timestep",
+                "key_name": output_name,
+                "reporting_frequency": reporting_frequency,
             }
 
-    def actuator_func(self, state):
-        actuators_list = []
-        if self.actuators_list is None:
-            list = self.api.api.listAllAPIDataCSV(state).decode("utf-8")
-            for line in list.split("\n"):
-                if line.startswith("Actuator"):
-                    actuators_list.append(line.split(",", 1)[1])
-            self.actuators_list = actuators_list
-        else:
-            self.api.api.stopSimulation(state)
 
-    def gen_list_of_actuators(self):
-        with EnergyPlusSetup(self) as ep:
-            ep.set_callback(
-                "callback_begin_system_timestep_before_predictor", self.actuator_func
-            )
-            ep.run(
-                weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw",
-                output_prefix="test1",
-            )
+def ep_datetime_parser(inp: str):
+    """Parse date and time from EnergyPlus output.
 
-
-def ep_datetime_parser(inp):
+    Args:
+        inp: Date and time string from EnergyPlus output.
+    """
     date, time = inp.strip().split()
     month, day = [int(i) for i in date.split("/")]
     hr, mi, sc = [int(i) for i in time.split(":")]
@@ -475,15 +544,9 @@ def ep_datetime_parser(inp):
         return datetime(1900, month, day, hr, mi, sc)
 
 
-class Handles:
-    def __init__(self):
-        self.variable = {}
-        self.actuator = {}
-        self.construction = {}
-
-
 class EnergyPlusSetup:
     """EnergyPlus Simulation Setup.
+
     Attributes:
         api: EnergyPlusAPI object
         epjs: EnergyPlusJSON object
@@ -492,11 +555,22 @@ class EnergyPlusSetup:
         wea_meta: WeaMetaData object
     """
 
-    def __init__(self, epmodel):
+    def __init__(self, epmodel: EnergyPlusModel, weather_file: Optional[str] = None):
+        """Class for setting up and running EnergyPlus simulations.
+
+        Args:
+            epmodel: EnergyPlusModel object
+
+        Example:
+            >>> epsetup = EnergyPlusSetup(epmodel, epw="USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
+        """
         self.api = epmodel.api
+        self.epw = weather_file
         self.epjs = epmodel.epjs
         self.state = self.api.state_manager.new_state()
-        self.handles = Handles()
+        self.variable_handles = {}
+        self.actuator_handles = {}
+        self.construction_handles = {}
 
         loc = list(self.epjs["Site:Location"].values())[0]
         self.wea_meta = sky.WeaMetaData(
@@ -508,7 +582,9 @@ class EnergyPlusSetup:
             timezone=(0 - loc["time_zone"]) * 15,
         )
 
-        self.api.runtime.callback_begin_new_environment(self.state, self.get_handles())
+        self.api.runtime.callback_begin_new_environment(self.state, self._get_handles())
+        self.actuators = None
+        self._get_list_of_actuators()
 
     def __enter__(self):
         return self
@@ -516,99 +592,151 @@ class EnergyPlusSetup:
     def __exit__(self, exc_type, exc_value, exc_tb):
         self.api.state_manager.delete_state(self.state)
 
-    def actuate(self, name: str, key: str, value):
-        """
-        :param component_type: The actuator category, e.g. "Weather Data"
-        :param name: The name of the actuator to retrieve, e.g. "Outdoor Dew Point"
-        :param key: The instance of the variable to retrieve, e.g. "Environment"
-        """
-        if key not in self.handles.actuator:
-            raise ValueError("Actuator not found", name, key)
-        self.api.exchange.set_actuator_value(
-            self.state, self.handles.actuator[key][name], value
-        )
-
-    def request_actuator(self, state, component_type: str, name: str, key: str):
-        """
-        :param component_type: The actuator category, e.g. "Weather Data"
-        :param name: The name of the actuator to retrieve, e.g. "Outdoor Dew Point"
-        :param key: The instance of the variable to retrieve, e.g. "Environment"
-
-        """
-        if (key, name) in self.handles.actuator.items():
-            pass
+    def _actuator_func(self, state):
+        actuators_list = []
+        if self.actuators is None:
+            list = self.api.api.listAllAPIDataCSV(state).decode("utf-8")
+            for line in list.split("\n"):
+                if line.startswith("Actuator"):
+                    line = line.replace(";", "")
+                    actuators_list.append(line.split(",", 1)[1])
+            self.actuators = actuators_list
         else:
+            self.api.api.stopSimulation(state)
+
+    def _get_list_of_actuators(self):
+        with open("epmodel.json", "w") as wtr:
+            json.dump(self.epjs, wtr)
+
+        actuator_state = self.api.state_manager.new_state()
+        self.api.runtime.set_console_output_status(actuator_state, False)
+        method = getattr(
+            self.api.runtime, "callback_begin_system_timestep_before_predictor"
+        )
+        method(actuator_state, self._actuator_func)
+
+        if self.epw is not None:
+            self.api.runtime.run_energyplus(
+                actuator_state, ["-p", "actuator", "-w", self.epw, "epmodel.json"]
+            )
+        elif "SizingPeriod:DesignDay" in self.epjs:
+            self.api.runtime.run_energyplus(actuator_state, ["-D", "epmodel.json"])
+        else:
+            raise ValueError(
+                "Specify weather file in EnergyPlusSetup "
+                "or model design day in EnergyPlusModel."
+            )
+        self.api.state_manager.delete_state(actuator_state)
+
+    def actuate(self, component_type: str, name: str, key: str, value: float):
+        """Set or update the operating value of an actuator in the EnergyPlus model.
+
+        If actuator has not been requested previously, it will be requested.
+        Set the actuator value to the value specified.
+
+        Args:
+            component_type: The actuator category, e.g. "Weather Data"
+            name: The name of the actuator to retrieve, e.g. "Outdoor Dew Point"
+            key: The instance of the variable to retrieve, e.g. "Environment"
+            value: The value to set the actuator to
+
+        Raises:
+            ValueError: If the actuator is not found
+
+        Example:
+            >>> epsetup.actuate("Weather Data", "Outdoor Dew Point", "Environment", 10)
+        """
+        if key not in self.actuator_handles:  # check if key exists in actuator handles
+            self.actuator_handles[key] = {}
+        if (
+            name not in self.actuator_handles[key]
+        ):  # check if name exists in actuator handles
             handle = self.api.exchange.get_actuator_handle(
-                state, component_type, name, key
+                self.state, component_type, name, key
             )
             if handle == -1:
+                del self.actuator_handles[key]
                 raise ValueError(
-                    f"Actuator {component_type} {name} {key} not found", key
+                    "Actuator is not found: "
+                    f"component_type = {component_type}, name = {name}, key = {key}."
                 )
-            # check key exists
-            if key not in self.handles.actuator:
-                self.handles.actuator[key] = {}
-            self.handles.actuator[key][name] = handle
+            self.actuator_handles[key][name] = handle
 
-    def get_variable_value(self, name: str, key: str):
+        # set actuator value
+        self.api.exchange.set_actuator_value(
+            self.state, self.actuator_handles[key][name], value
+        )
+
+    def get_variable_value(self, name: str, key: str) -> float:
+        """Get the value of a variable in the EnergyPlus model during runtime.
+
+        Args:
+            name: The name of the variable to retrieve, e.g. "Outdoor Dew Point"
+            key: The instance of the variable to retrieve, e.g. "Environment"
+
+        Returns:
+            The value of the variable
+
+        Raises:
+            ValueError: If the variable is not found
+
+        Example:
+            >>> epsetup.get_variable_value("Outdoor Dew Point", "Environment")
+        """
         return self.api.exchange.get_variable_value(
-            self.state, self.handles.variable[key][name]
+            self.state, self.variable_handles[key][name]
         )
 
     def request_variable(self, name: str, key: str):
-        if (key, name) in self.handles.actuator.items():
+        """Request a variable from the EnergyPlus model during runtime.
+
+        Args:
+            name: The name of the variable to retrieve, e.g. "Outdoor Dew Point"
+            key: The instance of the variable to retrieve, e.g. "Environment"
+
+        Example:
+            >>> epsetup.request_variable("Outdoor Dew Point", "Environment")
+        """
+        if key not in self.variable_handles:
+            self.variable_handles[key] = {}
+        if name in self.variable_handles[key]:
             pass
         else:
             self.api.exchange.request_variable(self.state, name, key)
-            # check key exists
-            if key not in self.handles.variable:
-                self.handles.variable[key] = {}
-            self.handles.variable[key][name] = None
+            self.variable_handles[key][name] = None
 
-    def get_handles(self):
+    def _get_handles(self):
         def callback_function(state):
-            for key in self.handles.variable:
+            for key in self.variable_handles:
                 try:
-                    for name in self.handles.variable[key]:
+                    for name in self.variable_handles[key]:
                         handle = self.api.exchange.get_variable_handle(state, name, key)
                         if handle == -1:
-                            raise ValueError("Variable handle not found", name, key)
-                        self.handles.variable[key][name] = handle
+                            raise ValueError(
+                                "Variable handle not found: "
+                                f"name = {name}, key = {key}"
+                            )
+                        self.variable_handles[key][name] = handle
                 except TypeError:
-                    print("No variables requested for", self.handles.variable, key)
+                    print("No variables requested for", self.variable_handles, key)
 
             if "Construction:ComplexFenestrationState" in self.epjs:
                 for cfs in self.epjs["Construction:ComplexFenestrationState"]:
                     handle = self.api.api.getConstructionHandle(state, cfs.encode())
                     if handle == -1:
-                        raise ValueError("Construction handle not found", cfs)
-                    self.handles.construction[cfs] = handle
-
-            if "FenestrationSurface:Detailed" in self.epjs:
-                for window in self.epjs["FenestrationSurface:Detailed"]:
-                    self.request_actuator(
-                        state,
-                        component_type="Surface",
-                        name="Construction State",
-                        key=window,
-                    )
-
-            for light in self.epjs.get("Lights", []):
-                self.request_actuator(
-                    state, component_type="Lights", name="Electricity Rate", key=light
-                )
-
-                self.request_variable("Lights Electricity Energy", light)
-                var_handle = self.api.exchange.get_variable_handle(
-                    state, "Lights Electricity Energy", light
-                )
-                if var_handle == -1:
-                    raise ValueError("Light variable not found", light)
-                self.handles.variable[light]["Lights Electricity Energy"] = var_handle
+                        raise ValueError(
+                            "Construction handle not found: " f"Construction = {cfs}"
+                        )
+                    self.construction_handles[cfs] = handle
 
         return callback_function
 
-    def get_datetime(self):
+    def get_datetime(self) -> datetime:
+        """Get the current date and time from EnergyPlus
+
+        Returns:
+            datetime object
+        """
         year = self.api.exchange.year(self.state)
         month = self.api.exchange.month(self.state)
         day = self.api.exchange.day_of_month(self.state)
@@ -631,14 +759,56 @@ class EnergyPlusSetup:
 
     def run(
         self,
-        weather_file: Optional[str] = None,
-        output_directory: Optional[str] = None,
+        output_directory: Optional[str] = "./",
         output_prefix: Optional[str] = "eplus",
+        output_suffix: Optional[str] = "L",
+        weather_file: Optional[str] = None,
+        silent: bool = False,
+        annual: bool = False,
+        design_day: bool = False,
     ):
-        options = {"-w": weather_file, "-d": output_directory, "-p": output_prefix}
-        # check if any of options are None, if so, dont pass them to run_energyplus
-        options = {k: v for k, v in options.items() if v is not None}
-        opt = [item for sublist in options.items() for item in sublist]
+        """Run EnergyPlus simulation.
+
+        Args:
+            output_directory: Output directory path. (default: None) \
+                If None, use current directory.
+            output_prefix: Prefix for output files. (default: eplus)
+            output_suffix: Suffix style for output files. (default: L)
+                L: Legacy (e.g., eplustbl.csv)
+                C: Capital (e.g., eplusTable.csv)
+                D: Dash (e.g., eplus-table.csv)
+            silent: If True, do not print EnergyPlus output to console. (default: False)
+            annual: If True, force run annual simulation. (default: False)
+            design_day: If True, force run design-day-only simulation. (default: False)
+
+        Example:
+            >>> epsetup.run(output_prefix="test1", silent=True)
+        """
+        opt = ["-d", output_directory, "-p", output_prefix, "-s", output_suffix]
+
+        if weather_file is not None:
+            opt.extend(["-w", weather_file])
+        elif design_day:
+            if "SizingPeriod:DesignDay" in self.epjs:
+                opt.append("-D")
+            else:
+                raise ValueError(
+                    "Design day simulation requested, "
+                    "but no design day found in EnergyPlus model."
+                )
+        else:
+            raise ValueError(
+                "Specify weather file in EnergyPlusSetup or "
+                "run with design_day = True for design-day-only simulation."
+            )
+
+        if annual:
+            if weather_file is not None:
+                opt.append("-a")
+            else:
+                raise ValueError(
+                    "Annual simulation requested, but no weather file found."
+                )
 
         if "OutputControl:Files" not in self.epjs:
             self.epjs["OutputControl:Files"] = {
@@ -648,14 +818,27 @@ class EnergyPlusSetup:
         with open(f"{output_prefix}.json", "w") as wtr:
             json.dump(self.epjs, wtr)
 
+        self.api.runtime.set_console_output_status(self.state, not silent)
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
 
-    def set_callback(self, method_name: str, func):
+    def set_callback(self, method_name: str, func: Callable):
+        """Set callback function for EnergyPlus runtime API.
+
+        Args:
+            method_name: Name of the method to set callback for.
+            func: Callback function.
+
+        Raises:
+            AttributeError: If method_name is not found in EnergyPlus runtime API.
+
+        Example:
+            >>> epsetup.set_callback("callback_begin_system_timestep_before_predictor", func)
+        """
         try:
             method = getattr(self.api.runtime, method_name)
         except AttributeError:
             raise AttributeError(
-                f"Method {method_name} not found in EnergyPlus runtime API"
+                f"Method {method_name} not found in EnergyPlus runtime API."
             )
         # method(self.state, partial(func, self))
         method(self.state, func)
