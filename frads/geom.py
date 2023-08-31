@@ -96,15 +96,14 @@ class Polygon:
     def _calculate_centroid(self):
         return np.mean(self._vertices, axis=0)
 
-    def scale(self, scale_vect: np.ndarray, center: np.ndarray):
+    def scale(self, scale_vect: np.ndarray, center: np.ndarray) -> "Polygon":
         """Scale the polygon.
 
-        Parameters:
-        scale_vect (numpy array): scale along x, y, z;
-        center (numpy array): center of scaling
-
+        Args:
+            scale_vect: scale along x, y, z;
+            center: center of scaling
         Returns:
-        Scaled polygon (Polygon)
+            Scaled polygon
         """
 
         new_vertices = []
@@ -322,7 +321,7 @@ def get_polygon_limits(polygon_list: Sequence[Polygon], offset: float = 0.0):
     return xmin, xmax, ymin, ymax, zmin, zmax
 
 
-def getbbox(polygons: Sequence[Polygon], offset: float = 0.0):
+def getbbox(polygons: Sequence[Polygon], offset: float = 0.0) -> List[Polygon]:
     """Get a bounding box for a list of polygons.
 
     Return a list of polygon that is the
@@ -362,7 +361,7 @@ def merge_polygon(polygons: Sequence[Polygon]) -> Polygon:
     Returns:
         Merged polygon
     Raises:
-        ValueError if window normals are not the same
+        ValueError: if windows are not co-planar
     """
     normals = [p.normal for p in polygons]
     if len(set(map(tuple, normals))) > 1:

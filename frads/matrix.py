@@ -37,9 +37,21 @@ BASIS_DIMENSION = {
 
 
 class SensorSender:
-    """Sender object as a list of sensors."""
+    """Sender object as a list of sensors.
+
+    Attributes:
+        sensors: A list of sensors, each sensor is a list of 6 numbers
+        content: Sensor encoded for Radiance
+        yres: Number of sensors
+    """
 
     def __init__(self, sensors: List[List[float]], ray_count: int = 1):
+        """Initialize a sender object with a list of sensors:
+
+        Args:
+            sensors: A list of sensors, each sensor is a list of 6 numbers
+            ray_count: Number of rays per sensor
+        """
         self.sensors = [i for i in sensors for _ in range(ray_count)]
         self.content = (
             os.linesep.join([" ".join(map(str, li)) for li in self.sensors])
@@ -52,7 +64,14 @@ class SensorSender:
 
 
 class ViewSender:
-    """Sender object as a view."""
+    """Sender object as a view.
+
+    Attributes:
+        view: A view object
+        content: View encoded for Radiance
+        xres: x resolution
+        yres: y resolution
+    """
 
     def __init__(self, view: pr.View, ray_count=1, xres=800, yres=800):
         self.view = view
@@ -96,11 +115,29 @@ class ViewSender:
 
 
 class SurfaceSender:
-    """Sender object as a list of surface primitives."""
+    """Sender object as a list of surface primitives.
+
+    Attributes:
+        surfaces: A list of surface primitives
+        basis: Sender sampling basis
+        content: Surface encoded for Radiance
+    """
 
     def __init__(
-        self, surfaces: List[pr.Primitive], basis: str, left_hand=False, offset=None
+        self,
+        surfaces: List[pr.Primitive],
+        basis: str,
+        left_hand: bool = False,
+        offset: bool = None,
     ):
+        """Instantiate a SurfaceSender object.
+
+        Args:
+            surfaces: A list of surface primitives
+            basis: Sender sampling basis
+            left_hand: Whether to use left-hand coordinate system
+            offset: Offset of the sender surface
+        """
         self.surfaces = surfaces
         self.basis = basis
         self.content = rfluxmtx_markup(
@@ -112,6 +149,13 @@ class SurfaceSender:
 
 
 class Receiver:
+    """Base class for receiver objects.
+
+    Attributes:
+        basis: Receiver sampling basis
+        content: Receiver encoded for Radiance
+    """
+
     def __init__(self, basis):
         check_index = 0
         if basis[0] == "-":
@@ -129,6 +173,14 @@ class Receiver:
 
 
 class SurfaceReceiver(Receiver):
+    """Receiver object as a list of surface primitives.
+
+    Attributes:
+        surfaces: A list of surface primitives
+        basis: Receiver sampling basis
+        content: Surface encoded for Radiance
+    """
+
     def __init__(
         self,
         surfaces: List[pr.Primitive],
@@ -153,6 +205,13 @@ class SurfaceReceiver(Receiver):
 
 
 class SkyReceiver(Receiver):
+    """Sky as receiver object.
+
+    Attributes:
+        basis: Receiver sampling basis
+        content: Sky encoded for Radiance
+    """
+
     def __init__(self, basis, out=None):
         super().__init__(basis)
         self.content = ""
@@ -169,13 +228,33 @@ class SkyReceiver(Receiver):
 
 
 class SunReceiver(Receiver):
+    """Sun as receiver object.
+    The number of suns is reduced depending on the input.
+    If an annual sun_matrix is provided, only the non-zero
+    solar position is used. If window_normals are provided,
+    only the suns that are visible through the window are used.
+
+    Attributes:
+        basis: Receiver sampling basis
+        content: Sun encoded for Radiance
+        modifiers: Sun modifier names
+    """
+
     def __init__(
         self,
-        basis,
+        basis: str,
         sun_matrix: Optional[np.ndarray] = None,
         window_normals: Optional[List[np.ndarray]] = None,
-        full_mod=False,
+        full_mod: bool = False,
     ):
+        """Initialize a sun receiver.
+
+        Args:
+            basis: Sampling basis
+            sun_matrix: Annual sun matrix
+            window_normals: List of window normals
+            full_mod: Use full set of sun modifiers
+        """
         super().__init__(basis)
         if not basis.startswith("r") and not basis[-1].isdigit():
             raise ValueError("Invalid Reinhart/Treganza basis", basis)
@@ -204,15 +283,35 @@ class SunReceiver(Receiver):
 
 
 class Matrix:
-    """Base Matrix object."""
+    """Base Matrix object.
+
+    Attributes:
+        sender: Sender object
+        receivers: List of receiver objects
+        array: Matrix array, this is usually where the matrix data is stored
+        ncols: Number of columns
+        nrows: Number of rows
+        dtype: Matrix data type
+        ncomp: Number of components
+        octree: Octree file used to generate the matrix
+        surfaces: List of environment surface primitives
+    """
 
     def __init__(
         self,
         sender: Union[SensorSender, ViewSender, SurfaceSender],
         receivers: Union[List[SkyReceiver], List[SurfaceReceiver], List[SunReceiver]],
-        octree,
-        surfaces=None,
+        octree: Optional[str] = None,
+        surfaces: Optional[List[str]] = None,
     ):
+        """Initialize a matrix.
+
+        Args:
+            sender: Sender object
+            receivers: List of receiver objects
+            octree: Octree file used to generate the matrix
+            surfaces: List of environment surface file paths
+        """
         if not isinstance(sender, (SensorSender, ViewSender, SurfaceSender)):
             raise ValueError(
                 "Sender must be a SensorSender, ViewSender, or SurfaceSender"
@@ -245,10 +344,25 @@ class Matrix:
         self.surfaces = surfaces
 
     def generate(
-        self, params: List[str], nproc=1, sparse=False, to_file=False, memmap=False
+        self,
+        params: List[str],
+        nproc: int = 1,
+        sparse: bool = False,
+        to_file: bool = False,
+        memmap: bool = False,
     ) -> None:
-        """
-        Call rfluxmtx to generate the matrix.
+        """Call rfluxmtx to generate the matrix.
+
+        Args:
+            params: List of rfluxmtx parameters
+            nproc: Number of processes to use
+            sparse: Use sparse matrix format
+            to_file: Indicate the matrix will be written to file
+                directly as specified by rfluxmtx markup. As a
+                result, the matrix will not be stored in memory
+                as numpy array.
+            memmap: Use memory mapping (out-of-core) to store
+                the matrix, which is useful for large matrices.
         """
         surface_file = None
         rays = None
@@ -339,7 +453,27 @@ class Matrix:
 
 
 class SunMatrix(Matrix):
-    def __init__(self, sender: Union[SensorSender, ViewSender], receiver: SunReceiver, octree: Optional[str], surfaces: Optional[List[str]]=None):
+    """Sun Matrix object, specialized for sun-only matrices.
+
+    Attributes:
+        sender: Sender object
+        receiver: Receiver object
+        octree: Octree file
+        surfaces: List of surface files
+        array: Matrix array
+        nrows: Number of rows
+        ncols: Number of columns
+        dtype: Data type
+        ncomp: Number of components
+    """
+
+    def __init__(
+        self,
+        sender: Union[SensorSender, ViewSender],
+        receiver: SunReceiver,
+        octree: Optional[str],
+        surfaces: Optional[List[str]] = None,
+    ):
         if isinstance(sender, SurfaceSender):
             raise TypeError("SurfaceSender cannot be used with SunMatrix")
         super().__init__(sender, [receiver], octree, surfaces=surfaces)
@@ -347,7 +481,23 @@ class SunMatrix(Matrix):
         self.receiver = receiver
         self.ncols = BASIS_DIMENSION[receiver.basis] + 1
 
-    def generate(self, parameters: List[str], nproc=1, radmtx=False, sparse=False) -> Optional[bytes]:
+    def generate(
+        self,
+        parameters: List[str],
+        nproc: int = 1,
+        radmtx: bool = False,
+        sparse: bool = False,
+    ) -> Optional[bytes]:
+        """Call rcontrib to generate a matrix and store it in memory
+        as a numpy array.
+
+        Args:
+            parameters: List of rcontrib parameters
+            nproc: Number of processes to use
+            radmtx: If true, return the matrix bytes from rcontrib directly
+            sparse: Use sparse matrix format, this is usually a good idea
+                given the nature of sun-only matrices.
+        """
         if not isinstance(self.receiver, SunReceiver):
             raise TypeError("SunMatrix must have a SunReceiver")
         xres, yres = None, None
@@ -425,12 +575,12 @@ class SunMatrix(Matrix):
             )
 
 
-def load_matrix(file: Union[bytes, str, Path], dtype: str = "float"):
-    """
-    Load a Radiance matrix file into numpy array.
+def load_matrix(file: Union[bytes, str, Path], dtype: str = "float") -> np.ndarray:
+    """Load a Radiance matrix file into numpy array.
 
     Args:
         file: a file path
+        dtype: data type
 
     Returns:
         A numpy array
@@ -443,8 +593,11 @@ def load_matrix(file: Union[bytes, str, Path], dtype: str = "float"):
     )
 
 
-def load_binary_matrix(buffer, nrows, ncols, ncomp, dtype, header=False):
+def load_binary_matrix(
+    buffer: bytes, nrows: int, ncols: int, ncomp: int, dtype: str, header: bool = False
+) -> np.ndarray:
     """Load a matrix in binary format into a numpy array.
+
     Args:
         buffer: buffer to read from
         nrows: number of rows
@@ -452,6 +605,7 @@ def load_binary_matrix(buffer, nrows, ncols, ncomp, dtype, header=False):
         ncomp: number of components
         dtype: data type
         header: if True, strip header
+
     Returns:
         The matrix as a numpy array
     """
@@ -461,14 +615,17 @@ def load_binary_matrix(buffer, nrows, ncols, ncomp, dtype, header=False):
     return np.frombuffer(buffer, dtype=npdtype).reshape(nrows, ncols, ncomp)
 
 
-def matrix_multiply_rgb(*mtx: np.ndarray, weights=None):
-    """
-    Multiply matrices as numpy ndarray.
+def matrix_multiply_rgb(
+    *mtx: np.ndarray, weights: Optional[List[float]] = None
+) -> np.ndarray:
+    """Multiply matrices as numpy ndarray.
     linalg.multi_dot figures out the multiplication order
     but uses more memory.
+
     Args:
         mtx: matrices to multiply
         weights: weights for each component
+
     Returns:
         The result as a numpy array
     """
@@ -483,17 +640,22 @@ def matrix_multiply_rgb(*mtx: np.ndarray, weights=None):
 
 
 def sparse_matrix_multiply_rgb_vtds(
-    vmx: np.ndarray, tmx: np.ndarray, dmx: np.ndarray, smx: np.ndarray, weights=None
-):
-    """
-    Multiply sparse view, transmission, daylight,
+    vmx: np.ndarray,
+    tmx: np.ndarray,
+    dmx: np.ndarray,
+    smx: np.ndarray,
+    weights: Optional[List[float]] = None,
+) -> np.ndarray:
+    """ Multiply sparse view, transmission, daylight,
     and sky matrices. (ThreePhaseMethod)
+
     Args:
         vmx: view matrix (sparse)
         tmx: transmission matrix (non-sparse)
         dmx: daylight matrix (sparse)
         smx: sky matrix (sparse)
         weights: weights for RGB channels
+
     Returns:
         The result as a numpy array (non sparse)
     """
@@ -515,12 +677,13 @@ def sparse_matrix_multiply_rgb_vtds(
     return res
 
 
-def to_sparse_matrix3(mtx, mtype="csr") -> np.ndarray:
-    """
-    Convert a three-channel matrix to sparse matrix.
+def to_sparse_matrix3(mtx: np.ndarray, mtype: str = "csr") -> np.ndarray:
+    """Convert a three-channel matrix to sparse matrix.
+
     Args:
         mtx: a three-channel matrix
         mtype: matrix type
+
     Returns:
         An array of sparse matrix
     """
@@ -541,13 +704,14 @@ def to_sparse_matrix3(mtx, mtype="csr") -> np.ndarray:
 
 def rfluxmtx_markup(
     surfaces: List[pr.Primitive],
-    basis,
-    left_hand=False,
-    offset=None,
-    source="glow",
-    out=None,
-):
-    """Mark up a file for rfluxmtx.
+    basis: str,
+    left_hand: bool = False,
+    offset: Optional[float] = None,
+    source: str = "glow",
+    out: Optional[str] = None,
+) -> str:
+    """Mark up surfaces for rfluxmtx.
+
     Args:
         surfaces: list of surfaces
         basis: basis type
@@ -555,6 +719,7 @@ def rfluxmtx_markup(
         offset: offset
         source: source type
         out: output file
+
     Returns:
         Marked up primitives as strings (to be written to a file for rfluxmtx)
     """
@@ -621,14 +786,15 @@ def surfaces_view_factor(
     env: List[pr.Primitive],
     ray_count: int = 10000,
 ) -> Dict[str, List[float]]:
-    """
-    Calculate surface to surface view factor using rfluxmtx.
+    """Calculate surface to surface view factor using rfluxmtx.
+
     Args:
         surfaces: list of surface primitives that we want to calculate view factor for.
             Surface normal needs to be facing inward.
         env: list of environment primitives that our surfaces will be exposed to.
             Surface normal needs to be facing inward.
         ray_count: number of rays spawned for each surface.
+
     Returns:
         A dictionary of view factors, where the key is the surface identifier.
     """

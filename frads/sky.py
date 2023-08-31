@@ -76,7 +76,14 @@ class WeaData(NamedTuple):
 
 
 def parse_epw(epw_str: str) -> tuple:
-    """Parse epw file and return wea header and data."""
+    """Parse epw file and return wea header and data.
+
+    Args:
+        epw_str: String containing epw file.
+
+    Returns:
+        Tuple of meta data and wea data.
+    """
     raw = epw_str.splitlines()
     epw_header = raw[0].split(",")
     content = raw[8:]
@@ -111,7 +118,13 @@ def parse_epw(epw_str: str) -> tuple:
 
 
 def parse_wea(wea_str: str) -> Tuple[WeaMetaData, List[WeaData]]:
-    """Parse a wea file in its entirety."""
+    """
+    Parse a wea file in its entirety.
+    Args:
+        wea_str: String containing wea file.
+    Returns:
+        Tuple of meta data and wea data.
+    """
     lines = wea_str.splitlines()
     place = lines[0].split(" ", 1)[1]
     lat = float(lines[1].split(" ", 1)[1])
@@ -141,151 +154,31 @@ def parse_wea(wea_str: str) -> Tuple[WeaMetaData, List[WeaData]]:
 
 
 def parse_epw_file(file: os.PathLike) -> tuple:
-    # parse a epw file using parse_epw
+    """Parse an epw file using parse_epw.
+
+    Args:
+        file: Path to epw file.
+
+    Returns:
+        Tuple of meta data and epw data.
+    """
     with open(file, "r") as f:
         epw_str = f.read()
     return parse_epw(epw_str)
 
 
-# parse a wea file using parse_wea
 def parse_wea_file(file: os.PathLike) -> tuple:
+    """Parse a wea file using parse_wea.
+
+    Args:
+        file: Path to wea file.
+
+    Returns:
+        Tuple of meta data and wea data.
+    """
     with open(file, "r") as f:
         wea_str = f.read()
     return parse_wea(wea_str)
-
-
-# def basis_glow(sky_basis: str) -> str:
-#     """
-#     Generate a set of regular sky and ground glow primitives string.
-#
-#     Args:
-#         sky_basis(str): sky sampling basis, e.g. r1, r4
-#     Returns:
-#         ground and sky glow string, usually used for rfluxmtx calls.
-#     """
-#     grnd_str = grndglow()
-#     sky_str = skyglow(sky_basis)
-#     return grnd_str + sky_str
-#
-#
-# def skyglow(basis: str, upvect: str = "+Y") -> str:
-#     """
-#     Generate a set of skyglow string
-#
-#     Args:
-#         basis(str): e.g., r1, r2, r4
-#         upvect(str): Optional, default=+Y
-#     Returns:
-#         A set of sky glow primitive string
-#     """
-#     sky_string = f"#@rfluxmtx u={upvect} h={basis}\n\n"
-#     sky_string += "void glow skyglow\n"
-#     sky_string += "0\n0\n4 1 1 1 0\n\n"
-#     sky_string += "skyglow source sky\n"
-#     sky_string += "0\n0\n4 0 0 1 180\n"
-#     return sky_string
-#
-#
-# def grndglow(basis: str = "u") -> str:
-#     """
-#     Generate a set of ground string
-#     Args:
-#         basis(str): Optional default=u
-#     Returns:
-#         A set of ground glow primitive string
-#     """
-#     ground_string = f"#@rfluxmtx h={basis}\n\n"
-#     ground_string += "void glow groundglow\n"
-#     ground_string += "0\n0\n4 1 1 1 0\n\n"
-#     ground_string += "groundglow source ground\n"
-#     ground_string += "0\n0\n4 0 0 -1 180\n\n"
-#     return ground_string
-
-
-# def gen_sun_source_full(mf: int) -> Tuple[str, str]:
-#     """
-#     Generate a full set of sun light sources according to Reinhart basis.
-#
-#     Args:
-#         mf(int): multiplication factor, usually 1, 2, or 4.
-#     Returns:
-#         A tuple of full set of sun light and source primitive string
-#         and associated modifier string.
-#     """
-#     runlen = 144 * mf**2 + 3
-#     mod_str = os.linesep.join([f"sol{i}" for i in range(1, runlen)])
-#     dirs, _ = utils.calc_reinsrc_dir(mf)
-#     lines = []
-#     for i, d in enumerate(dirs):
-#         lines.append(
-#             f"void light sol{i} 0 0 3 1 1 1 sol{i} source sun "
-#             f"0 0 4 {d.x:.6g} {d.y:.6g} {d.z:.6g} 0.533"
-#         )
-#     return os.linesep.join(lines) + os.linesep, mod_str
-
-
-# def gen_sun_source_culled(
-#     mf,
-#     smx_path: Optional[Path] = None,
-#     window_normals: Optional[List[geom.Vector]] = None,
-# ) -> Tuple[str, str, str]:
-#     """
-#     Generate a culled set of sun sources based on either window orientation
-#     and/or climate-based sky matrix. The reduced set of sun sources will
-#     significantly speed up the direct-sun matrix generation.
-#
-#     Args:
-#         mf(int): multiplication factor, usually 1, 2, or 4.
-#         smx_path(str): Optional, sky matrix path, usually the output of gendaymtx
-#         window_normals(str): Optional, window normals
-#     Returns:
-#         A tuple of culled set of sun light and source primitive string,
-#         corresponding modifier strings, and the full set of modifier string.
-#     """
-#     runlen = 144 * mf**2 + 3
-#     dirs, _ = utils.calc_reinsrc_dir(mf)
-#     full_mod_str = os.linesep.join([f"sol{i}" for i in range(1, runlen)])
-#     win_norm = []
-#     if smx_path is not None:
-#         cmd1 = pr.rmtxop(
-#             str(smx_path), outform="f", transpose=True, transform=(0.3, 0.6, 0.1)
-#         )
-#         cmd2 = pr.getinfo(cmd1, strip_header=True)
-#         proc3 = pr.total(cmd2, inform="f", incount=runlen - 1, sep=",")
-#         dtot = [float(i) for i in proc3.split(b",")]
-#     else:
-#         dtot = [1] * runlen
-#     out_lines = []
-#     mod_str = []
-#     if window_normals is not None:
-#         win_norm = window_normals
-#         for i, d in enumerate(dirs):
-#             _mod = "sol" + str(i)
-#             v = 0
-#             if dtot[i] > 0:
-#                 for norm in win_norm:
-#                     if norm * d < 0:
-#                         v = 1
-#                         mod_str.append(_mod)
-#                         break
-#             out_lines.append(
-#                 f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} source sun "
-#                 f"0 0 4 {d.x:.6g} {d.y:.6g} {d.z:.6g} 0.533"
-#             )
-#     else:
-#         for i, d in enumerate(dirs):
-#             _mod = f"sol{i}"
-#             v = 0
-#             if dtot[i] > 0:
-#                 v = 1
-#                 mod_str.append(_mod)
-#             out_lines.append(
-#                 f"void light sol{i} 0 0 3 {v} {v} {v} sol{i} source sun "
-#                 f"0 0 4 {d.x:.6g} {d.y:.6g} {d.z:.6g} 0.533"
-#             )
-#     logger.debug(out_lines)
-#     logger.debug(mod_str)
-#     return os.linesep.join(out_lines), os.linesep.join(mod_str), full_mod_str
 
 
 def genskymtx(
@@ -307,25 +200,33 @@ def genskymtx(
     solar_radiance: bool = False,
     mfactor: int = 1,
 ) -> bytes:
-    """
-    Call gendaymtx to generate a sky/sun matrix
-    and write results to out.  It takes either a .wea file path
+    """Call gendaymtx to generate a sky/sun matrix
+    Write results to out.  It takes either a .wea file path
     or wea data and metadata (defined in frads.types).
     If both are provided, .wea file path will be used.
 
     Args:
-        out(str or pathlib.Path): outpath file path
-        mf(int): multiplication factor
-        data(Sequence[WeaData], optional): A sequence of WeaData.
-        meta(WeaMetaData, optional): A instance of WeaMetaData object.
-        wpath(Path, optional): .wea file path.
-        direct(bool, optional): Whether to generate sun-only sky matrix.
-        solar(bool, optional): Whether to generate sky matrix if solar spectrum.
-        onesun(bool, optional): Whether to generate single sun matrix (five-phase).
-        rotate(float, optional): rotate the sky counter-clock wise, looking down.
-        binary(bool, optional): Whether to have outputs in single precision floats.
+        data: A list of WeaData objects.
+        meta: A WeaMetaData object.
+        wpath: A .wea file path.
+        onesun: If True, only one sun will be generated.
+        header: If True, a header will be included in the output.
+        average: If True, the output will be averaged.
+        sun_only: If True, only sun will be generated.
+        sky_only: If True, only sky will be generated.
+        sun_file: A sun file path.
+        sun_mods: A sun modifier.
+        daylight_hours_only: If True, only daylight hours will be generated.
+        sky_color: A list of sky color values.
+        ground_color: A list of ground color values.
+        rotate: A rotation value.
+        outform: An output format.
+        solar_radiance: If True, solar radiance will be generated.
+        mfactor: An mfactor value.
+
     Returns:
-        cmd(List[str]): the gendaymtx command called.
+        A bytes object containing the output.
+
     Raises:
         ValueError: An error occurs if neither a .wea path nor wea data is provided.
     """
@@ -366,7 +267,7 @@ def genskymtx(
 
 
 def gen_perez_sky(
-    dt,
+    dt: datetime.datetime,
     latitude: float,
     longitude: float,
     timezone: int,
@@ -380,6 +281,26 @@ def gen_perez_sky(
     grefl: Optional[float] = None,
     rotate: Optional[float] = None,
 ) -> bytes:
+    """Generate a perez sky using gendaylit.
+
+    Args:
+        dt: A datetime object.
+        latitude: A latitude value.
+        longitude: A longitude value.
+        timezone: A timezone value.
+        year: A year value.
+        dirnorm: A direct normal value.
+        diffhor: A diffuse horizontal value.
+        dirhor: A direct horizontal value.
+        dirnorm_illum: A direct normal illuminance value.
+        diffhor_illum: A diffuse horizontal illuminance value.
+        solar: If True, solar will be generated.
+        grefl: A ground reflectance value.
+        rotate: A rotation value.
+
+    Returns:
+        bytes: the sky primitive.
+    """
     sun = pr.gendaylit(
         dt,
         latitude,
@@ -397,9 +318,7 @@ def gen_perez_sky(
     if rotate:
         sun = pr.xform(sun, rotatez=rotate)
     out = [pr.Primitive("skyfunc", "glow", "sglow", [], [1, 1, 1, 0]).bytes]
-    # out.append(b"sglow source sky 0 0 4 0 0 1 180")
     out.append(pr.Primitive("sglow", "source", "sky", [], [0, 0, 1, 180]).bytes)
-    # out.append(b"sglow source ground 0 0 4 0 0 -1 180")
     out.append(pr.Primitive("sglow", "source", "ground", [], [0, 0, -1, 180]).bytes)
     return sun + b" ".join(out)
 
@@ -548,104 +467,3 @@ def solar_minute(data: WeaData) -> int:
     mo_da = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
     jd = mo_da[data.time.month - 1] + data.time.day
     return 24 * 60 * (jd - 1) + int(data.time.hour * 60.0 + data.time.minute + 0.5)
-
-
-# def filter_data_by_direct_sun(
-#     data: Sequence[WeaData],
-#     meta: WeaMetaData,
-#     window_normal: Optional[Sequence[np.ndarray]] = None,
-# ) -> List[WeaData]:
-#     """
-#     Remove wea data entries with zero solar luminance according to
-#     Perez All-Weather sky model. If window normal supplied,
-#     eliminate entries not seen by window. Window field of view
-#     is 176 deg with 2 deg tolerance on each side.
-#
-#     Args:
-#         data: Sequence[WeaData],
-#         meta: WeaMetaData,
-#         window_normal: Optional[Sequence[np.ndarray]] = None,
-#     Returns:
-#         data(List[WeaData]):
-#     """
-#     wea_input = meta.wea_header() + "\n".join(map(str, data))
-#     out = pr.gendaymtx(wea_input.encode(), sun_file="-", daylight_hours_only=True)
-#     prims = pr.parse_primitive(out.decode())
-#     light_prims = [prim for prim in prims if prim.ptype == "light"]
-#     keep_minutes = []
-#     if window_normal is not None:
-#         source_prims = [prim for prim in prims if prim.ptype == "source"]
-#         for lpr, spr in zip(light_prims, source_prims):
-#             if lpr.fargs[0] > 0:
-#                 sdir = np.array((*spr.fargs[:3]))
-#                 for normal in window_normal:
-#                     if normal * sdir < -0.035:  # 2deg tolerance
-#                         keep_minutes.append(int(spr.modifier.lstrip("solar")))
-#                         break
-#     else:
-#         for lpr in light_prims:
-#             if lpr.fargs[0] > 0:
-#                 keep_minutes.append(int(lpr.identifier.lstrip("solar")))
-#     # inminutes = [solar_minute(d) for d in data]
-#     inminutes = []
-#     extra_day = 0
-#     for d in data:
-#         inm = solar_minute(d)
-#         if d.time.month == 2 and d.time.day == 29:
-#             extra_day = 1440
-#         inm += extra_day
-#         inminutes.append(inm)
-#     new_dataline = [data for data, minu in zip(data, inminutes) if minu in keep_minutes]
-#     return new_dataline
-
-
-# def filter_wea( wea_data: Sequence[WeaData],
-#     meta_data: WeaMetaData,
-#     start_hour: Optional[float] = None,
-#     end_hour: Optional[float] = None,
-#     daylight_hours_only: bool = False,
-#     remove_zero: bool = False,
-#     window_normals: Optional[List[geom.Vector]] = None,
-# ) -> Tuple[Sequence[WeaData], List[Any]]:
-#     """
-#     Obtain and prepare weather file data.
-#
-#     Args:
-#         wea_data(List[WeaData]): A list of WeaData.
-#         meta_data(WeaMetaData): A instance of WeaMetaData object.
-#         start_hour(float, optional): Filter out wea data before this hour.
-#         end_hour(float, optional): Filter out wea data after this hour.
-#         daylight_hours_only(bool, optional): Filter out wea data below horizon.
-#         remove_zero(bool, optional): Filter out wea data with zero DNI.
-#         window_normals(List[geom.Vector], optional): Filter out wea data with direct
-#             sun not seen by these window normals.
-#     Returns:
-#         wea_data(List[WeaData]): Filterd list of wea data
-#         datetime_stamps(list): Remaining datetime stamps
-#     """
-#     logger.info("Filtering wea data, starting with %d rows", len(wea_data))
-#     if (start_hour is not None) and (end_hour is not None):
-#         wea_data = start_end_hour(wea_data, start_hour, end_hour)
-#         logger.info(
-#             "Filtering out hours outside of %f and %f: %d rows remaining",
-#             start_hour,
-#             end_hour,
-#             len(wea_data),
-#         )
-#     if daylight_hours_only:
-#         wea_data = check_sun_above_horizon(wea_data, meta_data)
-#         logger.info("Filtering by daylight hours: %d rows remaining", len(wea_data))
-#     if remove_zero:
-#         wea_data = filter_data_with_zero_dni(wea_data)
-#     if window_normals is not None:
-#         wea_data = filter_data_by_direct_sun(
-#             wea_data, meta_data, window_normal=window_normals
-#         )
-#         logger.info(
-#             "Filtering zero DNI hours and suns not seen by window: %d rows remaining",
-#             len(wea_data),
-#         )
-#     datetime_stamps = [row.dt_str() for row in wea_data]
-#     if len(wea_data) == 0:
-#         logger.warning("Empty wea file")
-#     return wea_data, datetime_stamps

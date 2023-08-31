@@ -9,7 +9,7 @@ from pathlib import Path
 from random import choice
 import string
 import subprocess as sp
-from typing import Any, Dict, Optional, List, Set, Union
+from typing import Any, Dict, Optional, List, Union
 
 from frads import geom
 import numpy as np
@@ -23,12 +23,11 @@ def parse_rad_header(header_str: str) -> tuple:
     """Parse a Radiance matrix file header.
 
     Args:
-        header_str(str): header as string
+        header_str: header as string
     Returns:
         A tuple contain nrow, ncol, ncomp, datatype
     Raises:
-        ValueError if any of NROWs NCOLS NCOMP FORMAT is not found.
-        (This is problematic as it can happen)
+        ValueError: if any of NROWS NCOLS NCOMP FORMAT is not found.
     """
     compiled = re.compile(
         r" NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ", flags=re.X
@@ -59,7 +58,9 @@ def polygon_primitive(
 
 
 def parse_polygon(primitive: Primitive) -> geom.Polygon:
-    """Parse a primitive into a polygon.
+    """
+    Parse a primitive into a polygon.
+
     Args:
         primitive: a dictionary object containing a primitive
     Returns:
@@ -73,7 +74,7 @@ def parse_polygon(primitive: Primitive) -> geom.Polygon:
     return geom.Polygon(vertices)
 
 
-def array_hdr(array: np.ndarray, xres: int, yres: int, dtype="d") -> bytes:
+def array_hdr(array: np.ndarray, xres: int, yres: int, dtype: str = "d") -> bytes:
     """
     Call pvalue to generate a HDR image from a numpy array.
     Args:
@@ -87,7 +88,9 @@ def array_hdr(array: np.ndarray, xres: int, yres: int, dtype="d") -> bytes:
     return pvaluer(array.tobytes(), inform=dtype, header=False, xres=xres, yres=yres)
 
 
-def write_hdr(fname, array, xres, yres, dtype="d") -> None:
+def write_hdr(
+    fname: str, array: np.ndarray, xres: int, yres: int, dtype: str = "d"
+) -> None:
     """
     Write a array into a HDR image.
     Args:
@@ -103,7 +106,9 @@ def write_hdr(fname, array, xres, yres, dtype="d") -> None:
         f.write(array_hdr(array, xres, yres, dtype=dtype))
 
 
-def write_hdrs(array, xres, yres, dtype="d", outdir=".") -> None:
+def write_hdrs(
+    array: np.ndarray, xres: int, yres: int, dtype: str = "d", outdir: str = "."
+) -> None:
     """
     Write a series of HDR images to a file.
     Args:
@@ -167,13 +172,15 @@ def primitive_normal(primitive_paths: List[str]) -> List[np.ndarray]:
 def neutral_plastic_prim(
     mod: str, ident: str, refl: float, spec: float, rough: float
 ) -> Primitive:
-    """Generate a neutral color plastic material.
+    """
+    Generate a neutral color plastic material.
+
     Args:
-        mod(str): modifier to the primitive
-        ident(str): identifier to the primitive
-        refl (float): measured reflectance (0.0 - 1.0)
-        specu (float): material specularity (0.0 - 1.0)
-        rough (float): material roughness (0.0 - 1.0)
+        mod: modifier to the primitive
+        ident: identifier to the primitive
+        refl: measured reflectance (0.0 - 1.0)
+        spec: material specularity (0.0 - 1.0)
+        rough: material roughness (0.0 - 1.0)
 
     Returns:
         A material primtive
@@ -187,13 +194,15 @@ def neutral_plastic_prim(
 def neutral_trans_prim(
     mod: str, ident: str, trans: float, refl: float, spec: float, rough: float
 ) -> Primitive:
-    """Generate a neutral color plastic material.
+    """
+    Generate a neutral color plastic material.
+
     Args:
-        mod(str): modifier to the primitive
-        ident(str): identifier to the primitive
-        refl (float): measured reflectance (0.0 - 1.0)
-        specu (float): material specularity (0.0 - 1.0)
-        rough (float): material roughness (0.0 - 1.0)
+        mod: modifier to the primitive
+        ident: identifier to the primitive
+        refl: measured reflectance (0.0 - 1.0)
+        spec: material specularity (0.0 - 1.0)
+        rough: material roughness (0.0 - 1.0)
 
     Returns:
         A material primtive
@@ -207,15 +216,24 @@ def neutral_trans_prim(
     return Primitive(mod, "trans", ident, [], real_args)
 
 
-def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough) -> Primitive:
+def color_plastic_prim(
+    mod: str,
+    ident: str,
+    refl: float,
+    red: int,
+    green: int,
+    blue: int,
+    specu: float,
+    rough: float,
+) -> Primitive:
     """Generate a colored plastic material.
     Args:
-        mod(str): modifier to the primitive
-        ident(str): identifier to the primitive
-        refl (float): measured reflectance (0.0 - 1.0)
-        red; green; blue (int): rgb values (0 - 255)
-        specu (float): material specularity (0.0 - 1.0)
-        rough (float): material roughness (0.0 - 1.0)
+        mod: modifier to the primitive
+        ident: identifier to the primitive
+        refl : measured reflectance (0.0 - 1.0)
+        red: green; blue (int): rgb values (0 - 255)
+        specu: material specularity (0.0 - 1.0)
+        rough: material roughness (0.0 - 1.0)
 
     Returns:
         A material primtive
@@ -233,13 +251,6 @@ def color_plastic_prim(mod, ident, refl, red, green, blue, specu, rough) -> Prim
     return Primitive(mod, "plastic", ident, [], real_args)
 
 
-# Generate a Manikin polygon from a file
-# Move the polygon to the correct place
-# Rotate the polygon
-
-# Generate the rays from the polygons
-
-
 def add_manikin(
     manikin_file: str,
     manikin_name: str,
@@ -249,9 +260,10 @@ def add_manikin(
 ) -> None:
     """Add a manikin to the scene.i
     Args:
-        manikin: manikin primitives as a .rad file
+        manikin_file: path to the manikin file
+        manikin_name: name of the manikin
         zone: zone as a dictionary, must have 'model' key, we assume all scene
-        data is inside the data key, and not files.
+            data is inside the data key, and not files.
         position: position of the manikin (x, y), where x and y are 0-1
         rotation: rotation of the manikin in degree (0-360)
     Returns:
@@ -296,15 +308,17 @@ def add_manikin(
 
 
 def glass_prim(
-    mod, ident, tr: float, tg: float, tb: float, refrac: float = 1.52
+    mod: str, ident: str, tr: float, tg: float, tb: float, refrac: float = 1.52
 ) -> Primitive:
     """Generate a glass material.
 
     Args:
-        mod (str): modifier to the primitive
-        ident (str): identifier to the primtive
-        tr, tg, tb (float): transmmisivity in each channel (0.0 - 1.0)
-        refrac (float): refraction index (default=1.52)
+        mod: modifier to the primitive
+        ident: identifier to the primtive
+        tr: Transmissivity in red channel (0.0 - 1.0)
+        tg: Transmissivity in green channel (0.0 - 1.0)
+        tb: Transmissivity in blue channel (0.0 - 1.0)
+        refrac: refraction index (default=1.52)
     Returns:
         material primtive (dict)
 
@@ -317,10 +331,10 @@ def glass_prim(
 
 
 def bsdf_prim(
-    mod,
-    ident,
-    xmlpath,
-    upvec,
+    mod: str,
+    ident: str,
+    xmlpath: str,
+    upvec: List[float],
     pe: bool = False,
     thickness: float = 0.0,
     xform=None,

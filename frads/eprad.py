@@ -5,7 +5,7 @@ Class and functions for accessing EnergyPlus Python API
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional, Callable, Union
 
 from frads import sky
 from frads.window import GlazingSystem
@@ -34,10 +34,11 @@ class EnergyPlusModel:
         >>> model = EnergyPlusModel(Path("model.idf"))
     """
 
-    def __init__(self, fpath: Path):
+    def __init__(self, fpath: Union[str, Path]):
         """Load and parse input file into a JSON object.
         If the input file is in .idf format, use command-line
         energyplus program to convert it to epJSON format
+
         Args:
             fpath: input file path
         """
