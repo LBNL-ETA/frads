@@ -17,7 +17,7 @@ dependencies = [
     "pywincalc>=3.1.0",
     "pyenergyplus_lbnl",
 ]
-license = "BSD-3-Clause-LBNL"
+license = {"file"= "license.txt"}
 requires-python = ">= 3.8"
 
 [project.scripts]
