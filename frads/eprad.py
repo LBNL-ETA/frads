@@ -106,10 +106,10 @@ class EnergyPlusModel:
         return floors
 
     @property
-    def lighting_zones(self):
+    def lights(self):
         """
         Example:
-            >>> model.lighting_zones
+            >>> model.lights
         """
         if "Lights" in self.epjs:
             return list(self.epjs["Lights"].keys())
