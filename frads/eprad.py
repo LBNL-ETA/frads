@@ -763,7 +763,6 @@ class EnergyPlusSetup:
         output_directory: Optional[str] = "./",
         output_prefix: Optional[str] = "eplus",
         output_suffix: Optional[str] = "L",
-        weather_file: Optional[str] = None,
         silent: bool = False,
         annual: bool = False,
         design_day: bool = False,
@@ -787,8 +786,8 @@ class EnergyPlusSetup:
         """
         opt = ["-d", output_directory, "-p", output_prefix, "-s", output_suffix]
 
-        if weather_file is not None:
-            opt.extend(["-w", weather_file])
+        if self.epw is not None:
+            opt.extend(["-w", self.epw])
         elif design_day:
             if "SizingPeriod:DesignDay" in self.epjs:
                 opt.append("-D")
@@ -804,7 +803,7 @@ class EnergyPlusSetup:
             )
 
         if annual:
-            if weather_file is not None:
+            if self.epw is not None:
                 opt.append("-a")
             else:
                 raise ValueError(
