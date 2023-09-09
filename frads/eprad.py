@@ -474,7 +474,7 @@ class EnergyPlusModel:
             reporting_frequency: Reporting frequency of the output variable or meter.
 
         Raises:
-            raise ValueError("output_type must be 'variable' or 'meter'.")
+            ValueError: If output_type is not "variable" or "meter".
 
         Example:
             >>> model.add_output("Zone Mean Air Temperature", "variable")
