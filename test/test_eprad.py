@@ -17,7 +17,7 @@ def test_energyplusmodel():
     assert isinstance(epmodel.zones, list)
     assert isinstance(epmodel.window_walls, list)
     assert isinstance(epmodel.windows, list)
-    assert isinstance(epmodel.lighting_zones, list)
+    assert isinstance(epmodel.lights, list)
     assert isinstance(epmodel.complex_fenestration_states, list)
 
 
