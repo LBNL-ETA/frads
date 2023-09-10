@@ -125,7 +125,7 @@ class EnergyPlusModel:
             return list(self.epjs["Zone"].keys())
         return []
 
-    def _add(self, key: str, obj: dict or str):
+    def _add(self, key: str, obj: Union[dict, str]):
         """Add an object to the epjs dictionary.
 
         Args:
@@ -464,13 +464,13 @@ class EnergyPlusModel:
         self._add("Lights", lights)
 
     def add_output(
-        self, output_name: str, output_type: str, reporting_frequency: str = "Timestep"
+        self, output_type: str, output_name: str, reporting_frequency: str = "Timestep"
     ):
         """Add an output variable or meter to the epjs dictionary.
 
         Args:
-            output_name: Name of the output variable or meter.
             output_type: Type of the output. "variable" or "meter".
+            output_name: Name of the output variable or meter.
             reporting_frequency: Reporting frequency of the output variable or meter.
 
         Raises:
@@ -771,8 +771,7 @@ class EnergyPlusSetup:
         """Run EnergyPlus simulation.
 
         Args:
-            output_directory: Output directory path. (default: None) \
-                If None, use current directory.
+            output_directory: Output directory path. (default: current directory)
             output_prefix: Prefix for output files. (default: eplus)
             output_suffix: Suffix style for output files. (default: L)
                 L: Legacy (e.g., eplustbl.csv)
