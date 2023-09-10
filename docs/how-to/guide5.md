@@ -374,13 +374,13 @@ Before the simulation run, use `add_output`to request output variables and meter
 
 ```python
 epmodel.add_output(
-    output_name="Zone Lights Electricity Rate",
     output_type="variable",
+    output_name="Zone Lights Electricity Rate",
     reporting_frequency="timestep",
 )
 epmodel.add_output(
-    output_name="Electricity:Facility", 
     output_type="meter"
+    output_name="Electricity:Facility", 
 )
 ```
 
