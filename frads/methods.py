@@ -997,7 +997,7 @@ class ThreePhaseMethod(PhaseMethod):
     def calculate_edgps(
         self,
         view: str,
-        shades: Union[List[pr.Primitive], List[str]],
+        shades: Union[List[pr.Primitive], List[str], List[Path]],
         bsdf: Union[np.ndarray, List[np.ndarray]],
         date_time: datetime,
         dni: float,
@@ -1011,7 +1011,8 @@ class ThreePhaseMethod(PhaseMethod):
             shades: list of shades, either primitves or file paths. This is used
                 for high resolution direct sun calculation.
             bsdf: bsdf matrix, either a single matrix or a list of matrices depending
-                on the number of windows This is used to calculate the vertical illuminance.
+                on the number of windows This is used to calculate the vertical
+                illuminance.
             date_time: datetime object
             dni: direct normal irradiance
             dhi: diffuse horizontal irradiance
@@ -1027,16 +1028,17 @@ class ThreePhaseMethod(PhaseMethod):
             self.wea_metadata.latitude,
             self.wea_metadata.longitude,
             self.wea_metadata.timezone,
-            dni,
-            dhi,
+            dirnorm=dni,
+            diffhor=dhi,
         )
-        if isinstance(shades[0], pr.Primitive):
-            for shade in shades:
+        shade_paths = []
+        for shade in shades:
+            if isinstance(shade, pr.Primitive):
                 stdin += shade.bytes
-        elif isinstance(shades[0], (str, Path)):
-            _shades = shades
-        else:
-            _shades = []
+            elif isinstance(shade, (str, Path)):
+                shade_paths.append(str(shade))
+            else:
+                raise ValueError("Shade must be either a primitive or a file path")
         octree = "test.oct"
         with open(octree, "wb") as f:
             f.write(pr.oconv(*shades, stdin=stdin, octree=self.octree))

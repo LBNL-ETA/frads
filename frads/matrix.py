@@ -646,7 +646,7 @@ def sparse_matrix_multiply_rgb_vtds(
     smx: np.ndarray,
     weights: Optional[List[float]] = None,
 ) -> np.ndarray:
-    """ Multiply sparse view, transmission, daylight,
+    """Multiply sparse view, transmission, daylight,
     and sky matrices. (ThreePhaseMethod)
 
     Args:
