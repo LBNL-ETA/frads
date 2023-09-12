@@ -958,7 +958,8 @@ def epmodel_to_radmodel(
     """Convert EnergyPlus model to Radiance model.
 
     Args:
-        epmodel (EnergyPlusModel): EnergyPlus model.
+        ep_model: EnergyPlus model.
+        epw_file: EnergyPlus weather file path. Defaults to None.
 
     Returns:
         dict: Radiance model.

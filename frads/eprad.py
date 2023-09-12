@@ -43,7 +43,7 @@ class EnergyPlusModel(epm.EnergyPlusModel):
     @property
     def floors(self):
         """
-        Example:
+        Examples:
             >>> model.floors
         """
         floors = []
@@ -93,7 +93,7 @@ class EnergyPlusModel(epm.EnergyPlusModel):
             ValueError: If solar and photopic results are not computed.
             ValueError: If more than 6 layers in glazing system.
 
-        Example:
+        Examples:
             >>> model = load_energyplus_model(Path("model.idf"))
             >>> model.add_glazing_system(glazing_system1)
         """
