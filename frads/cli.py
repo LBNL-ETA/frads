@@ -18,8 +18,8 @@ from pyradiance import model as rmodel
 import pywincalc as pwc
 
 from frads import ncp
-from frads.eprad import EPModel
-from frads.epjson2rad import epjson2rad
+from frads.eprad import EnergyPlusModel
+from frads.epjson2rad import epjson_to_rad
 from frads.room import make_room
 from frads.window import PaneRGB, get_glazing_primitive
 from frads.matrix import (
@@ -469,10 +469,10 @@ def epjson2rad_cmd() -> None:
     parser.add_argument("fpath", type=Path)
     parser.add_argument("-run", action="store_true", default=False)
     args = parser.parse_args()
-    epmodel = EPModel(args.fpath)
+    epmodel = EnergyPlusModel(args.fpath)
     if "FenestrationSurface:Detailed" not in epmodel.epjs:
         raise ValueError("No windows found in this model")
-    zones = epjson2rad.epjson2rad(epmodel.epjs)
+    zones = epjson_to_rad(epmodel)
     for zone in zones:
         write_ep_rad_model(f"{zone}.rad", zones[zone])
 
