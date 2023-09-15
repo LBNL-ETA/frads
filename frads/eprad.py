@@ -106,10 +106,10 @@ class EnergyPlusModel:
         return floors
 
     @property
-    def lighting_zones(self):
+    def lights(self):
         """
         Example:
-            >>> model.lighting_zones
+            >>> model.lights
         """
         if "Lights" in self.epjs:
             return list(self.epjs["Lights"].keys())
@@ -125,7 +125,7 @@ class EnergyPlusModel:
             return list(self.epjs["Zone"].keys())
         return []
 
-    def _add(self, key: str, obj: dict or str):
+    def _add(self, key: str, obj: Union[dict, str]):
         """Add an object to the epjs dictionary.
 
         Args:
@@ -464,17 +464,17 @@ class EnergyPlusModel:
         self._add("Lights", lights)
 
     def add_output(
-        self, output_name: str, output_type: str, reporting_frequency: str = "Timestep"
+        self, output_type: str, output_name: str, reporting_frequency: str = "Timestep"
     ):
         """Add an output variable or meter to the epjs dictionary.
 
         Args:
-            output_name: Name of the output variable or meter.
             output_type: Type of the output. "variable" or "meter".
+            output_name: Name of the output variable or meter.
             reporting_frequency: Reporting frequency of the output variable or meter.
 
         Raises:
-            ValueError: output_type must be variable or meter."
+            ValueError: If output_type is not "variable" or "meter".
 
         Example:
             >>> model.add_output("Zone Mean Air Temperature", "variable")
@@ -763,7 +763,6 @@ class EnergyPlusSetup:
         output_directory: Optional[str] = "./",
         output_prefix: Optional[str] = "eplus",
         output_suffix: Optional[str] = "L",
-        weather_file: Optional[str] = None,
         silent: bool = False,
         annual: bool = False,
         design_day: bool = False,
@@ -771,8 +770,7 @@ class EnergyPlusSetup:
         """Run EnergyPlus simulation.
 
         Args:
-            output_directory: Output directory path. (default: None) \
-                If None, use current directory.
+            output_directory: Output directory path. (default: current directory)
             output_prefix: Prefix for output files. (default: eplus)
             output_suffix: Suffix style for output files. (default: L)
                 L: Legacy (e.g., eplustbl.csv)
@@ -787,8 +785,8 @@ class EnergyPlusSetup:
         """
         opt = ["-d", output_directory, "-p", output_prefix, "-s", output_suffix]
 
-        if weather_file is not None:
-            opt.extend(["-w", weather_file])
+        if self.epw is not None:
+            opt.extend(["-w", self.epw])
         elif design_day:
             if "SizingPeriod:DesignDay" in self.epjs:
                 opt.append("-D")
@@ -804,7 +802,7 @@ class EnergyPlusSetup:
             )
 
         if annual:
-            if weather_file is not None:
+            if self.epw is not None:
                 opt.append("-a")
             else:
                 raise ValueError(

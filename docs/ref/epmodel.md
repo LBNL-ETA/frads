@@ -1,3 +1,3 @@
-::: frads.EPModel
+::: frads.EnergyPlusModel
 
-::: frads.epjson2rad.epjson2rad
+::: frads.epjson2rad.epjson_to_rad
