@@ -54,7 +54,6 @@ class EnergyPlusModel(epm.EnergyPlusModel):
                 floors.append(k)
         return floors
 
-
     def _add(self, key: str, obj: dict):
         if getattr(self, key) is None:
             setattr(self, key, obj)
@@ -93,7 +92,7 @@ class EnergyPlusModel(epm.EnergyPlusModel):
             ValueError: If solar and photopic results are not computed.
             ValueError: If more than 6 layers in glazing system.
 
-        Examples:
+        Example:
             >>> model = load_energyplus_model(Path("model.idf"))
             >>> model.add_glazing_system(glazing_system1)
         """
