@@ -159,7 +159,7 @@ def fenestration_to_polygon(fen: epm.FenestrationSurfaceDetailed) -> geom.Polygo
             )
         ),
     ]
-    if fen.number_of_vertices == 4:
+    if fen.number_of_vertices.root == 4:
         vertices.append(
             np.array(
                 (
