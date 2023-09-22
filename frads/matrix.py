@@ -733,7 +733,7 @@ def rfluxmtx_markup(
     surface_normal = np.zeros(3)
     for primitive in primitives:
         polygon = parse_polygon(primitive)
-        surface_normal += polygon.normal * polygon.area
+        surface_normal += polygon.area
     sampling_direction = surface_normal * (1 / len(primitives))
     sampling_direction = sampling_direction / np.linalg.norm(sampling_direction)
     if np.array_equal(sampling_direction, np.array([0, 0, 1])):
