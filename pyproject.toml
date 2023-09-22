@@ -11,7 +11,7 @@ authors = [
 ]
 description = "Framework for lighting and energy simulations"
 dependencies = [
-    "epmodel>=0.2.2",
+    "epmodel>=0.2.4",
     "numpy>=1.24.4",
     "pyradiance >= 0.1.2",
     "pywincalc>=3.1.0",
