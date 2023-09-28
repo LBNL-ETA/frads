@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from frads.eprad import EnergyPlusModel, EnergyPlusSetup
+from frads.eplus import EnergyPlusModel, EnergyPlusSetup, load_energyplus_model
 from frads.window import GlazingSystem
 
 test_dir = Path(__file__).resolve().parent
@@ -10,35 +10,21 @@ idf_path = resource_dir / "RefBldgMediumOfficeNew2004_southzone.idf"
 glazing_path = resource_dir / "igsdb_product_7406.json"
 
 
-def test_energyplusmodel():
-    epmodel = EnergyPlusModel(idf_path)
-    assert isinstance(epmodel.epjs, dict)
-    assert isinstance(epmodel.floors, list)
-    assert isinstance(epmodel.zones, list)
-    assert isinstance(epmodel.window_walls, list)
-    assert isinstance(epmodel.windows, list)
-    assert isinstance(epmodel.lights, list)
-    assert isinstance(epmodel.complex_fenestration_states, list)
-
 
 def test_add_glazingsystem():
-    epmodel = EnergyPlusModel(idf_path)
+    epmodel = load_energyplus_model(idf_path)
     gs = GlazingSystem()
     gs.add_glazing_layer(glazing_path)
     epmodel.add_glazing_system(gs)
-    assert isinstance(epmodel.complex_fenestration_states, list)
-    assert epmodel.complex_fenestration_states != []
-    assert isinstance(epmodel.epjs["Construction:ComplexFenestrationState"], dict)
-    assert isinstance(epmodel.epjs["Matrix:TwoDimension"], dict)
-    assert isinstance(epmodel.epjs["WindowMaterial:Glazing"], dict)
-    assert isinstance(epmodel.epjs["WindowMaterial:Gas"], dict)
-    assert isinstance(epmodel.epjs["WindowMaterial:Gap"], dict)
-    assert isinstance(epmodel.epjs["WindowMaterial:ComplexShade"], dict)
-    assert isinstance(epmodel.epjs["WindowThermalModel:Params"], dict)
+    assert epmodel.construction_complex_fenestration_state != {}
+    assert isinstance(epmodel.construction_complex_fenestration_state, dict)
+    assert isinstance(epmodel.matrix_two_dimension, dict)
+    assert isinstance(epmodel.window_material_glazing, dict)
+    assert isinstance(epmodel.window_thermal_model_params, dict)
 
 
 def test_add_lighting():
-    epmodel = EnergyPlusModel(idf_path)
+    epmodel = load_energyplus_model(idf_path)
     try:
         epmodel.add_lighting("z1")  # zone does not exist
         assert False
@@ -47,7 +33,7 @@ def test_add_lighting():
 
 
 def test_add_lighting1():
-    epmodel = EnergyPlusModel(idf_path)
+    epmodel = load_energyplus_model(idf_path)
     try:
         epmodel.add_lighting("Perimeter_bot_ZN_1")  # zone already has lighting
         assert False
@@ -56,27 +42,27 @@ def test_add_lighting1():
 
 
 def test_add_lighting2():
-    epmodel = EnergyPlusModel(idf_path)
+    epmodel = load_energyplus_model(idf_path)
     epmodel.add_lighting("Perimeter_bot_ZN_1", replace=True)
 
-    assert isinstance(epmodel.epjs["Lights"], dict)
-    assert isinstance(epmodel.epjs["Schedule:Constant"], dict)
-    assert isinstance(epmodel.epjs["ScheduleTypeLimits"], dict)
+    assert isinstance(epmodel.lights, dict)
+    assert isinstance(epmodel.schedule_constant, dict)
+    assert isinstance(epmodel.schedule_type_limits, dict)
 
 
 def test_output_variable():
     """Test adding output variable to an EnergyPlusModel."""
-    epmodel = EnergyPlusModel(idf_path)
+    epmodel = load_energyplus_model(idf_path)
     epmodel.add_output(output_name="Zone Mean Air Temperature", output_type="variable")
 
     assert "Zone Mean Air Temperature" in [
-        i["variable_name"] for i in epmodel.epjs["Output:Variable"].values()
+        i.variable_name for i in epmodel.output_variable.values()
     ]
 
 
 def test_output_meter():
     """Test adding output meter to an EnergyPlusModel."""
-    epmodel = EnergyPlusModel(idf_path)
+    epmodel = load_energyplus_model(idf_path)
     epmodel.add_output(
         output_name="CO2:Facility",
         output_type="meter",
@@ -84,16 +70,16 @@ def test_output_meter():
     )
 
     assert "CO2:Facility" in [
-        i["key_name"] for i in epmodel.epjs["Output:Meter"].values()
+        i.key_name for i in epmodel.output_meter.values()
     ]
     assert "Hourly" in [
-        i["reporting_frequency"] for i in epmodel.epjs["Output:Meter"].values()
+        i.reporting_frequency.value for i in epmodel.output_meter.values()
     ]
 
 
 def test_energyplussetup():
     """Test running EnergyPlusSetup."""
-    epmodel = EnergyPlusModel(idf_path)  # file with Design Day
+    epmodel = load_energyplus_model(idf_path)  # file with Design Day
 
     ep = EnergyPlusSetup(epmodel)
     ep.run(design_day=True)

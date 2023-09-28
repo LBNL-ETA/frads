@@ -1,14 +1,14 @@
 """
 """
 # from frads import epjson_to_rad
-from frads import epjson_to_rad
-from frads.eprad import EnergyPlusModel
+from frads import epmodel_to_radmodel
+from frads.eplus import EnergyPlusModel
 
 
 def test_cfscase(resources_dir):
     epjson1 = resources_dir / "CmplxGlz_SingleZone_DoubleClearAir.epJSON"
     epmodel = EnergyPlusModel(epjson1)
-    rad_model: dict = epjson_to_rad(epmodel, epw="")
+    rad_model = epmodel_to_radmodel(epmodel)
     assert (
         rad_model["Room 102"]["model"]["sensors"]["Room 102_Room102_Floor"] is not None
     )
@@ -17,7 +17,7 @@ def test_cfscase(resources_dir):
 def test_refcase(resources_dir):
     epjson2 = resources_dir / "RefBldgMediumOfficeNew2004_Chicago.epJSON"
     epmodel = EnergyPlusModel(epjson2)
-    rad_model: dict = epjson_to_rad(epmodel, epw="")
+    rad_model = epmodel_to_radmodel(epmodel)
     assert (
         rad_model["Perimeter_bot_ZN_1"]["model"]["sensors"][
             "Perimeter_bot_ZN_1_Perimeter_bot_ZN_1_Floor"
