@@ -4,17 +4,20 @@ Class and functions for accessing EnergyPlus Python API
 
 from datetime import datetime, timedelta
 import json
+import os
 from pathlib import Path
 from typing import List, Optional, Callable, Union
+from tempfile import TemporaryDirectory
 
-import epmodel as epm
+from epmodel import epmodel as epm
+import epmodel
 from frads import sky
 from frads.window import GlazingSystem
 import copy
 from pyenergyplus.api import EnergyPlusAPI
 
 
-class EnergyPlusModel(epm.EnergyPlusModel):
+class EnergyPlusModel(epmodel.EnergyPlusModel):
     """EnergyPlus Model object
 
     Attributes:
@@ -54,34 +57,6 @@ class EnergyPlusModel(epm.EnergyPlusModel):
                 floors.append(k)
         return floors
 
-    def _add(self, key: str, obj: dict):
-        if getattr(self, key) is None:
-            setattr(self, key, obj)
-        else:
-            setattr(self, key, {**getattr(self, key), **obj})
-
-    def get_matrix_two_dimension(
-        self, matrix: Union[List[List[float]], List[float]]
-    ) -> epm.MatrixTwoDimension:
-        """Get MatrixTwoDimension object from matrix.
-
-        Args:
-            matrix: 1D or 2D matrix
-        """
-        if isinstance(matrix[0], list):
-            ncolumns = len(matrix[0])
-            nrows = len(matrix)
-            values = [epm.Value(value=val) for row in matrix for val in row]
-        elif isinstance(matrix[0], float):
-            ncolumns = len(matrix)
-            nrows = 1
-            values = [epm.Value(value=val) for val in matrix]
-        else:
-            raise ValueError("Invalid matrix type.")
-        return epm.MatrixTwoDimension(
-            number_of_columns=ncolumns, number_of_rows=nrows, values=values
-        )
-
     def add_glazing_system(self, glzsys: GlazingSystem):
         """Add glazing system to EnergyPlusModel's epjs dictionary.
 
@@ -90,7 +65,6 @@ class EnergyPlusModel(epm.EnergyPlusModel):
 
         Raises:
             ValueError: If solar and photopic results are not computed.
-            ValueError: If more than 6 layers in glazing system.
 
         Example:
             >>> model = load_energyplus_model(Path("model.idf"))
@@ -101,160 +75,39 @@ class EnergyPlusModel(epm.EnergyPlusModel):
         if glzsys.solar_results is None or glzsys.photopic_results is None:
             raise ValueError("Solar and photopic results not computed.")
 
-        if len(glzsys.layers) > 6:
-            raise ValueError("More than 6 layers in glazing system.")
-
-        basis_matrix_name = f"{glzsys.name}_Basis"
-        rho_sol_back_name = f"{glzsys.name}_RbSol"
-        tau_sol_back_name = f"{glzsys.name}_TfSol"
-        tau_vis_back_name = f"{glzsys.name}_Tbvis"
-        tau_vis_front_name = f"{glzsys.name}_Tfvis"
-        alpha_back_outside_layer_name = f"{glzsys.name}_layer_1_bAbs"
-        alpha_front_outside_layer_name = f"{glzsys.name}_layer_1_fAbs"
-
-        # Initialize Matrix:TwoDimension dictionary with system and outer layer matrices
-        mtx2d = {
-            rho_sol_back_name: self.get_matrix_two_dimension(
-                glzsys.solar_results.system_results.back.reflectance.matrix
-            ),
-            tau_sol_back_name: self.get_matrix_two_dimension(
-                glzsys.solar_results.system_results.front.transmittance.matrix
-            ),
-            tau_vis_back_name: self.get_matrix_two_dimension(
-                glzsys.photopic_results.system_results.back.transmittance.matrix
-            ),
-            tau_vis_front_name: self.get_matrix_two_dimension(
-                glzsys.photopic_results.system_results.front.transmittance.matrix
-            ),
-            alpha_back_outside_layer_name: self.get_matrix_two_dimension(
-                glzsys.solar_results.layer_results[0].back.absorptance.angular_total
-            ),
-            alpha_front_outside_layer_name: self.get_matrix_two_dimension(
-                glzsys.solar_results.layer_results[0].front.absorptance.angular_total
-            ),
-        }
-        cfs_layer_name_paris = []
-        # Define layer absorptance names and matrices for the rest of the layers.
-        for i in range(len(glzsys.layers) - 1):
-            _layer_name = f"{glzsys.name}_layer_{i+2}"
-            cfs_layer_name_paris.append(
-                [
-                    f"layer_{i+2}_directional_back_absoptance_matrix_name",
-                    f"{_layer_name}_bAbs",
-                ]
+        name = glzsys.name
+        gap_inputs = []
+        for i, gap in enumerate(glzsys.gaps):
+            gap_inputs.append(
+                epm.ConsComplexFenestrationStateGapInput(
+                    gas=getattr(epm.GasType, gap[0][0]),
+                    thickness=gap[-1]
+                )
             )
-            mtx2d[f"{_layer_name}_bAbs"] = self.get_matrix_two_dimension(
-                glzsys.solar_results.layer_results[i + 1].back.absorptance.angular_total
-            )
-            cfs_layer_name_paris.append(
-                [
-                    f"layer_{i+2}_directional_front_absoptance_matrix_name",
-                    f"{_layer_name}_fAbs",
-                ]
-            )
-            mtx2d[f"{_layer_name}_fAbs"] = self.get_matrix_two_dimension(
-                glzsys.solar_results.layer_results[
-                    i + 1
-                ].front.absorptance.angular_total
-            )
-            cfs_layer_name_paris.append(
-                [
-                    f"layer_{i+2}_name",
-                    glzsys.layers[i + 1].product_name,
-                ]
-            )
-
-        # Define gap and gas layer
-        window_material_gap = {}
-        window_material_gas = {}
-        for i, gap in enumerate(glzsys.gaps, 1):
-            _gap_name = f"{glzsys.name}_gap_{i}"
-            cfs_layer_name_paris.append(
-                [
-                    f"gap_{i}_name",
-                    f"{_gap_name}_layer",
-                ]
-            )
-            _gas_name = f"gas_{i}"
-            window_material_gap[f"{_gap_name}_layer"] = epm.WindowMaterialGap(
-                gas_or_gas_mixture_=_gas_name,
-                thickness=gap[-1],
-            )
-            window_material_gas[_gas_name] = epm.WindowMaterialGas(
-                gas_type=gap[0][0].name.capitalize(),
-                thickness=gap[-1],
-            )
-
-        window_material_glazing = {}
-        window_material_complex_shade = {}
-        for layer in glzsys.layers:
-            if layer.product_type == "glazing":
-                window_material_glazing[layer.product_name] = epm.WindowMaterialGlazing(
-                    back_side_infrared_hemispherical_emissivity=layer.emissivity_back,
-                    conductivity=layer.conductivity,
-                    front_side_infrared_hemispherical_emissivity=layer.emissivity_front,
-                    infrared_transmittance_at_normal_incidence=layer.ir_transmittance,
-                    optical_data_type=epm.OpticalDataType.bsdf,
-                    poisson_s_ratio=0.22,
+        layer_inputs: List[epmodel.ConstructionComplexFenestrationStateLayerInput] = []
+        for i, layer in enumerate(glzsys.layers):
+            layer_inputs.append(
+                epmodel.ConstructionComplexFenestrationStateLayerInput(
+                    name=f"{glzsys.name}_layer_{i}",
+                    product_type=layer.product_type,
                     thickness=layer.thickness,
-                    window_glass_spectral_data_set_name="",
-                )
-            # Assuming complex shade if not glazing
-            else:
-                window_material_complex_shade[
-                    layer.product_name
-                ] = epm.WindowMaterialComplexShade(
-                    back_emissivity=layer.emissivity_back,
-                    top_opening_multiplier=0,
-                    bottom_opening_multiplier=0,
-                    left_side_opening_multiplier=0,
-                    right_side_opening_multiplier=0,
-                    front_opening_multiplier=0.05,
                     conductivity=layer.conductivity,
-                    front_emissivity=layer.emissivity_front,
-                    ir_transmittance=layer.ir_transmittance,
-                    layer_type=epm.LayerType.bsdf,
-                    thickness=layer.thickness,
+                    emissivity_front=layer.emissivity_front,
+                    emissivity_back=layer.emissivity_back,
+                    infrared_transmittance=layer.ir_transmittance,
+                    directional_absorptance_front=glzsys.solar_results.layer_results[i].front.absorptance.angular_total,
+                    directional_absorptance_back=glzsys.solar_results.layer_results[i].back.absorptance.angular_total,
                 )
-
-        cfs = epm.ConstructionComplexFenestrationState(
-            basis_matrix_name=basis_matrix_name,
-            basis_symmetry_type=epm.BasisSymmetryType.none,
-            basis_type=epm.BasisType.lbnlwindow,
-            solar_optical_complex_back_reflectance_matrix_name=rho_sol_back_name,
-            solar_optical_complex_front_transmittance_matrix_name=tau_sol_back_name,
-            visible_optical_complex_back_transmittance_matrix_name=tau_vis_back_name,
-            visible_optical_complex_front_transmittance_matrix_name=tau_vis_front_name,
-            window_thermal_model="ThermParam_1",
-            outside_layer_directional_back_absoptance_matrix_name=alpha_back_outside_layer_name,
-            outside_layer_directional_front_absoptance_matrix_name=alpha_front_outside_layer_name,
-            outside_layer_name=glzsys.layers[0].product_name,
+            )
+        input = epmodel.ConstructionComplexFenestrationStateInput(
+            gaps=gap_inputs,
+            layers=layer_inputs,
+            solar_reflectance_back=glzsys.solar_results.system_results.back.reflectance.matrix,
+            solar_transmittance_back=glzsys.solar_results.system_results.front.transmittance.matrix,
+            visible_transmittance_back=glzsys.photopic_results.system_results.back.transmittance.matrix,
+            visible_transmittance_front=glzsys.photopic_results.system_results.front.transmittance.matrix,
         )
-        for pair in cfs_layer_name_paris:
-            setattr(cfs, pair[0], pair[1])
-
-        self._add("matrix_two_dimension", mtx2d)
-        self._add("window_material_gas", window_material_gas)
-        self._add("window_material_gap", window_material_gap)
-        self._add("window_material_glazing", window_material_glazing)
-        self._add("window_material_complex_shade", window_material_complex_shade)
-        self._add(
-            "window_thermal_model_params",
-            {
-                "ThermParam_1": epm.WindowThermalModelParams(
-                    standard=epm.Standard.iso15099,
-                    thermal_model=epm.ThermalModel.iso15099,
-                    sdscalar=1.0,
-                    deflection_model=epm.DeflectionModel.no_deflection,
-                )
-            },
-        )
-        self._add("construction_complex_fenestration_state", {glzsys.name: cfs})
-
-        # Set the all fenestration surface constructions to the 1st cfs
-        first_cfs = list(self.construction_complex_fenestration_state.keys())[0]
-        for window in self.fenestration_surface_detailed.values():
-            window.construction_name = first_cfs
+        self.add_construction_complex_fenestration_state(name, input)
 
     def add_lighting(self, zone: str, replace: bool = False):
         """Add lighting object to EnergyPlusModel's epjs dictionary.
@@ -290,44 +143,41 @@ class EnergyPlusModel(epm.EnergyPlusModel):
                         )
 
         # Add lighting schedule type limit to epjs dictionary
-        self._add(
+        self.add(
             "schedule_type_limits",
-            {
-                "on_off": epm.ScheduleTypeLimits(
-                    lower_limit_value=0,
-                    upper_limit_value=1,
-                    numeric_type=epm.NumericType.discrete,
-                    unit_type=epm.UnitType.availability,
-                )
-            },
+            "on_off",
+            epm.ScheduleTypeLimits(
+                lower_limit_value=0,
+                upper_limit_value=1,
+                numeric_type=epm.NumericType.discrete,
+                unit_type=epm.UnitType.availability,
+            )
         )
 
         # Add lighting schedule to epjs dictionary
-        self._add(
+        self.add(
             "schedule_constant",
-            {
-                "constant_off": epm.ScheduleConstant(
-                    schedule_type_limits_name="on_off",
-                    hourly_value=0,
-                )
-            },
+            "constant_off",
+            epm.ScheduleConstant(
+                schedule_type_limits_name="on_off",
+                hourly_value=0,
+            )
         )
 
         # Add lighting to epjs dictionary
-        self._add(
+        self.add(
             "lights",
-            {
-                f"Light_{zone}": epm.Lights(
-                    design_level_calculation_method=epm.DesignLevelCalculationMethod.lighting_level,
-                    fraction_radiant=0,
-                    fraction_replaceable=1,
-                    fraction_visible=1,
-                    lighting_level=0,
-                    return_air_fraction=0,
-                    schedule_name="constant_off",
-                    zone_or_zonelist_or_space_or_spacelist_name=zone,
-                )
-            },
+            f"Light_{zone}",
+            epm.Lights(
+                design_level_calculation_method=epm.DesignLevelCalculationMethod.lighting_level,
+                fraction_radiant=0,
+                fraction_replaceable=1,
+                fraction_visible=1,
+                lighting_level=0,
+                return_air_fraction=0,
+                schedule_name="constant_off",
+                zone_or_zonelist_or_space_or_spacelist_name=zone,
+            )
         )
 
     def add_output(
@@ -412,6 +262,15 @@ def ep_datetime_parser(inp: str):
         return datetime(1900, month, day, hr, mi, sc)
 
 
+class EnergyPlusResult:
+    def __init__(self):
+        ...
+
+
+
+
+
+
 class EnergyPlusSetup:
     """EnergyPlus Simulation Setup.
 
@@ -435,8 +294,8 @@ class EnergyPlusSetup:
         self.model = epmodel
         self.api = EnergyPlusAPI()
         self.epw = weather_file
-        # self.epjs = epmodel.epjs
         self.state = self.api.state_manager.new_state()
+        self.result = EnergyPlusResult()
         self.variable_handles = {}
         self.actuator_handles = {}
         self.construction_handles = {}
@@ -550,6 +409,7 @@ class EnergyPlusSetup:
             The value of the variable
 
         Raises:
+            KeyError: If the key is not found
             ValueError: If the variable is not found
 
         Example:
@@ -637,7 +497,7 @@ class EnergyPlusSetup:
         silent: bool = False,
         annual: bool = False,
         design_day: bool = False,
-    ):
+    ) -> EnergyPlusResult:
         """Run EnergyPlus simulation.
 
         Args:
@@ -687,11 +547,34 @@ class EnergyPlusSetup:
                 )
             }
 
+        if self.model.output_control_timestamp is None:
+            self.model.output_control_timestamp = {
+                "OutputControl:Timestamp 1": epm.OutputControlTimestamp(
+                    iso8601_format=epm.EPBoolean.yes,
+                    timestamp_at_beginning_of_interval=epm.EPBoolean.yes,
+                )
+            }
+
+
         with open(f"{output_prefix}.json", "w") as wtr:
             wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
 
         self.api.runtime.set_console_output_status(self.state, not silent)
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
+
+        # TODO: Setup temp directory for EnergyPlus output
+        # with TemporaryDirectory() as temp_dir:
+        #     with open(os.path.join(temp_dir, "input.json"), "w") as wtr:
+        #         wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
+        #     opt.extend(["-d", temp_dir, "input.json"])
+        #     self.api.runtime.set_console_output_status(self.state, not silent)
+        #     self.api.runtime.run_energyplus(self.state, opt)
+        #     # load everything except input.json and sqlite.err
+        #     for ofile in os.listdir(temp_dir):
+        #         if ofile not in ["input.json", "sqlite.err"]:
+        #             with open(os.path.join(temp_dir, ofile)) as f:
+        #                 setattr(self.result, ofile, f.read())
+        # return self.result
 
     def set_callback(self, method_name: str, func: Callable):
         """Set callback function for EnergyPlus runtime API.

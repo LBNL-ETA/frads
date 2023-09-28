@@ -11,21 +11,10 @@ import pyradiance as pr
 import numpy as np
 import epmodel as epm
 from frads import geom, utils
-from frads.eprad import EnergyPlusModel
+from frads.eplus import EnergyPlusModel
 
 
 logger: logging.Logger = logging.getLogger("frads.epjson2rad")
-
-
-# @dataclass
-# class EPlusWindowGas:
-#     """EnergyPlus Window Gas material data container."""
-#
-#     name: str
-#     thickness: float
-#     type: list
-#     percentage: list
-#     # primitive: str = ""
 
 
 @dataclass
@@ -48,25 +37,6 @@ class EPlusWindowMaterial:
     name: str
     visible_transmittance: float
     primitive: pr.Primitive
-
-
-# @dataclass
-# class EPlusWindowMaterialComplexShade:
-#     """EnergyPlus complex window material data container."""
-#
-#     name: str
-#     layer_type: str
-#     thickness: float
-#     conductivity: float
-#     ir_transmittance: float
-#     front_emissivity: float
-#     back_emissivity: float
-#     top_opening_multiplier: float
-#     bottom_opening_multiplier: float
-#     left_side_opening_multiplier: float
-#     right_side_opening_multiplier: float
-#     front_opening_multiplier: float
-#     primitive: str = ""
 
 
 @dataclass
@@ -353,52 +323,6 @@ def parse_material_nomass(name: str, material: dict) -> EPlusOpaqueMaterial:
         visible_reflectance,
         primitive,
     )
-
-
-# def parse_windowmaterial_complexshade(
-#     name: str, material: epm.WindowMaterialComplexShade
-# ) -> EPlusWindowMaterialComplexShade:
-#     """Parse EP WindowMaterial:ComplexShade."""
-#     return EPlusWindowMaterialComplexShade(
-#         name.replace(" ", "_"),
-#         material.layer_type or "",
-#         material.thickness or 0.002,
-#         material.conductivity or 1.0,
-#         material.ir_transmittance or 0.0,
-#         material.front_emissivity or 0.84,
-#         material.back_emissivity or 0.84,
-#         material.top_opening_multiplier or 0.0,
-#         material.bottom_opening_multiplier or 0.0,
-#         material.left_side_opening_multiplier or 0.0,
-#         material.right_side_opening_multiplier or 0.0,
-#         material.front_opening_multiplier or 0.0,
-#     )
-
-
-# def parse_windowmaterial_gap(name: str, material: dict) -> EPlusWindowGas:
-#     """Parse EP WindowMaterial:Gap"""
-#     name = name.replace(" ", "_")
-#     thickness = material["thickness"]
-#     gas = material["gas_or_gas_mixture_"]
-#     return EPlusWindowGas(name, thickness, gas, [1])
-#
-#
-# def parse_windowmaterial_gas(name: str, material: dict) -> EPlusWindowGas:
-#     """Parse EP WindowMaterial:Gas"""
-#     name = name.replace(" ", "_")
-#     ptype = [material["gas_type"]]
-#     thickness = material["thickness"]
-#     percentage = [1]
-#     return EPlusWindowGas(name, thickness, ptype, percentage)
-
-
-# def parse_windowmaterial_gasmixture(name: str, material: dict) -> EPlusWindowGas:
-#     """Parse EP WindowMaterial:GasMixture"""
-#     name = name.replace(" ", "_")
-#     thickness = material["thickness"]
-#     gas = [material["Gas"]]
-#     percentage = [1]
-#     return EPlusWindowGas(name, thickness, gas, percentage)
 
 
 def parse_windowmaterial_simpleglazingsystem(
@@ -954,7 +878,7 @@ def create_settings(ep_model: EnergyPlusModel, epw_file: Optional[str]) -> dict:
 
 def epmodel_to_radmodel(
     ep_model: EnergyPlusModel, epw_file: Optional[str] = None
-) -> Optional[dict]:
+) -> dict:
     """Convert EnergyPlus model to Radiance model.
 
     Args:

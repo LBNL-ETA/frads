@@ -50,9 +50,9 @@ or on a time-step basis.
 
 import logging
 
-from .epjson2rad import epjson_to_rad
+from .ep2rad import epmodel_to_radmodel
 
-from .eprad import EnergyPlusModel, EnergyPlusSetup, ep_datetime_parser
+from .eplus import EnergyPlusModel, EnergyPlusSetup, ep_datetime_parser
 
 from .matrix import (
     load_matrix,
@@ -112,8 +112,7 @@ __all__ = [
     "WorkflowConfig",
     "XENON",
     "ep_datetime_parser",
-    "epjson2rad",
-    "epjson_to_rad",
+    "epmodel_to_radmodel",
     "gen_grid",
     "gen_perez_sky",
     "genskymtx",
