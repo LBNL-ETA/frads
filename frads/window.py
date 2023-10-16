@@ -29,14 +29,12 @@ class PaneRGB(NamedTuple):
 
 def create_gap(*gases_ratios: Tuple[pwc.PredefinedGasType, float], thickness):
     """Create a gap with the gas and thickness."""
-    if len(gases_ratios) > 1:
-        if sum([ratio for _, ratio in gases_ratios]) != 1:
-            raise ValueError("The sum of the gas ratios must be 1.")
-        components = [
-            pwc.PredefinedGasMixtureComponent(gas, ratio) for gas, ratio in gases_ratios
-        ]
-        return pwc.Gap(components, thickness)
-    return pwc.Gap(gases_ratios[0][0], thickness)
+    if sum([ratio for _, ratio in gases_ratios]) != 1:
+        raise ValueError("The sum of the gas ratios must be 1.")
+
+    components = pwc.create_gas([[ratio, gas] for gas, ratio in gases_ratios])
+
+    return pwc.Layers.gap(thickness=thickness, gas=components)
 
 
 # class Layer:
