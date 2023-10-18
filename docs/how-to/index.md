@@ -15,5 +15,8 @@ provided in this project.
 
 6. [How to setup a simple rtrace workflow?](guide6.md)
 
+7. [How to setup a workflow configuration?](guide7.md)
+
+8. [How to setup a Three-Phase method workflow with a workflow configuration?](guide8.md)
 
 
