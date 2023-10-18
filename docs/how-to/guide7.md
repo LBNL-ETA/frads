@@ -1,10 +1,11 @@
 # How to set up a workflow configuration?
 
-This guide will show you how to set up a workflow configuration using the `WorkflowConfig` class. The workflow configuration can be used to run a Three-Phase method workflow.
+This guide will show you how to set up a workflow configuration using the `WorkflowConfig` class. The workflow configuration can be used to run a two- or three- or five- Phase method workflow.
 
 The workflow configuration has two parts: settings and model. 
-1. `settings` is used to define the simulation settings, such as the number of parallel processes, the sky basis, the window basis, the epw/wea file, the latitude, the longitude, the timezone, the site elevation, the matrices sampling parameters, etc.
-2. `model` is used to define the model, which includes the scene, the windows, the materials, the sensors, and the views.
+
+1. `settings` defines the simulation settings, such as number of parallel processes, sky basis, window basis, epw/wea file, latitude, longitude, timezone, site elevation, matrices sampling parameters, etc.
+2. `model` defines the model, which includes scene, windows, materials, sensors, and views.
 
 ## Ways to set up a configuration file
 
@@ -132,13 +133,13 @@ cfg.model.scene = fr.SceneConfig(
 
 ```python title="windows"
 cfg.model.windows = {"window_1": fr.WindowConfig(
-    files=["window.rad"],
+    files=["window_!.rad"],
     matrix_file="blinds.xml",
     )
 }
 ```
 
-??? example "window.rad"
+??? example "window_1.rad"
     geometry primitive
     ```
     window_mat polygon window_1
@@ -168,7 +169,7 @@ cfg.model.materials = fr.MaterialConfig(files=["materials.mat"])
 cfg.model.sensors = {"sensor_1": fr.SensorConfig(file="sensor.txt")}
 ```
 
-??? example "sensor.txt"
+??? example "sensor_1.txt"
     x_viewpoint y_viewpoint z_viewpoint x_direction y_direction z_direction
     ```
     1 1 1 0 -1 0
@@ -184,7 +185,7 @@ cfg.model.views = {
 }
 ```
 
-??? example "view.vf"
+??? example "view_1.vf"
     view_type view_point view_direction view_up_direction view_horizontal_field_of_view view_vertical_field_of_view view_rotation_angle
     ```
     -vta -vp 1 1 1 -vd 0 -1 0 -vu 0 0 1 -vh 180 -vv 180
@@ -222,8 +223,8 @@ cfg = fr.WorkflowConfig.from_dict(dict)
                 ]
             },
             "windows": {
-                "glass_1": {
-                    "file": "glass.rad",
+                "window_1": {
+                    "file": "window_1.rad",
                     "matrix_file": "blinds.xml"
                 }
             },
@@ -231,7 +232,7 @@ cfg = fr.WorkflowConfig.from_dict(dict)
                 "files": ["materials.mat"]
             },
             "sensors": {
-                "sensor_1": {"file": "grid.txt"}
+                "sensor_1": {"file": "sensor_1.txt"}
             },
             "views": {
                 "view_1": {
