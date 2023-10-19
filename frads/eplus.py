@@ -600,6 +600,14 @@ class EnergyPlusSetup:
         method(self.state, func)
 
     def _request_variable_from_callback(self, func: Callable) -> None:
+        """Request variables from callback function.
+
+        Args:
+            func: Callback function.
+
+        Example:
+            >>> epsetup._request_variable_from_callback(func)
+        """
         source_code = inspect.getsource(func)
         tree = ast.parse(source_code)
         key_value_pairs = []
@@ -607,7 +615,18 @@ class EnergyPlusSetup:
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and hasattr(node.func, 'attr'):
                 if node.func.attr == 'get_variable_value':
-                    key_value = (ast.literal_eval(node.args[0]), ast.literal_eval(node.args[1]))
+                    if len(node.args) == 2:
+                        key_value = {
+                            "name": ast.literal_eval(node.args[0]),
+                            "key": ast.literal_eval(node.args[1]),
+                        }
+                    elif len(node.keywords) == 2:
+                        key_value = {
+                            node.keywords[0].arg: node.keywords[0].value.value,
+                            node.keywords[1].arg: node.keywords[1].value.value,
+                        }
+                    else:
+                        raise ValueError(f"Invalid number of arguments in {func}.")
                     key_value_pairs.append(key_value)
         for key_value in key_value_pairs:
             self.request_variable(key_value[0], key_value[1])
