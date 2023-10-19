@@ -1,11 +1,11 @@
-# How to set up a workflow configuration?
+# How to set up a workflow configuration for Radiance simulation?
 
-This guide will show you how to set up a workflow configuration using the `WorkflowConfig` class. The workflow configuration can be used to run a two- or three- or five- Phase method workflow.
+The workflow configuration can be used to run a two- or three- or five-Phase method simulation in Radiance. This guide will show you how to set up a workflow configuration using the `WorkflowConfig` class. 
 
 The workflow configuration has two parts: settings and model. 
 
 1. `settings` defines the simulation settings, such as number of parallel processes, sky basis, window basis, epw/wea file, latitude, longitude, timezone, site elevation, matrices sampling parameters, etc.
-2. `model` defines the model, which includes scene, windows, materials, sensors, and views.
+2. `model` defines the model, which includes the scene, windows, materials, sensors, and views.
 
 ## Ways to set up a configuration file
 
@@ -13,7 +13,13 @@ The workflow configuration has two parts: settings and model.
 
 **Method 2** Use the `from_dict()` method of the `WorkflowConfig` class to generate a workflow configuration by passing a dictionary to the method. The dictionary should contain the settings and model parameters.
 
-## Method 1
+## 0. Import the required classes and functions
+
+```python
+import frads as fr
+```
+
+## 1. Use the `settings` and `model` attributes
 
 ### 1.1 Initialize a `WorkflowConfig` instance
 
@@ -81,7 +87,7 @@ The `Settings` class has the following default settings. You can change the defa
 
     **sensor_window_matrix**: Sensor window matrix sampling parameters. (default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"])
 
-    **view_window_matrix**: View window matrix sampling  parameters. (default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"])
+    **view_window_matrix**: View window matrix sampling parameters. (default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"])
 
     **daylight_matrix**: Daylight matrix sampling parameters. (default_factory=lambda: ["-ab", "2", "-c", "5000"])
 
@@ -108,15 +114,11 @@ The `Model` class has the following attributes.
 5. `views`: The views to use for the simulation. A dictionary of instances of the `ViewConfig` class.
 
 ```python title="scene"
-cfg.model.scene = fr.SceneConfig(
-    files=[
-        "walls.rad",
-        "ceiling.rad",
-        "floor.rad",
-        "ground.rad",
-    ]
-)
+scene = fr.SceneConfig()
+scene.files = ["walls.rad", "ceiling.rad", "floor.rad", "ground.rad"]
+cfg.model.scene = scene
 ```
+
 ??? example "wall.rad"
     geometry primitive
     ```
@@ -132,11 +134,10 @@ cfg.model.scene = fr.SceneConfig(
 
 
 ```python title="windows"
-cfg.model.windows = {"window_1": fr.WindowConfig(
-    files=["window_!.rad"],
-    matrix_file="blinds.xml",
-    )
-}
+window_1 = fr.WindowConfig()
+window_1.file = "window_1.rad"
+window_1.matrix_file = "window_1.xml"
+cfg.model.windows = {"window_1": window_1}
 ```
 
 ??? example "window_1.rad"
@@ -153,7 +154,9 @@ cfg.model.windows = {"window_1": fr.WindowConfig(
     ```
 
 ```python title="materials"
-cfg.model.materials = fr.MaterialConfig(files=["materials.mat"])
+materials = fr.MaterialConfig()
+materials.files = ["materials.mat"]
+cfg.model.materials = materials
 ```
 
 ??? example "materials.mat"
@@ -166,7 +169,9 @@ cfg.model.materials = fr.MaterialConfig(files=["materials.mat"])
     ```
 
 ```python title="sensors"
-cfg.model.sensors = {"sensor_1": fr.SensorConfig(file="sensor.txt")}
+sensor_1 = fr.SensorConfig()
+sensor_1.files = ["sensor_1.txt"]
+cfg.model.sensors = {"sensor_1": sensor_1}
 ```
 
 ??? example "sensor_1.txt"
@@ -176,13 +181,11 @@ cfg.model.sensors = {"sensor_1": fr.SensorConfig(file="sensor.txt")}
     ```
 
 ```python title="views"
-cfg.model.views = {
-    "view_1": fr.ViewConfig(
-        file="view_1.vf",
-        xres=16,
-        yres=16,
-    )
-}
+view_1 = fr.ViewConfig()
+view_1.file = "view_1.vf"
+view_1.xres = 16
+view_1.yres = 16
+cfg.model.views = {"view_1": view_1}
 ```
 
 ??? example "view_1.vf"
@@ -191,17 +194,17 @@ cfg.model.views = {
     -vta -vp 1 1 1 -vd 0 -1 0 -vu 0 0 1 -vh 180 -vv 180
     ```
 
-## Method 2
+## 2. Use the `from_dict()` method
 
 ### 2.1 Initialize a `WorkflowConfig` instance with a dictionary
 
 ```python
-cfg = fr.WorkflowConfig.from_dict(dict)
+cfg = fr.WorkflowConfig.from_dict(dict_1)
 ```
 
-??? example "dict"
+??? example "dict_1"
     ```json
-    cfg = {
+    dict = {
         "settings": {
             "method": "3phase",
             "sky_basis": "r1",
@@ -225,7 +228,7 @@ cfg = fr.WorkflowConfig.from_dict(dict)
             "windows": {
                 "window_1": {
                     "file": "window_1.rad",
-                    "matrix_file": "blinds.xml"
+                    "matrix_file": "window_1.xml"
                 }
             },
             "materials": {
@@ -243,6 +246,19 @@ cfg = fr.WorkflowConfig.from_dict(dict)
             }
         }
     }
+    ```
+
+!!! tips "Use an EnergyPlus model to set up a workflow configuration"
+    You can use the `epjson_to_rad()` function to convert an EnergyPlus model to a Radiance model. The function returns a dictionary of the Radiance model for each exterior zone in the EnergyPlus model. You can use the dictionary to set up the workflow configuration.
+        
+    ```python
+    epmodel = fr.EnergyPlusModel("file.idf") # EnergyPlus model
+    radmodel = fr.epjson_to_rad(epmodel) # Radiance model
+    dict_zone1 = radmodel["zone_1"] # Get the dictionary of the Radiance model for zone_1.
+    ```
+
+    ```python
+    cfg = fr.WorkflowConfig.from_dict(dict_zone1)
     ```
 
 
