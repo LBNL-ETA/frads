@@ -80,7 +80,7 @@ def test_three_phase(cfg, objects_dir):
         workflow.generate_matrices(view_matrices=False)
         workflow.calculate_sensor(
             "wpi",
-            [workflow.window_bsdfs["upper_glass"], workflow.window_bsdfs["lower_glass"]],
+            {"upper_glass": "blinds30", "lower_glass": "blinds30"},
             time,
             dni,
             dhi,
@@ -88,7 +88,7 @@ def test_three_phase(cfg, objects_dir):
         res = workflow.calculate_edgps(
             "view1",
             [lower_glass, upper_glass],
-            [workflow.window_bsdfs["upper_glass"], workflow.window_bsdfs["lower_glass"]],
+            {"upper_glass": "blinds30", "lower_glass": "blinds30"},
             time,
             dni,
             dhi,
@@ -133,7 +133,7 @@ def test_eprad_threephase(resources_dir):
         edgps = rad_workflow.calculate_edgps(
             view="view1",
             shades=[shade_path],
-            bsdf=tmx,
+            bsdf={f"{zone}_Wall_South_Window": tmx},
             date_time=dt,
             dni=dni,
             dhi=dhi,
