@@ -671,7 +671,7 @@ class EnergyPlusToRadianceModelConverter:
             Tuple[List[bytes], Dict[str, Dict[str, bytes]], List[Polygon]]: A tuple of scene, windows, and window polygons.
         """
         scene: List[bytes] = []
-        windows: Dict[str, Dict[str, bytes]] = {}
+        windows: Dict[str, dict] = {}
         window_polygons: List[Polygon] = []
         opaque_surface_name = surface_name.replace(" ", "_")
         if not check_outward(surface_polygon, zone_center):
@@ -680,7 +680,9 @@ class EnergyPlusToRadianceModelConverter:
             fenestration_polygon, window = self._process_fenestration(fname, fene)
             window_polygons.append(fenestration_polygon)
             surface_polygon -= fenestration_polygon
-            windows[fname] = {"bytes": window.bytes}
+            windows[fname] = { "bytes": window.bytes}
+            if fene.construction_name in self.matrices:
+                windows[fname]["matrix_file"] = fene.construction_name
         # polygon to primitive
         construction = self.constructions[surface_construction_name]
         inner_material_name = construction.layers[-1].replace(" ", "_")
