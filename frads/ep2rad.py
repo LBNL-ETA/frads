@@ -337,7 +337,9 @@ class EnergyPlusToRadianceModelConverter:
             mtx = val["tvb"]
             for i in range(0, len(mtx["values"]), mtx["nrows"]):
                 nested.append(mtx["values"][i : i + mtx["ncolumns"]])
-            self.matrices[key] = {"matrix_data": nested}
+            self.matrices[key] = {
+                "matrix_data": [[[ele, ele, ele] for ele in row] for row in nested]
+            }
         constructions.update(cfs)
         return constructions
 
