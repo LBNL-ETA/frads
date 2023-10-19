@@ -1,6 +1,7 @@
 import tempfile
 from pathlib import Path
-from typing import List, NamedTuple, Tuple
+import json
+from typing import List, NamedTuple, Optional, Tuple, Union
 
 import pyradiance as pr
 import pywincalc as pwc
@@ -139,24 +140,58 @@ class GlazingSystem:
         self._thickness += sum([g[-1] for g in value])
         self.updated = True
 
-    def add_glazing_layer(self, inp):
-        """Add a glazing layer."""
-        if isinstance(inp, (str, Path)):
-            _path = Path(inp)
-            product_name = _path.stem
-            if not _path.exists():
-                raise FileNotFoundError(inp)
-            if _path.suffix == ".json":
-                data = pwc.parse_json_file(str(_path))
-            else:
-                data = pwc.parse_optics_file(str(_path))
-        else:
-            data = pwc.parse_json(inp)
-            product_name = inp["name"] or inp["product_name"]
-        data.product_name = data.product_name or product_name or str(inp)[:6]
-        self.layers.append(data)
+    def add_glazing_layer(self, inp: Union[str, Path, bytes]) -> None:
+        """Add a glazing layer.
+        Add a glazing layer, which can be a json file, optics file, or json bytes.
 
-        self._thickness += data.thickness / 1000.0 or 0  # mm to m
+        Args:
+            inp: The input file or bytes.
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: If the input type is not valid.
+            FileNotFoundError: If the input file does not exist.
+        """
+
+        input_data: Optional[bytes] = None
+        input_path: Optional[Path] = None
+        product_name: Optional[str] = None
+        product_data: Optional[pwc.ProductData] = None
+
+        if isinstance(inp, str):
+            input_path = Path(inp)
+        elif isinstance(inp, Path):
+            input_path = inp
+        elif isinstance(inp, bytes):
+            input_data = inp
+        else:
+            raise ValueError("Invalid input type")
+
+        if input_path is not None:
+            if not input_path.exists():
+                raise FileNotFoundError(inp)
+            product_name = input_path.stem
+            if input_path.suffix == ".json":
+                product_data = pwc.parse_json_file(str(input_path))
+            else:
+                product_data = pwc.parse_optics_file(str(input_path))
+        elif input_data is not None:
+            if len(input_data) == 0:
+                raise ValueError("Empty json data")
+            product_data = pwc.parse_json(input_data)
+        else:
+            raise ValueError("Invalid input type")
+
+        if product_data is None:
+            raise ValueError("Invalid input type")
+
+        if product_data.product_name is None:
+            product_data.product_name = product_name or str(inp)[:6]
+        self.layers.append(product_data)
+
+        self._thickness += product_data.thickness / 1000.0 or 0  # mm to m
         if len(self.layers) > 1:
             self._gaps.append(self.default_air_gap)
             self._thickness += self.default_air_gap[-1]
@@ -215,12 +250,18 @@ class GlazingSystem:
         self.updated = True if force else self.updated
         if self.updated:
             self.build()
+            if self.glzsys is None:
+                raise ValueError("Glazing system not built")
             self.solar_results = self.glzsys.optical_method_results("SOLAR")
             self.photopic_results = self.glzsys.optical_method_results("PHOTOPIC")
             self.updated = False
 
     def to_xml(self, out):
         """Save the glazing system to a file."""
+        if self.solar_results is None or self.photopic_results is None:
+            self.compute_solar_photopic_results()
+        if self.solar_results is None or self.photopic_results is None:
+            raise ValueError("Glazing system not computed")
         with tempfile.TemporaryDirectory() as tmpdir:
             _tbv = Path(tmpdir) / "tbv"
             _tfv = Path(tmpdir) / "tfv"

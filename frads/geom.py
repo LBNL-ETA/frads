@@ -87,11 +87,14 @@ class Polygon:
         normal_vector = np.cross(vector1, vector2)
         return normal_vector / np.linalg.norm(normal_vector)
 
-    def _calculate_area(self):
-        vector1 = self._vertices[1] - self._vertices[0]
-        vector2 = self._vertices[2] - self._vertices[0]
-        cross_product = np.cross(vector1, vector2)
-        return 0.5 * np.linalg.norm(cross_product)
+    def _calculate_area(self) -> np.ndarray:
+        total = np.array((0.0, 0.0, 0.0))
+        for idx in range(1, len(self._vertices) - 1):
+            total += np.cross(
+                (self._vertices[idx] - self._vertices[0]),
+                (self._vertices[idx + 1] - self._vertices[0]),
+            )
+        return abs(total * np.array((0.5, 0.5, 0.5)))
 
     def _calculate_centroid(self):
         return np.mean(self._vertices, axis=0)

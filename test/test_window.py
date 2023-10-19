@@ -1,15 +1,18 @@
 from pathlib import Path
 from frads.window import GlazingSystem, AIR, ARGON
+import pytest
 
 
-test_dir = Path(__file__).parent.resolve()
-resource_dir = test_dir / "Resources"
+@pytest.fixture
+def glass_path(resources_dir):
+    return resources_dir / "CLEAR_3.DAT"
 
-glass_path = resource_dir / "CLEAR_3.DAT"
-shade_path = resource_dir / "2011-SA1.xml"
+@pytest.fixture
+def shade_path(resources_dir):
+    return resources_dir / "2011-SA1.xml"
 
 
-def test_simple_glazingsystem():
+def test_simple_glazingsystem(glass_path):
     """
     Test the GlazingSystem class.
     Build a GlazingSystem object consisting of two layer of clear glass.
@@ -40,7 +43,7 @@ def test_simple_glazingsystem():
     )
 
 
-def test_customized_gap():
+def test_customized_gap(glass_path):
     """
     Test the building of a customized gap.
     A 0.03 m thick gap between the two glass layers. The gap is filled with 90% argon and 10% air.
@@ -70,7 +73,7 @@ def test_customized_gap():
     )
 
 
-def test_multilayer_glazing_shading():
+def test_multilayer_glazing_shading(glass_path, shade_path):
     """
     Test GlazingSystem object with multiple layers of glazing and shading and more than one customized gap.
 
@@ -117,7 +120,7 @@ def test_multilayer_glazing_shading():
     assert gs.solar_results is None
 
 
-def test_compute_results():
+def test_compute_results(glass_path):
     """
     Test the computation of the solar and photopic results.
 

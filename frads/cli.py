@@ -18,8 +18,8 @@ from pyradiance import model as rmodel
 import pywincalc as pwc
 
 from frads import ncp
-from frads.eprad import EnergyPlusModel
-from frads.epjson2rad import epjson_to_rad
+from frads.eplus import load_energyplus_model
+from frads.ep2rad import epmodel_to_radmodel
 from frads.room import make_room
 from frads.window import PaneRGB, get_glazing_primitive
 from frads.matrix import (
@@ -150,12 +150,13 @@ def parse_mrad_config(cfg_path: Path) -> Dict[str, dict]:
     }
     config_dict["model"]["scene"]["files"] = config["Model"].getspaths("scene")
     config_dict["model"]["materials"]["files"] = config["Model"].getspaths("material")
+    config_dict["model"]["materials"]["matrices"] = {k.stem: {"matrix_file":k} for k in config["Model"].getpaths("window_xmls")}
     for wpath, xpath in zip(
         config["Model"].getpaths("windows"), config["Model"].getpaths("window_xmls")
     ):
         config_dict["model"]["windows"][wpath.stem] = {
             "file": str(wpath),
-            "matrix_file": str(xpath),
+            "matrix_file": xpath.stem
         }
     if (grid_files := config["RaySender"].getspaths("grid_points")) is not None:
         for gfile in grid_files:
@@ -469,10 +470,10 @@ def epjson2rad_cmd() -> None:
     parser.add_argument("fpath", type=Path)
     parser.add_argument("-run", action="store_true", default=False)
     args = parser.parse_args()
-    epmodel = EnergyPlusModel(args.fpath)
+    epmodel = load_energyplus_model(args.fpath)
     if "FenestrationSurface:Detailed" not in epmodel.epjs:
         raise ValueError("No windows found in this model")
-    zones = epjson_to_rad(epmodel)
+    zones = epmodel_to_radmodel(epmodel)
     for zone in zones:
         write_ep_rad_model(f"{zone}.rad", zones[zone])
 
