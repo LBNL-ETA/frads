@@ -4,10 +4,10 @@ Class and functions for accessing EnergyPlus Python API
 
 from datetime import datetime, timedelta
 import json
-import os
 from pathlib import Path
 from typing import List, Optional, Callable, Union
-from tempfile import TemporaryDirectory
+import inspect
+import ast
 
 from epmodel import epmodel as epm
 import epmodel
@@ -593,8 +593,26 @@ class EnergyPlusSetup:
             raise AttributeError(
                 f"Method {method_name} not found in EnergyPlus runtime API."
             )
+
+        self._request_variable_from_callback(func)
+
         # method(self.state, partial(func, self))
         method(self.state, func)
+
+    def _request_variable_from_callback(self, func: Callable) -> None:
+        source_code = inspect.getsource(func)
+        tree = ast.parse(source_code)
+        key_value_pairs = []
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and hasattr(node.func, 'attr'):
+                if node.func.attr == 'get_variable_value':
+                    key_value = (ast.literal_eval(node.args[0]), ast.literal_eval(node.args[1]))
+                    key_value_pairs.append(key_value)
+        for key_value in key_value_pairs:
+            self.request_variable(key_value[0], key_value[1])
+
+
 
 
 def load_idf(fpath: Union[str, Path]) -> dict:
