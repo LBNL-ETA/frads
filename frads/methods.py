@@ -894,7 +894,7 @@ class ThreePhaseMethod(PhaseMethod):
     def calculate_sensor(
         self,
         sensor: str,
-        bsdf: Union[np.ndarray, List[np.ndarray]],
+        bsdf: Dict[str, Union[np.ndarray, str]],
         time: datetime,
         dni: float,
         dhi: float,
@@ -903,7 +903,7 @@ class ThreePhaseMethod(PhaseMethod):
 
         Args:
             sensor: The sensor name
-            bsdf: The BSDF matrix
+            bsdf: A dictionary of window name as key and bsdf matrix or matrix name as value
             time: The datetime object
             dni: The direct normal irradiance
             dhi: The diffuse horizontal irradiance
@@ -916,7 +916,14 @@ class ThreePhaseMethod(PhaseMethod):
             if len(bsdf) != len(self.config.model.windows):
                 raise ValueError("Number of BSDF should match number of windows.")
         for idx, _name in enumerate(self.config.model.windows):
-            _bsdf = bsdf[idx] if isinstance(bsdf, list) else bsdf
+            if _name not in bsdf:
+                raise ValueError(f"Missing BSDF for window {_name}")
+            if isinstance(bsdf[_name], str):
+                _bsdf = self.config.model.materials.matrices[bsdf[_name]].matrix_data
+            elif isinstance(bsdf[_name], np.ndarray):
+                _bsdf = bsdf[_name]
+            else:
+                raise ValueError(f"Invalid BSDF for window {_name}")
             res.append(
                 matrix_multiply_rgb(
                     self.sensor_window_matrices[sensor].array[idx],
