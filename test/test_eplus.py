@@ -83,3 +83,4 @@ def test_energyplussetup():
 
     ep = EnergyPlusSetup(epmodel)
     ep.run(design_day=True)
+    assert Path("eplusout.csv").exists()

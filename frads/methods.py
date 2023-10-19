@@ -58,6 +58,16 @@ class SceneConfig:
 
     Attributes:
         files: A list of files to be concatenated to form the scene.
+        for name, material in self.model.material.items():
+            materials[name] = parse_material(name, material)
+        for name, material in  self.model.material_no_mass.items():
+            materials[name] = parse_material_no_mass(name, material)
+        for name, material in self.model.window_material_simple_glazing_system.items():
+            materials[name] = parse_window_material_simple_glazing_system(name, material)
+        for name, material in self.model.window_material_glazing.items():
+            materials[name] = parse_window_material_glazing(name, material)
+        for name, material in self.model.window_material_blind.items():
+            materials.update(parse_window_material_blind(material))
         bytes: A raw data string to be used as the scene.
         files_mtime: Files last modification time.
     """
@@ -70,6 +80,18 @@ class SceneConfig:
         if len(self.files) > 0:
             for fpath in self.files:
                 self.files_mtime.append(os.path.getmtime(fpath))
+
+
+@dataclass
+class MatrixConfig:
+    matrix_file: Union[str, Path] = ""
+    matrix_data: Optional[np.ndarray] = None
+
+    def __post_init__(self):
+        if self.matrix_data is None:
+            self.matrix_data = load_matrix(self.matrix_file)
+        elif isinstance(self.matrix_data, list):
+            self.matrix_data = np.array(self.matrix_data)
 
 
 @dataclass
@@ -88,6 +110,7 @@ class MaterialConfig:
 
     files: List[Path] = field(default_factory=list)
     bytes: ByteString = b""
+    matrices: Dict[str, MatrixConfig] = field(init=False, default_factory=dict)
     files_mtime: List[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
@@ -109,18 +132,14 @@ class WindowConfig:
     Attributes:
         file: A file to be used as the window group.
         bytes: A raw data string to be used as the window group.
-        matrix_file: A file to be used as the BSDF matrix.
-        matrix_data: A list of list of floats to be used as the BSDF matrix.
         shading_geometry_file: A file to be used as the shading geometry.
         shading_geometry_bytes: A raw data string to be used as the shading geometry.
-        tensor_tree_file: A file to be used as the tensor tree.
         files_mtime: Files last modification time.
     """
 
     file: Union[str, Path] = ""
     bytes: ByteString = b""
     matrix_file: Union[str, Path] = ""
-    matrix_data: Optional[List[List[float]]] = field(default_factory=list)
     shading_geometry_file: Union[str, Path] = ""
     shading_geometry_bytes: Optional[ByteString] = None
     tensor_tree_file: Union[str, Path] = ""
@@ -139,10 +158,6 @@ class WindowConfig:
             self.files_mtime.append(os.path.getmtime(self.shading_geometry_file))
             if not isinstance(self.shading_geometry_file, Path):
                 self.shading_geometry_file = Path(self.shading_geometry_file)
-        if os.path.exists(self.tensor_tree_file):
-            self.files_mtime.append(os.path.getmtime(self.tensor_tree_file))
-            if not isinstance(self.tensor_tree_file, Path):
-                self.tensor_tree_file = Path(self.tensor_tree_file)
         if self.bytes == b"":
             with open(self.file, "rb") as f:
                 self.bytes = f.read()
@@ -778,7 +793,7 @@ class ThreePhaseMethod(PhaseMethod):
                 self.window_bsdfs[_name] = np.array(window.matrix_data)
             else:
                 # raise ValueError("No matrix data or file available", _name)
-                logger.warning("No matrix data or file available", _name)
+                logger.warning(f"No matrix data or file available: {_name}")
             if _name in self.window_bsdfs:
                 window_basis = [
                     k
@@ -1041,7 +1056,7 @@ class ThreePhaseMethod(PhaseMethod):
                 raise ValueError("Shade must be either a primitive or a file path")
         octree = "test.oct"
         with open(octree, "wb") as f:
-            f.write(pr.oconv(*shades, stdin=stdin, octree=self.octree))
+            f.write(pr.oconv(*shade_paths, stdin=stdin, octree=self.octree))
         # render image with -ab 1
         params = ["-ab", f"{ambient_bounce}"]
         hdr = pr.rpict(

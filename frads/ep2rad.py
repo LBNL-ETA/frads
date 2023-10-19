@@ -2,19 +2,39 @@
 
 from dataclasses import dataclass
 import logging
-import os
 from pathlib import Path
 from typing import Dict, Optional, Any, List, Tuple
 import math
 
 import pyradiance as pr
 import numpy as np
-import epmodel as epm
-from frads import geom, utils
+from frads.geom import (
+    angle_between,
+    Polygon,
+    polygon_center,
+)
+from frads.utils import polygon_primitive, parse_polygon, gen_grid
 from frads.eplus import EnergyPlusModel
+from epmodel.epmodel import (
+    BuildingSurfaceDetailed,
+    FenestrationSurfaceDetailed,
+    Material,
+    MaterialNoMass,
+    SurfaceType,
+    WindowMaterialGlazing,
+    WindowMaterialSimpleGlazingSystem,
+)
 
 
 logger: logging.Logger = logging.getLogger("frads.epjson2rad")
+
+
+@dataclass
+class SurfaceWithNamedFenestrations:
+    """A surface with fenestrations."""
+
+    surface: BuildingSurfaceDetailed
+    fenestrations: Dict[str, FenestrationSurfaceDetailed]
 
 
 @dataclass
@@ -37,6 +57,7 @@ class EPlusWindowMaterial:
     name: str
     visible_transmittance: float
     primitive: pr.Primitive
+    thickness: float = 0.0
 
 
 @dataclass
@@ -46,6 +67,7 @@ class EPlusConstruction:
     name: str
     type: str
     layers: list
+    thickness: float
 
 
 @dataclass
@@ -54,7 +76,7 @@ class EPlusOpaqueSurface:
 
     name: str
     type: str
-    polygon: geom.Polygon
+    polygon: Polygon
     construction: str
     boundary: str
     sun_exposed: bool
@@ -68,7 +90,7 @@ class EPlusFenestration:
 
     name: str
     type: str
-    polygon: geom.Polygon
+    polygon: Polygon
     construction: EPlusConstruction
     host: EPlusOpaqueSurface
 
@@ -104,7 +126,7 @@ def tmit2tmis(tmit: float) -> float:
     return max(0, min(tmis, 1))
 
 
-def fenestration_to_polygon(fen: epm.FenestrationSurfaceDetailed) -> geom.Polygon:
+def fenestration_to_polygon(fen: FenestrationSurfaceDetailed) -> Polygon:
     """Convert a fenestration_surface_detailed surface to a polygon."""
     vertices = [
         np.array(
@@ -129,7 +151,7 @@ def fenestration_to_polygon(fen: epm.FenestrationSurfaceDetailed) -> geom.Polygo
             )
         ),
     ]
-    if fen.number_of_vertices.root == 4:
+    if fen.vertex_4_x_coordinate is not None:
         vertices.append(
             np.array(
                 (
@@ -139,10 +161,10 @@ def fenestration_to_polygon(fen: epm.FenestrationSurfaceDetailed) -> geom.Polygo
                 )
             )
         )
-    return geom.Polygon(vertices)
+    return Polygon(vertices)
 
 
-def surface_to_polygon(srf: epm.BuildingSurfaceDetailed) -> geom.Polygon:
+def surface_to_polygon(srf: BuildingSurfaceDetailed) -> Polygon:
     """Convert a building_surface_detailed surface to a polygon."""
     if srf.vertices is None:
         raise ValueError("Surface has no vertices.")
@@ -150,12 +172,12 @@ def surface_to_polygon(srf: epm.BuildingSurfaceDetailed) -> geom.Polygon:
         np.array((v.vertex_x_coordinate, v.vertex_y_coordinate, v.vertex_z_coordinate))
         for v in srf.vertices
     ]
-    return geom.Polygon(vertices)
+    return Polygon(vertices)
 
 
 def thicken(
-    surface: geom.Polygon, windows: List[geom.Polygon], thickness: float
-) -> list:
+    surface: Polygon, windows: List[Polygon], thickness: float
+) -> List[Polygon]:
     """Thicken window-wall."""
     direction = surface.normal * thickness
     facade = surface.extrude(direction)[:2]
@@ -179,103 +201,16 @@ def get_construction_thickness(
     return sum(layer_thickness)
 
 
-def check_outward(polygon: geom.Polygon, zone_center: np.ndarray) -> bool:
+def check_outward(polygon: Polygon, zone_center: np.ndarray) -> bool:
     """Check whether a surface is facing outside."""
     outward = True
-    angle2center = geom.angle_between(polygon.normal, zone_center - polygon.centroid)
+    angle2center = angle_between(polygon.normal, zone_center - polygon.centroid)
     if angle2center < math.pi / 4:
         outward = False
     return outward
 
 
-def eplus_surface2primitive(
-    surfaces: dict, constructions, zone_center, materials
-) -> dict:
-    """Conert EPlusOpaqueSurface (and its windows) to Radiance primitives."""
-    surface_primitives: dict = {}
-    for _, surface in surfaces.items():
-        name = surface.name
-        surface_primitives[name] = {}
-        surface_primitives[name]["window"] = {}
-        surface_primitives[name]["xml"] = []
-        surface_polygon = surface.polygon
-        if not check_outward(surface_polygon, zone_center):
-            surface_polygon = surface_polygon.flip()
-        window_polygons = []
-        for fen in surface.fenestrations:
-            _fen = {}
-            if constructions[fen.construction].type == "cfs":
-                window_material = "void"
-                _fen["cfs"] = fen.construction
-            else:
-                # Get the last construction layer
-                window_material = (
-                    constructions[fen.construction].layers[0].replace(" ", "_")
-                )
-            window_polygon = fen.polygon
-            if check_outward(fen.polygon, zone_center):
-                window_polygon = window_polygon.flip()
-            window_polygons.append(window_polygon)
-            _fen["data"] = utils.polygon_primitive(
-                window_polygon, window_material, fen.name
-            )
-            surface_primitives[name]["window"][fen.name] = _fen
-        surface_primitives[name]["surface"] = []
-        surface_construction_layers = constructions[surface.construction].layers
-        # Second to the last of construction layers
-        inner_material = surface_construction_layers[
-            -min(2, len(surface_construction_layers))
-        ].replace(" ", "_")
-        surface_primitives[name]["surface"].append(
-            utils.polygon_primitive(surface_polygon, inner_material, surface.name)
-        )
-        if surface.sun_exposed:
-            outer_material = surface_construction_layers[-1].replace(" ", "_")
-            thickness = get_construction_thickness(
-                constructions[surface.construction], materials
-            )
-            facade = thicken(surface_polygon, window_polygons, thickness)
-            surface_primitives[name]["surface"].append(
-                utils.polygon_primitive(
-                    facade[1], outer_material, f"ext_{surface.name}"
-                )
-            )
-            for idx in range(2, len(facade)):
-                surface_primitives[name]["surface"].append(
-                    utils.polygon_primitive(
-                        facade[idx], inner_material, f"sill_{surface.name}.{idx}"
-                    )
-                )
-    return surface_primitives
-
-
-def write_primitives(surfaces: dict, odir: str) -> None:
-    """Write surface and subsurface primitives."""
-    for name, item in surfaces.items():
-        opath = os.path.join(odir, name + ".rad")
-        with open(opath, "w", encoding="ascii") as wtr:
-            for primitive in item["surface"]:
-                wtr.write(str(primitive))
-        if item["window"] != []:
-            opath = os.path.join(odir, name + "_window.rad")
-            with open(opath, "w", encoding="ascii") as wtr:
-                for primitive in item["window"]:
-                    wtr.write(str(primitive))
-
-
-def epluszone2rad(zone, constructions, materials):
-    """Convert a EPlusZone object to a Radiance model."""
-    zone_center = geom.polygon_center(*[wall.polygon for wall in zone.wall.values()])
-    wall = eplus_surface2primitive(zone.wall, constructions, zone_center, materials)
-    ceiling = eplus_surface2primitive(
-        zone.ceiling, constructions, zone_center, materials
-    )
-    roof = eplus_surface2primitive(zone.roof, constructions, zone_center, materials)
-    floor = eplus_surface2primitive(zone.floor, constructions, zone_center, materials)
-    return wall, ceiling, roof, floor
-
-
-def parse_material(name: str, material: epm.Material) -> EPlusOpaqueMaterial:
+def parse_material(name: str, material: Material) -> EPlusOpaqueMaterial:
     """Parser EP Material."""
     name = name.replace(" ", "_")
     roughness = material.roughness.value
@@ -301,12 +236,12 @@ def parse_material(name: str, material: epm.Material) -> EPlusOpaqueMaterial:
     )
 
 
-def parse_material_nomass(name: str, material: dict) -> EPlusOpaqueMaterial:
+def parse_material_no_mass(name: str, material: MaterialNoMass) -> EPlusOpaqueMaterial:
     """Parse EP Material:NoMass"""
     name = name.replace(" ", "_")
-    roughness = material.get("roughness", "Smooth")
-    solar_absorptance = material.get("solar_absorptance", 0.7)
-    visible_absorptance = material.get("visible_absorptance", 0.7)
+    roughness = material.roughness.value
+    solar_absorptance = material.solar_absorptance or 0.7
+    visible_absorptance = material.visible_absorptance or 0.7
     visible_reflectance = round(1 - visible_absorptance, 2)
     primitive = pr.Primitive(
         "void",
@@ -325,100 +260,66 @@ def parse_material_nomass(name: str, material: dict) -> EPlusOpaqueMaterial:
     )
 
 
-def parse_windowmaterial_simpleglazingsystem(
-    name: str, material: dict
+def parse_window_material_simple_glazing_system(
+    name: str, material: WindowMaterialSimpleGlazingSystem
 ) -> EPlusWindowMaterial:
     """Parse EP WindowMaterial:SimpleGlazingSystem"""
     identifier = name.replace(" ", "_")
-    shgc = material["solar_heat_gain_coefficient"]
-    tmit = material.get("visible_transmittance", shgc)
+    shgc = material.solar_heat_gain_coefficient
+    tmit = material.visible_transmittance or shgc
     tmis = tmit2tmis(tmit)
     primitive = pr.Primitive("void", "glass", identifier, [], [tmis, tmis, tmis])
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
 
-def parse_windowmaterial_simpleglazing(
-    name: str, material: dict
+def parse_window_material_glazing(
+    name: str, material: WindowMaterialGlazing
 ) -> EPlusWindowMaterial:
-    """Parse EP WindowMaterial:Simpleglazing"""
-    identifier = name.replace(" ", "_")
-    tmit = material["visible_transmittance"]
-    tmis = tmit2tmis(tmit)
-    primitive = pr.Primitive("void", "glass", identifier, [], [tmis, tmis, tmis])
-    return EPlusWindowMaterial(identifier, tmit, primitive)
-
-
-def parse_windowmaterial_glazing(name: str, material: dict) -> EPlusWindowMaterial:
     """Parse EP WindowMaterial:Glazing"""
+    default_tmit = 0.6
     identifier = name.replace(" ", "_")
-    if material["optical_data_type"].lower() == "bsdf":
+    if material.optical_data_type.value.lower() == "bsdf":
         tmit = 1
     else:
-        tmit = material["visible_transmittance_at_normal_incidence"]
+        tmit = material.visible_transmittance_at_normal_incidence or default_tmit
     tmis = tmit2tmis(tmit)
     primitive = pr.Primitive("void", "glass", identifier, [], [tmis, tmis, tmis])
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
 
-def parse_windowmaterial_blind(inp: dict) -> dict:
-    """Parse EP WindowMaterial:Blind"""
-    blind_prims = {}
-    for key, val in inp.items():
-        _id = key.replace(" ", "_")
-        # back_beam_vis_refl = val['back_side_slat_beam_visible_reflectance']
-        # back_diff_vis_refl = val['back_side_slat_diffuse_visible_reflectance']
-        # front_beam_vis_refl = val['front_side_slat_beam_visible_reflectance']
-        front_diff_vis_refl = val["front_side_slat_diffuse_visible_reflectance"]
-        # slat_width = val['slat_width']
-        # slat_thickness = val['slat_thickness']
-        # slat_separation = val['slat_separation']
-        # slat_angle = val['slat_angle']
-        blind_prims[key] = pr.Primitive(
-            "void",
-            "plastic",
-            _id,
-            [],
-            [front_diff_vis_refl, front_diff_vis_refl, front_diff_vis_refl, 0, 0],
-        )
-        # genblinds_cmd = f"genblinds {_id} {_id} {slat_width} 3
-        # {20*slat_separation} {slat_angle}"
-    return blind_prims
-
-
-def parse_construction_complexfenestrationstate(epjs):
+def parse_construction_complex_fenestration_state(
+    epmodel: EnergyPlusModel,
+) -> tuple:
     """Parser EP Construction:ComplexFenestrationState."""
-    construction = epjs.get("Construction:ComplexFenestrationState", {})
+    construction = epmodel.construction_complex_fenestration_state
+    if construction is None:
+        return {}, {}
     cfs = {}
     matrices = {}
     for key, val in construction.items():
-        val["ctype"] = "cfs"
         names = {
-            "tvf": val["visible_optical_complex_front_transmittance_matrix_name"],
-            "tvb": val["visible_optical_complex_back_transmittance_matrix_name"],
-            # "rvf": val["visible_optical_complex_front_reflectance_matrix_name"],
-            # "rvb": val["visible_optical_complex_back_reflectance_matrix_name"],
-            "tsf": val["solar_optical_complex_front_transmittance_matrix_name"],
-            # "tsb": val["solar_optical_complex_back_transmittance_matrix_name"],
-            # "rsf": val["solar_optical_complex_front_reflectance_matrix_name"],
-            "rsb": val["solar_optical_complex_back_reflectance_matrix_name"],
+            "tvf": val.visible_optical_complex_front_transmittance_matrix_name,
+            "tvb": val.visible_optical_complex_back_transmittance_matrix_name,
+            "tsf": val.solar_optical_complex_front_transmittance_matrix_name,
+            "rsb": val.solar_optical_complex_back_reflectance_matrix_name,
         }
         bsdf = {
-            key: [v["value"] for v in epjs["Matrix:TwoDimension"][name]["values"]]
+            key: [v.value for v in epmodel.matrix_two_dimension[name].values]
             for key, name in names.items()
         }
         ncs = {
-            key: epjs["Matrix:TwoDimension"][name]["number_of_columns"]
+            key: epmodel.matrix_two_dimension[name].number_of_columns
             for key, name in names.items()
         }
         nrs = {
-            key: epjs["Matrix:TwoDimension"][name]["number_of_rows"]
+            key: epmodel.matrix_two_dimension[name].number_of_rows
             for key, name in names.items()
         }
         matrices[key] = {
             key: {"ncolumns": ncs[key], "nrows": nrs[key], "values": bsdf[key]}
             for key in names
         }
-        cfs[key] = EPlusConstruction(key, "cfs", [])
+        cfs[key] = EPlusConstruction(key, "cfs", [], 0)
     return cfs, matrices
 
 
@@ -429,7 +330,7 @@ def parse_opaque_surface(surfaces: dict, fenestrations: dict) -> dict:
         identifier = name.replace(" ", "_")
         fenes = [fen for fen in fenestrations.values() if fen.host == name]
         ptype = surface["surface_type"]
-        polygon = geom.Polygon(
+        polygon = Polygon(
             [np.array(list(vertice.values())) for vertice in surface["vertices"]]
         )
         for fen in fenes:
@@ -442,55 +343,6 @@ def parse_opaque_surface(surfaces: dict, fenestrations: dict) -> dict:
             identifier, ptype, polygon, construction, boundary, sun_exposed, zone, fenes
         )
     return opaque_surfaces
-
-
-def parse_epjson_fenestration(
-    fenes: Dict[str, epm.FenestrationSurfaceDetailed]
-) -> Dict[str, EPlusFenestration]:
-    """Parse fenestration dictionary to a EPlusFenestration object."""
-    fenestrations = {}
-    for name, fen in fenes.items():
-        if fen.surface_type == epm.SurfaceType1.window:
-            name = name.replace(" ", "_")
-            host = fen.building_surface_name
-            vertices = [
-                np.array(
-                    (
-                        fen.vertex_1_x_coordinate,
-                        fen.vertex_1_y_coordinate,
-                        fen.vertex_1_z_coordinate,
-                    )
-                ),
-                np.array(
-                    (
-                        fen.vertex_2_x_coordinate,
-                        fen.vertex_2_y_coordinate,
-                        fen.vertex_2_z_coordinate,
-                    )
-                ),
-                np.array(
-                    (
-                        fen.vertex_3_x_coordinate,
-                        fen.vertex_3_y_coordinate,
-                        fen.vertex_3_z_coordinate,
-                    )
-                ),
-            ]
-            if fen.number_of_vertices == 4:
-                vertices.append(
-                    np.array(
-                        (
-                            fen.vertex_4_x_coordinate,
-                            fen.vertex_4_y_coordinate,
-                            fen.vertex_4_z_coordinate,
-                        )
-                    )
-                )
-            polygon = geom.Polygon(vertices)
-            fenestrations[name] = EPlusFenestration(
-                name, fen.surface_type, polygon, fen.construction_name, host
-            )
-    return fenestrations
 
 
 def parse_epjson(epmodel: EnergyPlusModel) -> tuple:
@@ -519,9 +371,6 @@ def parse_epjson(epmodel: EnergyPlusModel) -> tuple:
         raise NotImplementedError(
             "Construction:WindowEquivalentLayer is not supported yet."
         )
-
-    cfs, matrices = parse_construction_complexfenestrationstate(epjs)
-    constructions.update(cfs)
 
     # parse materials
     materials = parse_epjson_material(epjs)
@@ -669,8 +518,8 @@ def epjson_to_rad(epmodel: EnergyPlusModel, epw=None) -> dict:
             for srf in floor["surface"]:
                 scene_data.append(srf.bytes)
                 _name = f"{name}_{srf.identifier}"
-                polygon = utils.parse_polygon(srf)
-                grid = utils.gen_grid(polygon, 0.76, 0.61)
+                polygon = parse_polygon(srf)
+                grid = gen_grid(polygon, 0.76, 0.61)
                 model["sensors"][_name] = {"data": grid}
         model["scene"] = {}
         model["views"] = {}
@@ -688,20 +537,23 @@ def epjson_to_rad(epmodel: EnergyPlusModel, epw=None) -> dict:
     return rad_models
 
 
-class EnergyPlusModelParser:
+class EnergyPlusToRadianceModelConverter:
+    """Convert EnergyPlus model to Radiance model."""
+
     def __init__(self, ep_model: EnergyPlusModel):
         self.model = ep_model
         self._validate_ep_model()
         self.constructions = {}
         self.materials = {}
+        self.matrices = {}
 
     def parse(self) -> Dict[str, dict]:
-        self.constructions = self._parse_construction()
+        """Parse EnergyPlus model."""
         self.materials = self._parse_materials()
+        self.constructions = self._parse_construction()
 
-        zones = {}
-        for zname, _ in self.model.zone.items():
-            zones[zname] = self._process_zone(zname)
+        zones = {zname: self._process_zone(zname) for zname in self.model.zone}
+
         return zones
 
     def _parse_construction(self) -> dict:
@@ -711,22 +563,30 @@ class EnergyPlusModelParser:
         constructions = {}
         for cname, clayer in self.model.construction.items():
             layers = list(clayer.model_dump(exclude_none=True).values())
-            constructions[cname] = EPlusConstruction(cname, "default", layers)
+            constructions[cname] = EPlusConstruction(
+                cname,
+                "default",
+                layers,
+                sum(self.materials[layer].thickness for layer in layers),
+            )
+        cfs, self.matrices = parse_construction_complex_fenestration_state(self.model)
+        constructions.update(cfs)
         return constructions
 
     def _parse_materials(self) -> dict:
         """Parse EnergyPlus materials."""
         materials = {}
-        material_key = [
-            key for key in dir(self.model) if "material" in key.split("_")[0]
+        material_keys = [
+            "material",
+            "material_no_mass",
+            "window_material_simple_glazing_system",
+            "window_material_glazing",
         ]
-        for key in material_key:
+        for key in material_keys:
             func = f"parse_{key}".lower()
-            if func in globals() and (mdict := getattr(self.model, key)) is not None:
-                print(key)
-                tocall = globals()[func]
+            if (mdict := getattr(self.model, key)) is not None:
                 for name, material in mdict.items():
-                    materials[name.lower()] = tocall(name, material)
+                    materials[name] = globals()[func](name, material)
         return materials
 
     def _process_zone(self, zone_name: str) -> dict:
@@ -739,51 +599,120 @@ class EnergyPlusModelParser:
             dict: A dictionary of scene (static surfaces) and windows.
         """
         scene: List[bytes] = []
-        windows: Dict[str, bytes] = {}
+        windows: Dict[str, Dict[str, bytes]] = {}
+        sensors: Dict[str, dict] = {}
         surfaces = self._collect_zone_surfaces(zone_name)
         fenestrations = self._collect_zone_fenestrations(surfaces)
-        if (
-            surfaces_fenestrations := self._pair_surfaces_fenestrations(
-                surfaces, fenestrations
-            )
-        ) == {}:
+        if fenestrations == {}:  # no fenestrations in the zone
             return {}
+        surfaces_fenestrations = self._pair_surfaces_fenestrations(
+            surfaces, fenestrations
+        )
         surface_polygons = [surface_to_polygon(srf) for srf in surfaces.values()]
-        center = geom.polygon_center(*surface_polygons)
-        for sname, sdict in surfaces_fenestrations.items():
-            _surface, _surface_fenestrations = self._process_surface(sname, sdict, center)
+        center = polygon_center(*surface_polygons)
+        view_direction = np.array([0.0, 0.0, 0.0])
+        for sname, swnf in surfaces_fenestrations.items():
+            opaque_surface_polygon = surface_to_polygon(swnf.surface)
+            _surface, _surface_fenestrations, window_polygons = self._process_surface(
+                sname,
+                opaque_surface_polygon,
+                swnf.surface.construction_name,
+                swnf.fenestrations,
+                center,
+            )
             scene.extend(_surface)
-            windows = {**windows, **_surface_fenestrations}
+            windows.update(_surface_fenestrations)
+            if swnf.surface.surface_type == SurfaceType.floor:
+                sensors[sname] = {
+                    "data": gen_grid(
+                        polygon=opaque_surface_polygon, height=0.76, spacing=0.61
+                    )
+                }
+            for window_polygon in window_polygons:
+                view_direction += window_polygon.area
+        view = pr.View(
+            center.tolist(),
+            view_direction.tolist(),
+            "a",
+            horiz=180,
+            vert=180,
+        )
+
         return {
             "scene": {"bytes": b" ".join(scene)},
             "windows": windows,
+            "materials": {
+                "bytes": b" ".join(
+                    mat.primitive.bytes for mat in self.materials.values()
+                )
+            },
+            "sensors": sensors,
+            "views": {zone_name: {"view": view}},
         }
 
     def _process_surface(
-        self, surface_name: str, surface_fenestration: dict, zone_center: np.ndarray
-    ) -> Tuple[List[bytes], Dict[str, bytes]]:
+        self,
+        surface_name: str,
+        surface_polygon: Polygon,
+        surface_construction_name: str,
+        fenestrations: Dict[str, FenestrationSurfaceDetailed],
+        zone_center: np.ndarray,
+    ) -> Tuple[List[bytes], Dict[str, Dict[str, bytes]], List[Polygon]]:
         """Process a surface in a zone.
 
         Args:
             surface_name: Surface name.
-            surface_fenestration: A dictionary of surface and fenestration.
+            surface_polygon: Surface polygon.
+            surface_construction_name: Surface construction name.
+            fenestrations: Fenestrations in the surface.
             zone_center: Zone center.
 
         Returns:
-            Tuple[List[bytes], Dict[str, bytes]]: A tuple of scene and windows.
+            Tuple[List[bytes], Dict[str, Dict[str, bytes]], List[Polygon]]: A tuple of scene, windows, and window polygons.
         """
         scene: List[bytes] = []
-        windows: Dict[str, bytes] = {}
-        opaque_surface = surface_fenestration["surface"]
-        opaque_surface_polygon = surface_to_polygon(opaque_surface)
-        if not check_outward(opaque_surface_polygon, zone_center):
-            opaque_surface_polygon = opaque_surface_polygon.flip()
-        for fname, fene in surface_fenestration["fenestration"].items():
+        windows: Dict[str, Dict[str, bytes]] = {}
+        window_polygons: List[Polygon] = []
+        opaque_surface_name = surface_name.replace(" ", "_")
+        if not check_outward(surface_polygon, zone_center):
+            surface_polygon = surface_polygon.flip()
+        for fname, fene in fenestrations.items():
             fenestration_polygon, window = self._process_fenestration(fname, fene)
-            opaque_surface_polygon -= fenestration_polygon
-        return scene, windows
+            window_polygons.append(fenestration_polygon)
+            surface_polygon -= fenestration_polygon
+            windows[fname] = {"bytes": window.bytes}
+        # polygon to primitive
+        construction = self.constructions[surface_construction_name]
+        inner_material_name = construction.layers[-1].replace(" ", "_")
+        scene.append(
+            polygon_primitive(
+                surface_polygon, inner_material_name, opaque_surface_name
+            ).bytes
+        )
 
-    def _collect_zone_surfaces(self, zone_name: str) -> dict:
+        # extrude the surface by thickness
+        if fenestrations != {}:
+            facade = thicken(surface_polygon, window_polygons, construction.thickness)
+            outer_material_name = construction.layers[0].replace(" ", "_")
+            scene.append(
+                polygon_primitive(
+                    facade[1], outer_material_name, f"ext_{opaque_surface_name}"
+                ).bytes
+            )
+            for idx in range(2, len(facade)):
+                scene.append(
+                    polygon_primitive(
+                        facade[idx],
+                        inner_material_name,
+                        f"sill_{opaque_surface_name}.{idx}",
+                    ).bytes
+                )
+
+        return scene, windows, window_polygons
+
+    def _collect_zone_surfaces(
+        self, zone_name: str
+    ) -> Dict[str, BuildingSurfaceDetailed]:
         if self.model.building_surface_detailed is None:
             return {}
         return {
@@ -792,7 +721,9 @@ class EnergyPlusModelParser:
             if srf.zone_name == zone_name
         }
 
-    def _collect_zone_fenestrations(self, zone_surfaces: dict) -> dict:
+    def _collect_zone_fenestrations(
+        self, zone_surfaces: dict
+    ) -> Dict[str, FenestrationSurfaceDetailed]:
         if self.model.fenestration_surface_detailed is None:
             return {}
         return {
@@ -802,32 +733,32 @@ class EnergyPlusModelParser:
         }
 
     def _pair_surfaces_fenestrations(
-        self, zone_surfaces: dict, zone_fenestrations: dict
-    ):
-        surface_fenestrations = {
-            sname: {
-                "surface": srf,
-                "fenestration": {
-                    fname: fen
-                    for fname, fen in zone_fenestrations.items()
-                    if fen.building_surface_name == sname
-                },
-            }
-            for sname, srf in zone_surfaces.items()
-        }
+        self,
+        zone_surfaces: Dict[str, BuildingSurfaceDetailed],
+        zone_fenestrations: Dict[str, FenestrationSurfaceDetailed],
+    ) -> Dict[str, SurfaceWithNamedFenestrations]:
+        surface_fenestrations = {}
+        for sname, srf in zone_surfaces.items():
+            named_fen = {}
+            for fname, fen in zone_fenestrations.items():
+                if fen.building_surface_name == sname:
+                    named_fen[fname] = fen
+            surface_fenestrations[sname] = SurfaceWithNamedFenestrations(srf, named_fen)
         return surface_fenestrations
 
     def _process_fenestration(
-        self, name: str, fenestration: epm.FenestrationSurfaceDetailed
-    ) -> Tuple[geom.Polygon, Dict[str, bytes]]:
+        self, name: str, fenestration: FenestrationSurfaceDetailed
+    ) -> Tuple[Polygon, pr.Primitive]:
         fenenstration_polygon = fenestration_to_polygon(fenestration)
-        window_material = fenestration.construction_name
-        window = {
-            name: utils.polygon_primitive(
-                fenenstration_polygon, window_material, name
-            ).bytes
-        }
-        return fenenstration_polygon, window
+        _construction = self.constructions[fenestration.construction_name]
+        if _construction.type == "cfs":
+            window_material = "void"
+        else:
+            window_material = _construction.layers[0].replace(" ", "_")
+        fenestration_primitive = polygon_primitive(
+            fenenstration_polygon, window_material, name.replace(" ", "_")
+        )
+        return fenenstration_polygon, fenestration_primitive
 
     def _validate_ep_model(self) -> bool:
         """Validate EnergyPlus model.
@@ -877,7 +808,7 @@ def create_settings(ep_model: EnergyPlusModel, epw_file: Optional[str]) -> dict:
 
 
 def epmodel_to_radmodel(
-    ep_model: EnergyPlusModel, epw_file: Optional[str] = None
+    ep_model: EnergyPlusModel, epw_file: Optional[str] = None, add_views: bool = True
 ) -> dict:
     """Convert EnergyPlus model to Radiance model.
 
@@ -888,12 +819,16 @@ def epmodel_to_radmodel(
     Returns:
         dict: Radiance model.
     """
-    model_parser = EnergyPlusModelParser(ep_model)
+    model_parser = EnergyPlusToRadianceModelConverter(ep_model)
     zone_models = model_parser.parse()
     settings = create_settings(ep_model, epw_file)
     rad_models = {
         zname: {"settings": settings, "model": zmodel}
         for zname, zmodel in zone_models.items()
+        if zmodel != {}
     }
+    if not add_views:
+        for model in rad_models.values():
+            model["views"] = {}
 
     return rad_models

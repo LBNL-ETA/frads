@@ -1,8 +1,8 @@
 from datetime import datetime
 from frads.methods import TwoPhaseMethod, ThreePhaseMethod, WorkflowConfig
 from frads.window import GlazingSystem
-from frads.epjson2rad import epjson_to_rad
-from frads.eprad import EnergyPlusModel
+from frads.ep2rad import epmodel_to_radmodel
+from frads.eplus import EnergyPlusModel, load_energyplus_model
 import frads as fr
 import numpy as np
 import pytest
@@ -107,21 +107,24 @@ def test_eprad_threephase(resources_dir):
     shade_path = resources_dir / "ec60.rad"
     shade_bsdf_path = resources_dir / "ec60.xml"
 
-    epmodel = EnergyPlusModel(idf_path)
+    epmodel = load_energyplus_model(idf_path)
     gs_ec60 = GlazingSystem()
     gs_ec60.add_glazing_layer(product_7406_path)
     gs_ec60.add_glazing_layer(clear_glass_path)
     gs_ec60.gaps = [((fr.AIR, 0.1), (fr.ARGON, 0.9), 0.0127)]
     gs_ec60.name = "ec60"
     epmodel.add_glazing_system(gs_ec60)
-    rad_models = epjson_to_rad(epmodel, epw=epw_path)
+    rad_models = epmodel_to_radmodel(epmodel, epw_file=epw_path)
     zone = "Perimeter_bot_ZN_1"
     zone_dict = rad_models[zone]
     zone_dict["model"]["views"]["view1"] = {"file": view_path, "xres": 16, "yres": 16}
     zone_dict["model"]["sensors"]["view1"] = {"data": [[17, 5, 4, 1, 0, 0]]}
     rad_cfg = WorkflowConfig.from_dict(zone_dict)
+    rad_cfg.settings.sensor_window_matrix = ["-ab", "0"]
+    rad_cfg.settings.view_window_matrix = ["-ab", "0"]
+    rad_cfg.settings.daylight_matrix = ["-ab", "0"]
     with ThreePhaseMethod(rad_cfg) as rad_workflow:
-        rad_workflow.generate_matrices()
+        rad_workflow.generate_matrices(view_matrices=False)
         dni = 800
         dhi = 100
         dt = datetime(2023, 1, 1, 12)

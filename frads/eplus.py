@@ -79,9 +79,8 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
         gap_inputs = []
         for i, gap in enumerate(glzsys.gaps):
             gap_inputs.append(
-                epm.ConsComplexFenestrationStateGapInput(
-                    gas=getattr(epm.GasType, gap[0][0]),
-                    thickness=gap[-1]
+                epmodel.ConstructionComplexFenestrationStateGapInput(
+                    gas=getattr(epm.GasType, gap[0][0].name.lower()), thickness=gap[-1]
                 )
             )
         layer_inputs: List[epmodel.ConstructionComplexFenestrationStateLayerInput] = []
@@ -95,8 +94,12 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                     emissivity_front=layer.emissivity_front,
                     emissivity_back=layer.emissivity_back,
                     infrared_transmittance=layer.ir_transmittance,
-                    directional_absorptance_front=glzsys.solar_results.layer_results[i].front.absorptance.angular_total,
-                    directional_absorptance_back=glzsys.solar_results.layer_results[i].back.absorptance.angular_total,
+                    directional_absorptance_front=glzsys.solar_results.layer_results[
+                        i
+                    ].front.absorptance.angular_total,
+                    directional_absorptance_back=glzsys.solar_results.layer_results[
+                        i
+                    ].back.absorptance.angular_total,
                 )
             )
         input = epmodel.ConstructionComplexFenestrationStateInput(
@@ -151,7 +154,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                 upper_limit_value=1,
                 numeric_type=epm.NumericType.discrete,
                 unit_type=epm.UnitType.availability,
-            )
+            ),
         )
 
         # Add lighting schedule to epjs dictionary
@@ -161,7 +164,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
             epm.ScheduleConstant(
                 schedule_type_limits_name="on_off",
                 hourly_value=0,
-            )
+            ),
         )
 
         # Add lighting to epjs dictionary
@@ -177,7 +180,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                 return_air_fraction=0,
                 schedule_name="constant_off",
                 zone_or_zonelist_or_space_or_spacelist_name=zone,
-            )
+            ),
         )
 
     def add_output(
@@ -265,10 +268,6 @@ def ep_datetime_parser(inp: str):
 class EnergyPlusResult:
     def __init__(self):
         ...
-
-
-
-
 
 
 class EnergyPlusSetup:
@@ -554,7 +553,6 @@ class EnergyPlusSetup:
                     timestamp_at_beginning_of_interval=epm.EPBoolean.yes,
                 )
             }
-
 
         with open(f"{output_prefix}.json", "w") as wtr:
             wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
