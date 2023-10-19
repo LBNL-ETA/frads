@@ -150,13 +150,15 @@ def parse_mrad_config(cfg_path: Path) -> Dict[str, dict]:
     }
     config_dict["model"]["scene"]["files"] = config["Model"].getspaths("scene")
     config_dict["model"]["materials"]["files"] = config["Model"].getspaths("material")
-    config_dict["model"]["materials"]["matrices"] = {k.stem: {"matrix_file":k} for k in config["Model"].getpaths("window_xmls")}
+    config_dict["model"]["materials"]["matrices"] = {
+        k.stem: {"matrix_file": k} for k in config["Model"].getpaths("window_xmls")
+    }
     for wpath, xpath in zip(
         config["Model"].getpaths("windows"), config["Model"].getpaths("window_xmls")
     ):
         config_dict["model"]["windows"][wpath.stem] = {
             "file": str(wpath),
-            "matrix_file": xpath.stem
+            "matrix_file": xpath.stem,
         }
     if (grid_files := config["RaySender"].getspaths("grid_points")) is not None:
         for gfile in grid_files:

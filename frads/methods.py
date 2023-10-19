@@ -782,7 +782,9 @@ class ThreePhaseMethod(PhaseMethod):
         for _name, window in self.config.model.windows.items():
             _prims = pr.parse_primitive(window.bytes.decode())
             if window.matrix_file != "":
-                self.window_bsdfs[_name] = self.config.model.materials.matrices[window.matrix_file].matrix_data
+                self.window_bsdfs[_name] = self.config.model.materials.matrices[
+                    window.matrix_file
+                ].matrix_data
                 window_basis = [
                     k
                     for k, v in BASIS_DIMENSION.items()
