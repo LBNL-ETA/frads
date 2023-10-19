@@ -110,13 +110,16 @@ class MaterialConfig:
 
     files: List[Path] = field(default_factory=list)
     bytes: ByteString = b""
-    matrices: Dict[str, MatrixConfig] = field(init=False, default_factory=dict)
+    matrices: Dict[str, MatrixConfig] = field(default_factory=dict)
     files_mtime: List[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
         if len(self.files) > 0:
             for fpath in self.files:
                 self.files_mtime.append(os.path.getmtime(fpath))
+        for k, v in self.matrices.items():
+            if isinstance(v, dict):
+                self.matrices[k] = MatrixConfig(**v)
 
 
 @dataclass
@@ -139,7 +142,7 @@ class WindowConfig:
 
     file: Union[str, Path] = ""
     bytes: ByteString = b""
-    matrix_file: Union[str, Path] = ""
+    matrix_file: str = ""
     shading_geometry_file: Union[str, Path] = ""
     shading_geometry_bytes: Optional[ByteString] = None
     tensor_tree_file: Union[str, Path] = ""
@@ -150,10 +153,6 @@ class WindowConfig:
             self.files_mtime.append(os.path.getmtime(self.file))
             if not isinstance(self.file, Path):
                 self.file = Path(self.file)
-        if os.path.exists(self.matrix_file):
-            self.files_mtime.append(os.path.getmtime(self.matrix_file))
-            if not isinstance(self.matrix_file, Path):
-                self.matrix_file = Path(self.matrix_file)
         if os.path.exists(self.shading_geometry_file):
             self.files_mtime.append(os.path.getmtime(self.shading_geometry_file))
             if not isinstance(self.shading_geometry_file, Path):
@@ -783,14 +782,12 @@ class ThreePhaseMethod(PhaseMethod):
         for _name, window in self.config.model.windows.items():
             _prims = pr.parse_primitive(window.bytes.decode())
             if window.matrix_file != "":
-                self.window_bsdfs[_name] = load_matrix(window.matrix_file)
+                self.window_bsdfs[_name] = self.config.model.materials.matrices[window.matrix_file].matrix_data
                 window_basis = [
                     k
                     for k, v in BASIS_DIMENSION.items()
                     if v == self.window_bsdfs[_name].shape[0]
                 ][0]
-            elif window.matrix_data != []:
-                self.window_bsdfs[_name] = np.array(window.matrix_data)
             else:
                 # raise ValueError("No matrix data or file available", _name)
                 logger.warning(f"No matrix data or file available: {_name}")

@@ -2,7 +2,7 @@ from datetime import datetime
 from frads.methods import TwoPhaseMethod, ThreePhaseMethod, WorkflowConfig
 from frads.window import GlazingSystem
 from frads.ep2rad import epmodel_to_radmodel
-from frads.eplus import EnergyPlusModel, load_energyplus_model
+from frads.eplus import load_energyplus_model
 import frads as fr
 import numpy as np
 import pytest
@@ -34,15 +34,16 @@ def cfg(resources_dir, objects_dir):
             "windows": {
                 "upper_glass": {
                     "file": objects_dir / "upper_glass.rad",
-                    "matrix_file": resources_dir / "blinds30.xml",
+                    "matrix_file": "blinds30",
                 },
                 "lower_glass": {
                     "file": objects_dir / "lower_glass.rad",
-                    "matrix_file": resources_dir / "blinds30.xml",
+                    "matrix_file": "blinds30",
                 },
             },
             "materials": {
                 "files": [objects_dir / "materials.mat"],
+                "matrices": {"blinds30": {"matrix_file": resources_dir / "blinds30.xml"}},
             },
             "sensors": {
                 "wpi": {"file": resources_dir / "grid.txt"},
