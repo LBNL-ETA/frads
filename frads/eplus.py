@@ -629,7 +629,7 @@ class EnergyPlusSetup:
                         raise ValueError(f"Invalid number of arguments in {func}.")
                     key_value_pairs.append(key_value)
         for key_value in key_value_pairs:
-            self.request_variable(key_value[0], key_value[1])
+            self.request_variable(**key_value)
 
 
 
