@@ -340,7 +340,7 @@ class EnergyPlusSetup:
 
         actuator_state = self.api.state_manager.new_state()
         self.api.runtime.set_console_output_status(actuator_state, False)
-        self.api.runtime.callback_begin_system_timestep_before_predictor(
+        self.api.runtime.callback_end_zone_timestep_after_zone_reporting(
             actuator_state, self._actuator_func
         )
 
@@ -559,7 +559,6 @@ class EnergyPlusSetup:
         self.api.runtime.set_console_output_status(self.state, not silent)
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
 
-
     def set_callback(self, method_name: str, func: Callable):
         """Set callback function for EnergyPlus runtime API.
 
@@ -580,7 +579,7 @@ class EnergyPlusSetup:
                 f"Method {method_name} not found in EnergyPlus runtime API."
             )
 
-        self._request_variable_from_callback(func)
+        self._analyze_callback(func)
 
         # method(self.state, partial(func, self))
         method(self.state, func)
@@ -592,7 +591,7 @@ class EnergyPlusSetup:
             func: Callback function.
 
         Example:
-            >>> epsetup._request_variable_from_callback(func)
+            >>> epsetup._analyze_callback(func)
         """
         source_code = inspect.getsource(func)
         tree = ast.parse(source_code)
