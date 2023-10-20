@@ -407,6 +407,7 @@ class EnergyPlusToRadianceModelConverter:
             horiz=180,
             vert=180,
         )
+        sensors[zone_name] = {"data": [center.tolist() + view_direction.tolist()]}
 
         return {
             "scene": {"bytes": b" ".join(scene)},
