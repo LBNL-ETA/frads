@@ -396,6 +396,130 @@ class EnergyPlusSetup:
             self.state, self.actuator_handles[key][name], value
         )
 
+    def actuate_cooling_setpoint(self, zone: str, value: float):
+        """Set cooling setpoint for a zone.
+
+        Args:
+            zone: The name of the zone to set the cooling setpoint for.
+            value: The value to set the cooling setpoint to.
+
+        Raises:
+            ValueError: If the zone is not found.
+            ValueError: If the zone does not have a thermostat.
+
+        Example:
+            >>> epsetup.actuate_cooling_setpoint("zone1", 24)
+        """
+        zone_stat = set(
+            [
+                self.model.zone_control_thermostat[stat].zone_or_zonelist_name
+                for stat in self.model.zone_control_thermostat
+            ]
+        )
+        if zone not in self.model.zone:
+            raise ValueError(f"Zone {zone} not found in model.")
+        elif zone not in zone_stat:
+            raise ValueError(f"Zone {zone} does not have a thermostat.")
+
+        self.actuate(
+            component_type="Zone Temperature Control",
+            name="Cooling Setpoint",
+            key=zone,
+            value=value,
+        )
+
+    def actuate_heating_setpoint(self, zone: str, value: float):
+        """Set heating setpoint for a zone.
+
+        Args:
+            zone: The name of the zone to set the heating setpoint for.
+            value: The value to set the heating setpoint to.
+
+        Raises:
+            ValueError: If the zone is not found.
+            ValueError: If the zone does not have a thermostat.
+
+        Example:
+            >>> epsetup.actuate_cooling_setpoint("zone1", 20)
+        """
+        zone_stat = set(
+            [
+                self.model.zone_control_thermostat[stat].zone_or_zonelist_name
+                for stat in self.model.zone_control_thermostat
+            ]
+        )
+        if zone not in self.model.zone:
+            raise ValueError(f"Zone {zone} not found in model.")
+        elif zone not in zone_stat:
+            raise ValueError(f"Zone {zone} does not have a thermostat.")
+
+        self.actuate(
+            component_type="Zone Temperature Control",
+            name="Heating Setpoint",
+            key=zone,
+            value=value,
+        )
+
+    def actuate_lighting_power(self, zone: str, value: float):
+        """Set lighting power for a zone.
+
+        Args:
+            zone: The name of the zone to set the lighting power for.
+            value: The value to set the lighting power to.
+
+        Raises:
+            ValueError: If the zone is not found.
+            ValueError: If the zone does not have lighting.
+
+        Example:
+            >>> epsetup.actuate_lighting_power("zone1", 1000)
+        """
+        zone_lgt = set(
+            [
+                self.model.lights[lgt].zone_or_zonelist_or_space_or_spacelist_name
+                for lgt in self.model.lights
+            ]
+        )
+        if zone not in self.model.zone:
+            raise ValueError(f"Zone {zone} not found in model.")
+        elif zone not in zone_lgt:
+            raise ValueError(f"Zone {zone} does not have lighting.")
+
+        self.actuate(
+            component_type="Lights",
+            name="Lighting Level",
+            key=zone,
+            value=value,
+        )
+
+    def actuate_cfs_state(self, surface: str, construction_state: str):
+        """Set construction state for a surface.
+
+        Args:
+            surface: The name of the surface to set the cfs state for.
+            construction_state: The name of the cfs state to set the surface to.
+
+        Raises:
+            ValueError: If the surface is not found.
+            ValueError: If the cfs state is not found.
+
+        Example:
+            >>> epsetup.actuate_construction_state("window1", "cfs1")
+        """
+        if surface not in self.model.fenestration_surface_detailed:
+            raise ValueError(f"Surface {surface} not found in model.")
+        elif (
+            construction_state not in self.model.construction_complex_fenestration_state
+        ):
+            raise ValueError(f"CFS state {construction_state} not found in model.")
+
+        self.actuate(
+            component_type="Surface",
+            name="Construction State",
+            key=surface,
+            value=self.construction_handles[construction_state],
+        )
+
     def get_variable_value(self, name: str, key: str) -> float:
         """Get the value of a variable in the EnergyPlus model during runtime.
 
