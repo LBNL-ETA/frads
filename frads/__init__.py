@@ -52,7 +52,7 @@ import logging
 
 from .ep2rad import epmodel_to_radmodel
 
-from .eplus import EnergyPlusModel, EnergyPlusSetup, ep_datetime_parser
+from .eplus import load_energyplus_model, EnergyPlusSetup, ep_datetime_parser
 
 from .matrix import (
     load_matrix,
@@ -92,7 +92,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 __all__ = [
     "AIR",
     "ARGON",
-    "EnergyPlusModel",
+    "load_energyplus_model",
     "EnergyPlusSetup",
     "FivePhaseMethod",
     "GlazingSystem",
