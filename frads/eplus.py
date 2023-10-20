@@ -5,16 +5,22 @@ Class and functions for accessing EnergyPlus Python API
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
-from typing import List, Optional, Callable, Union
+from typing import Dict, List, Optional, Callable, Union
 import inspect
 import ast
 
 from epmodel import epmodel as epm
 import epmodel
 from frads import sky
+from frads.ep2rad import epmodel_to_radmodel
 from frads.window import GlazingSystem
+from frads.methods import (
+    WorkflowConfig,
+    ThreePhaseMethod,
+)
 import copy
 from pyenergyplus.api import EnergyPlusAPI
+import numpy as np
 
 
 class EnergyPlusModel(epmodel.EnergyPlusModel):
@@ -273,7 +279,7 @@ class EnergyPlusSetup:
         wea_meta: WeaMetaData object
     """
 
-    def __init__(self, epmodel: EnergyPlusModel, weather_file: Optional[str] = None):
+    def __init__(self, epmodel: EnergyPlusModel, weather_file: Optional[str] = None, enable_radiance: bool = True):
         """Class for setting up and running EnergyPlus simulations.
 
         Args:
@@ -283,6 +289,13 @@ class EnergyPlusSetup:
             >>> epsetup = EnergyPlusSetup(epmodel, epw="USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
         """
         self.model = epmodel
+        if enable_radiance:
+            self.rmodels = epmodel_to_radmodel(epmodel, epw_file=weather_file, add_views=True)
+            self.rconfigs = {k: WorkflowConfig.from_dict(v) for k, v in self.rmodels.items()}
+            # Default to Three-Phase Method
+            self.rworkflows = {k: ThreePhaseMethod(v) for k, v in self.rconfigs.items()}
+            for v in self.rworkflows.values():
+                v.generate_matrices(view_matrices=False)
         self.api = EnergyPlusAPI()
         self.epw = weather_file
         self.state = self.api.state_manager.new_state()
@@ -750,6 +763,47 @@ class EnergyPlusSetup:
 
         for key_value_dict in key_value_pairs:
             self.request_variable(**key_value_dict)
+
+    def calculate_wpi(self, zone_name: str, cfs_name: Dict[str, Union[np.ndarray, str]]):
+        """Calculate workplane illuminance in a zone.
+
+        Args:
+            zone_name: Name of the zone.
+            cfs_name: Name of the complex fenestration state.
+
+        Returns:
+            Workplane illuminance in lux.
+
+        Raises:
+            ValueError: If zone not found in model.
+
+        Example:
+            >>> epsetup.calculate_wpi("Zone1", "CFS1")
+        """
+        date_time = self.get_datetime()
+        dni = self.get_variable_value("Site Direct Solar Radiation Rate per Area", "Environment")
+        dhi = self.get_variable_value("Site Diffuse Solar Radiation Rate per Area", "Environment")
+        sensor_name = next(iter(self.rconfigs[zone_name].model.sensors.keys()))
+        return self.rworkflows[zone_name].calculate_sensor(
+            sensor_name,
+            cfs_name,
+            date_time,
+            dni,
+            dhi
+        )
+
+    def calculate_edgps(self, zone_name: str, cfs_name: Dict[str, str]):
+        date_time = self.get_datetime()
+        dni = self.get_variable_value("Site Direct Solar Radiation Rate per Area", "Environment")
+        dhi = self.get_variable_value("Site Diffuse Solar Radiation Rate per Area", "Environment")
+        view_name = next(iter(self.rconfigs[zone_name].model.views.keys()))
+        return self.rworkflows[zone_name].calculate_edgps(
+            view_name,
+            cfs_name,
+            date_time,
+            dni,
+            dhi
+        )
 
 
 def load_idf(fpath: Union[str, Path]) -> dict:
