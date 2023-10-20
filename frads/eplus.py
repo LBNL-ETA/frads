@@ -313,7 +313,7 @@ class EnergyPlusSetup:
         )
 
         self.api.runtime.callback_begin_new_environment(self.state, self._get_handles())
-        self.actuators = None
+        self.actuators = []
         self._get_list_of_actuators()
 
     def __enter__(self):
@@ -323,14 +323,12 @@ class EnergyPlusSetup:
         self.api.state_manager.delete_state(self.state)
 
     def _actuator_func(self, state):
-        actuators_list = []
-        if self.actuators is None:
-            list = self.api.api.listAllAPIDataCSV(state).decode("utf-8")
-            for line in list.split("\n"):
+        if len(self.actuators) == 0:
+            api_data: List[str] = self.api.api.listAllAPIDataCSV(state).decode("utf-8").splitlines()
+            for line in api_data:
                 if line.startswith("Actuator"):
                     line = line.replace(";", "")
-                    actuators_list.append(line.split(",", 1)[1])
-            self.actuators = actuators_list
+                    self.actuators.append(line.split(",", 1)[1].split(","))
         else:
             self.api.api.stopSimulation(state)
 
@@ -340,10 +338,7 @@ class EnergyPlusSetup:
 
         actuator_state = self.api.state_manager.new_state()
         self.api.runtime.set_console_output_status(actuator_state, False)
-        method = getattr(
-            self.api.runtime, "callback_begin_system_timestep_before_predictor"
-        )
-        method(actuator_state, self._actuator_func)
+        self.api.runtime.callback_begin_system_timestep_before_predictor(actuator_state, self._actuator_func)
 
         if self.epw is not None:
             self.api.runtime.run_energyplus(
@@ -496,7 +491,7 @@ class EnergyPlusSetup:
         silent: bool = False,
         annual: bool = False,
         design_day: bool = False,
-    ) -> EnergyPlusResult:
+    ) -> None:
         """Run EnergyPlus simulation.
 
         Args:
@@ -599,7 +594,7 @@ class EnergyPlusSetup:
         # method(self.state, partial(func, self))
         method(self.state, func)
 
-    def _request_variable_from_callback(self, func: Callable) -> None:
+    def _analyze_callback(self, func: Callable) -> None:
         """Request variables from callback function.
 
         Args:
@@ -616,20 +611,32 @@ class EnergyPlusSetup:
             if isinstance(node, ast.Call) and hasattr(node.func, 'attr'):
                 if node.func.attr == 'get_variable_value':
                     if len(node.args) == 2:
-                        key_value = {
+                        key_value_dict = {
                             "name": ast.literal_eval(node.args[0]),
                             "key": ast.literal_eval(node.args[1]),
                         }
                     elif len(node.keywords) == 2:
-                        key_value = {
+                        key_value_dict = {
                             node.keywords[0].arg: node.keywords[0].value.value,
                             node.keywords[1].arg: node.keywords[1].value.value,
                         }
                     else:
                         raise ValueError(f"Invalid number of arguments in {func}.")
-                    key_value_pairs.append(key_value)
-        for key_value in key_value_pairs:
-            self.request_variable(**key_value)
+                    key_value_pairs.append(key_value_dict)
+
+                if node.func.attr == 'actuate':
+                    if len(node.args) == 4:
+                        key_value = [ast.literal_eval(node.args[i]) for i in range(4)]
+                    elif len(node.keywords) == 4:
+                        key_value_dict = {node.keywords[i].arg: node.keywords[i].value.value for i in range(4)}
+                        key_value= [key_value_dict['component_type'], key_value_dict['name'], key_value_dict['key'], key_value_dict['value']]
+                    else:
+                        raise ValueError(f"Invalid number of arguments in {func}.")
+                    if key_value not in self.actuators:
+                        raise ValueError(f"Actuator {key_value} not found in model.")
+
+        for key_value_dict in key_value_pairs:
+            self.request_variable(**key_value_dict)
 
 
 
