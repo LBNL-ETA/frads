@@ -324,7 +324,9 @@ class EnergyPlusSetup:
 
     def _actuator_func(self, state):
         if len(self.actuators) == 0:
-            api_data: List[str] = self.api.api.listAllAPIDataCSV(state).decode("utf-8").splitlines()
+            api_data: List[str] = (
+                self.api.api.listAllAPIDataCSV(state).decode("utf-8").splitlines()
+            )
             for line in api_data:
                 if line.startswith("Actuator"):
                     line = line.replace(";", "")
@@ -338,7 +340,9 @@ class EnergyPlusSetup:
 
         actuator_state = self.api.state_manager.new_state()
         self.api.runtime.set_console_output_status(actuator_state, False)
-        self.api.runtime.callback_begin_system_timestep_before_predictor(actuator_state, self._actuator_func)
+        self.api.runtime.callback_begin_system_timestep_before_predictor(
+            actuator_state, self._actuator_func
+        )
 
         if self.epw is not None:
             self.api.runtime.run_energyplus(
@@ -555,19 +559,6 @@ class EnergyPlusSetup:
         self.api.runtime.set_console_output_status(self.state, not silent)
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
 
-        # TODO: Setup temp directory for EnergyPlus output
-        # with TemporaryDirectory() as temp_dir:
-        #     with open(os.path.join(temp_dir, "input.json"), "w") as wtr:
-        #         wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
-        #     opt.extend(["-d", temp_dir, "input.json"])
-        #     self.api.runtime.set_console_output_status(self.state, not silent)
-        #     self.api.runtime.run_energyplus(self.state, opt)
-        #     # load everything except input.json and sqlite.err
-        #     for ofile in os.listdir(temp_dir):
-        #         if ofile not in ["input.json", "sqlite.err"]:
-        #             with open(os.path.join(temp_dir, ofile)) as f:
-        #                 setattr(self.result, ofile, f.read())
-        # return self.result
 
     def set_callback(self, method_name: str, func: Callable):
         """Set callback function for EnergyPlus runtime API.
@@ -608,8 +599,8 @@ class EnergyPlusSetup:
         key_value_pairs = []
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and hasattr(node.func, 'attr'):
-                if node.func.attr == 'get_variable_value':
+            if isinstance(node, ast.Call) and hasattr(node.func, "attr"):
+                if node.func.attr == "get_variable_value":
                     if len(node.args) == 2:
                         key_value_dict = {
                             "name": ast.literal_eval(node.args[0]),
@@ -624,12 +615,19 @@ class EnergyPlusSetup:
                         raise ValueError(f"Invalid number of arguments in {func}.")
                     key_value_pairs.append(key_value_dict)
 
-                if node.func.attr == 'actuate':
+                elif node.func.attr == "actuate":
                     if len(node.args) == 4:
-                        key_value = [ast.literal_eval(node.args[i]) for i in range(4)]
+                        key_value = [ast.literal_eval(node.args[i]) for i in range(3)]
                     elif len(node.keywords) == 4:
-                        key_value_dict = {node.keywords[i].arg: node.keywords[i].value.value for i in range(4)}
-                        key_value= [key_value_dict['component_type'], key_value_dict['name'], key_value_dict['key'], key_value_dict['value']]
+                        key_value_dict = {
+                            node.keywords[i].arg: node.keywords[i].value.value
+                            for i in range(4)
+                        }
+                        key_value = [
+                            key_value_dict["component_type"],
+                            key_value_dict["name"],
+                            key_value_dict["key"],
+                        ]
                     else:
                         raise ValueError(f"Invalid number of arguments in {func}.")
                     if key_value not in self.actuators:
@@ -637,8 +635,6 @@ class EnergyPlusSetup:
 
         for key_value_dict in key_value_pairs:
             self.request_variable(**key_value_dict)
-
-
 
 
 def load_idf(fpath: Union[str, Path]) -> dict:
