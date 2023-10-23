@@ -93,6 +93,13 @@ class MatrixConfig:
         elif isinstance(self.matrix_data, list):
             self.matrix_data = np.array(self.matrix_data)
 
+@dataclass
+class ShadingGeometryConfig:
+    shading_geometry_file: Union[str, Path] = ""
+    shading_geometry_bytes: Optional[np.ndarray] = None
+
+    def __post_init__(self):
+        ...
 
 @dataclass
 class MaterialConfig:
@@ -143,8 +150,7 @@ class WindowConfig:
     file: Union[str, Path] = ""
     bytes: ByteString = b""
     matrix_file: str = ""
-    shading_geometry_file: Union[str, Path] = ""
-    shading_geometry_bytes: Optional[ByteString] = None
+    shading_geometry: Dict[str, ShadingGeometryConfig] = field(default_factory=dict)
     tensor_tree_file: Union[str, Path] = ""
     files_mtime: List[float] = field(init=False, default_factory=list)
 
@@ -153,10 +159,9 @@ class WindowConfig:
             self.files_mtime.append(os.path.getmtime(self.file))
             if not isinstance(self.file, Path):
                 self.file = Path(self.file)
-        if os.path.exists(self.shading_geometry_file):
-            self.files_mtime.append(os.path.getmtime(self.shading_geometry_file))
-            if not isinstance(self.shading_geometry_file, Path):
-                self.shading_geometry_file = Path(self.shading_geometry_file)
+        for k, v in self.shading_geometry.items():
+            if isinstance(v, dict):
+                self.shading_geometry[k] = ShadingGeometryConfig(**v)
         if self.bytes == b"":
             with open(self.file, "rb") as f:
                 self.bytes = f.read()
@@ -1018,7 +1023,7 @@ class ThreePhaseMethod(PhaseMethod):
     def calculate_edgps(
         self,
         view: str,
-        shades: Union[List[pr.Primitive], List[str], List[Path]],
+        # shades: Union[List[pr.Primitive], List[str], List[Path]],
         # bsdf: Union[np.ndarray, List[np.ndarray]],
         bsdf: Dict[str, Union[np.ndarray, str]],
         date_time: datetime,
@@ -1065,7 +1070,7 @@ class ThreePhaseMethod(PhaseMethod):
         with open(octree, "wb") as f:
             f.write(pr.oconv(*shade_paths, stdin=stdin, octree=self.octree))
         # render image with -ab 1
-        params = ["-ab", f"{ambient_bounce}"]
+        params = ["-ab", str(ambient_bounce)]
         hdr = pr.rpict(
             self.view_senders[view].view.args(),
             octree,

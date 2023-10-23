@@ -303,6 +303,7 @@ class EnergyPlusSetup:
         self.variable_handles = {}
         self.actuator_handles = {}
         self.construction_handles = {}
+        self.enable_radiance = enable_radiance
 
         if self.model.site_location is None:
             raise ValueError("Site location not found in EnergyPlus model.")
@@ -602,19 +603,8 @@ class EnergyPlusSetup:
         hour = self.api.exchange.hour(self.state)
         minute = self.api.exchange.minutes(self.state)
 
-        date = datetime(year, month, day)
+        return datetime(year, month, day, hour, minute)
 
-        if minute == 60:
-            minute = 0
-            hour += 1
-
-        if hour == 24:
-            hour = 0
-            date += timedelta(days=1)
-
-        dt = date + timedelta(hours=hour, minutes=minute)
-
-        return dt
 
     def run(
         self,
@@ -780,6 +770,8 @@ class EnergyPlusSetup:
         Example:
             >>> epsetup.calculate_wpi("Zone1", "CFS1")
         """
+        if not self.enable_radiance:
+            raise ValueError("Radiance is not enabled.")
         date_time = self.get_datetime()
         dni = self.get_variable_value("Site Direct Solar Radiation Rate per Area", "Environment")
         dhi = self.get_variable_value("Site Diffuse Solar Radiation Rate per Area", "Environment")
@@ -793,6 +785,21 @@ class EnergyPlusSetup:
         )
 
     def calculate_edgps(self, zone_name: str, cfs_name: Dict[str, str]):
+        """Calculate enhanced simplified daylight glare probability in a zone.
+
+        Args:
+            zone_name: Name of the zone.
+            cfs_name: Dictionary of windows and their complex fenestration state.
+
+        Returns:
+            Enhanced simplified daylight glare probability.
+
+        Raises:
+            KeyError: If zone not found in model.
+
+        Example:
+            >>> epsetup.calculate_edgps("Zone1", "CFS1")
+        """
         date_time = self.get_datetime()
         dni = self.get_variable_value("Site Direct Solar Radiation Rate per Area", "Environment")
         dhi = self.get_variable_value("Site Diffuse Solar Radiation Rate per Area", "Environment")
