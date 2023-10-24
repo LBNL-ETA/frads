@@ -1,8 +1,7 @@
-import os
 from pathlib import Path
 
-from frads.eplus import EnergyPlusModel, EnergyPlusSetup, load_energyplus_model
-from frads.window import GlazingSystem, create_glazing_system
+from frads.eplus import EnergyPlusSetup, load_energyplus_model
+from frads.window import create_glazing_system
 from pyenergyplus.dataset import ref_models
 import pytest
 
@@ -85,24 +84,3 @@ def test_energyplussetup(medium_office):
     ep = EnergyPlusSetup(medium_office)
     ep.run(design_day=True)
     assert Path("eplusout.csv").exists()
-    os.remove("eplus.json")
-    os.remove("eplusout.csv")
-    os.remove("eplusout.eso")
-    os.remove("eplusout.mtr")
-    os.remove("eplusout.rdd")
-    os.remove("eplusout.bnd")
-    os.remove("eplusout.eio")
-    os.remove("eplusout.mtd")
-    os.remove("eplusout.mdd")
-    os.remove("eplusssz.csv")
-    os.remove("eplustbl.htm")
-    os.remove("epluszsz.csv")
-    os.remove("epmodel.json")
-    os.remove("eplusmtr.csv")
-    os.remove("eplusout.audit")
-    os.remove("eplusout.dxf")
-    os.remove("eplusout.end")
-    os.remove("eplusout.shd")
-    os.remove("eplusout.sql")
-    os.remove("sqlite.err")
-
