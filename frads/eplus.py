@@ -70,17 +70,13 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
             >>> model = load_energyplus_model(Path("model.idf"))
             >>> model.add_glazing_system(glazing_system1)
         """
-        if glzsys.solar_results is None or glzsys.photopic_results is None:
-            glzsys.compute_solar_photopic_results()
-        if glzsys.solar_results is None or glzsys.photopic_results is None:
-            raise ValueError("Solar and photopic results not computed.")
 
         name = glzsys.name
         gap_inputs = []
         for i, gap in enumerate(glzsys.gaps):
             gap_inputs.append(
                 epmodel.ConstructionComplexFenestrationStateGapInput(
-                    gas=getattr(epm.GasType, gap[0][0].name.lower()), thickness=gap[-1]
+                    gas=gap.gas[0].gas.capitalize(), thickness=gap.thickness
                 )
             )
         layer_inputs: List[epmodel.ConstructionComplexFenestrationStateLayerInput] = []
@@ -94,21 +90,17 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                     emissivity_front=layer.emissivity_front,
                     emissivity_back=layer.emissivity_back,
                     infrared_transmittance=layer.ir_transmittance,
-                    directional_absorptance_front=glzsys.solar_results.layer_results[
-                        i
-                    ].front.absorptance.angular_total,
-                    directional_absorptance_back=glzsys.solar_results.layer_results[
-                        i
-                    ].back.absorptance.angular_total,
+                    directional_absorptance_front=glzsys.solar_front_absorptance[i],
+                    directional_absorptance_back=glzsys.solar_back_absorptance[i],
                 )
             )
         input = epmodel.ConstructionComplexFenestrationStateInput(
             gaps=gap_inputs,
             layers=layer_inputs,
-            solar_reflectance_back=glzsys.solar_results.system_results.back.reflectance.matrix,
-            solar_transmittance_back=glzsys.solar_results.system_results.front.transmittance.matrix,
-            visible_transmittance_back=glzsys.photopic_results.system_results.back.transmittance.matrix,
-            visible_transmittance_front=glzsys.photopic_results.system_results.front.transmittance.matrix,
+            solar_reflectance_back=glzsys.solar_back_reflectance,
+            solar_transmittance_back=glzsys.solar_back_transmittance,
+            visible_transmittance_back=glzsys.visible_back_reflectance,
+            visible_transmittance_front=glzsys.visible_front_transmittance,
         )
         self.add_construction_complex_fenestration_state(name, input)
 
