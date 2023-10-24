@@ -1,6 +1,8 @@
 from datetime import datetime
+import os
+
 from frads.methods import TwoPhaseMethod, ThreePhaseMethod, WorkflowConfig
-from frads.window import GlazingSystem
+from frads.window import GlazingSystem, create_glazing_system, Gap, Gas
 from frads.ep2rad import epmodel_to_radmodel
 from frads.eplus import load_energyplus_model
 import frads as fr
@@ -109,11 +111,13 @@ def test_eprad_threephase(resources_dir):
     shade_bsdf_path = resources_dir / "ec60.xml"
 
     epmodel = load_energyplus_model(idf_path)
-    gs_ec60 = GlazingSystem()
-    gs_ec60.add_glazing_layer(product_7406_path)
-    gs_ec60.add_glazing_layer(clear_glass_path)
-    gs_ec60.gaps = [((fr.AIR, 0.1), (fr.ARGON, 0.9), 0.0127)]
-    gs_ec60.name = "ec60"
+    os.remove("eplusout.err")
+    os.remove("eplusout.end")
+    gs_ec60 = create_glazing_system(
+        name="ec60",
+        layers=[product_7406_path, clear_glass_path],
+        gaps=[Gap([Gas("air", 0.1), Gas("argon", 0.9)], 0.0127)],
+    )
     epmodel.add_glazing_system(gs_ec60)
     rad_models = epmodel_to_radmodel(epmodel, epw_file=epw_path)
     zone = "Perimeter_bot_ZN_1"

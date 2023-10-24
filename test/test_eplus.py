@@ -1,7 +1,8 @@
+import os
 from pathlib import Path
 
 from frads.eplus import EnergyPlusModel, EnergyPlusSetup, load_energyplus_model
-from frads.window import GlazingSystem
+from frads.window import GlazingSystem, create_glazing_system
 
 test_dir = Path(__file__).resolve().parent
 resource_dir = test_dir / "Resources"
@@ -13,8 +14,10 @@ glazing_path = resource_dir / "igsdb_product_7406.json"
 
 def test_add_glazingsystem():
     epmodel = load_energyplus_model(idf_path)
-    gs = GlazingSystem()
-    gs.add_glazing_layer(glazing_path)
+    gs = create_glazing_system(
+        name="test",
+        layers=[glazing_path],
+    )
     epmodel.add_glazing_system(gs)
     assert epmodel.construction_complex_fenestration_state != {}
     assert isinstance(epmodel.construction_complex_fenestration_state, dict)
@@ -84,3 +87,25 @@ def test_energyplussetup():
     ep = EnergyPlusSetup(epmodel)
     ep.run(design_day=True)
     assert Path("eplusout.csv").exists()
+    os.remove("eplus.json")
+    os.remove("eplusout.csv")
+    os.remove("eplusout.eso")
+    os.remove("eplusout.mtr")
+    os.remove("eplusout.rdd")
+    os.remove("eplusout.err")
+    os.remove("eplusout.bnd")
+    os.remove("eplusout.eio")
+    os.remove("eplusout.mtd")
+    os.remove("eplusout.mdd")
+    os.remove("eplusssz.csv")
+    os.remove("eplustbl.htm")
+    os.remove("epluszsz.csv")
+    os.remove("epmodel.json")
+    os.remove("eplusmtr.csv")
+    os.remove("eplusout.audit")
+    os.remove("eplusout.dxf")
+    os.remove("eplusout.end")
+    os.remove("eplusout.shd")
+    os.remove("eplusout.sql")
+    os.remove("sqlite.err")
+
