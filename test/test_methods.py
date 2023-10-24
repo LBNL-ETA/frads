@@ -110,8 +110,6 @@ def test_eprad_threephase(resources_dir):
     shade_bsdf_path = resources_dir / "ec60.xml"
 
     epmodel = load_energyplus_model(ref_models["medium_office"])
-    os.remove("eplusout.err")
-    os.remove("eplusout.end")
     gs_ec60 = create_glazing_system(
         name="ec60",
         layers=[product_7406_path, clear_glass_path],
