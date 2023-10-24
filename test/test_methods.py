@@ -8,6 +8,7 @@ from frads.eplus import load_energyplus_model
 import frads as fr
 import numpy as np
 import pytest
+from pyenergyplus.dataset import ref_models, weather_files
 
 
 @pytest.fixture
@@ -102,15 +103,13 @@ def test_eprad_threephase(resources_dir):
     """
     Integration test for ThreePhaseMethod using EnergyPlusModel and GlazingSystem
     """
-    idf_path = resources_dir / "RefBldgMediumOfficeNew2004_Chicago.idf"
     view_path = resources_dir / "view1.vf"
-    epw_path = resources_dir / "USA_CA_Oakland.Intl.AP.724930_TMY3.epw"
     clear_glass_path = resources_dir / "CLEAR_3.DAT"
     product_7406_path = resources_dir / "igsdb_product_7406.json"
     shade_path = resources_dir / "ec60.rad"
     shade_bsdf_path = resources_dir / "ec60.xml"
 
-    epmodel = load_energyplus_model(idf_path)
+    epmodel = load_energyplus_model(ref_models["medium_office"])
     os.remove("eplusout.err")
     os.remove("eplusout.end")
     gs_ec60 = create_glazing_system(
@@ -119,7 +118,7 @@ def test_eprad_threephase(resources_dir):
         gaps=[Gap([Gas("air", 0.1), Gas("argon", 0.9)], 0.0127)],
     )
     epmodel.add_glazing_system(gs_ec60)
-    rad_models = epmodel_to_radmodel(epmodel, epw_file=epw_path)
+    rad_models = epmodel_to_radmodel(epmodel, epw_file=weather_files["usa_ca_san_francisco"])
     zone = "Perimeter_bot_ZN_1"
     zone_dict = rad_models[zone]
     zone_dict["model"]["views"]["view1"] = {"file": view_path, "xres": 16, "yres": 16}
