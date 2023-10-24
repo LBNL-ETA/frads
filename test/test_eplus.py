@@ -90,7 +90,6 @@ def test_energyplussetup(medium_office):
     os.remove("eplusout.eso")
     os.remove("eplusout.mtr")
     os.remove("eplusout.rdd")
-    os.remove("eplusout.err")
     os.remove("eplusout.bnd")
     os.remove("eplusout.eio")
     os.remove("eplusout.mtd")
