@@ -45,6 +45,7 @@ from pyradiance.model import parse_view
 from scipy.sparse import csr_matrix
 
 
+
 logger: logging.Logger = logging.getLogger("frads.methods")
 
 
@@ -120,6 +121,7 @@ class MaterialConfig:
     files: List[Path] = field(default_factory=list)
     bytes: ByteString = b""
     matrices: Dict[str, MatrixConfig] = field(default_factory=dict)
+    glazing_materials: Dict[str, pr.Primitive] = field(default_factory=dict)
     files_mtime: List[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
@@ -153,7 +155,6 @@ class WindowConfig:
     bytes: ByteString = b""
     matrix_file: str = ""
     proxy_geometry: Dict[str, List[pr.Primitive]] = field(default_factory=dict)
-    glazing_material: Dict[str, pr.Primitive] = field(default_factory=dict)
     files_mtime: List[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
@@ -1050,7 +1051,7 @@ class ThreePhaseMethod(PhaseMethod):
             diffhor=dhi,
         ))
         for wname, sname in bsdf.items():
-            if (_gms := self.config.model.windows[wname].glazing_material) != {}:
+            if (_gms := self.config.model.materials.glazing_materials) != {}:
                 gmaterial = _gms[sname]
                 stdins.append(gmaterial.bytes)
                 for prim in self.window_senders[wname].surfaces:

@@ -82,7 +82,7 @@ from .sky import (
 
 from .utils import gen_grid, unpack_primitives
 
-from .window import GlazingSystem, AIR, ARGON, KRYPTON, XENON
+from .window import create_glazing_system, Gap, Gas, GlazingSystem, AIR, ARGON, KRYPTON, XENON
 
 __version__ = "1.0.1"
 
@@ -92,6 +92,9 @@ logger: logging.Logger = logging.getLogger(__name__)
 __all__ = [
     "AIR",
     "ARGON",
+    "create_glazing_system",
+    "Gap",
+    "Gas",
     "load_energyplus_model",
     "EnergyPlusSetup",
     "FivePhaseMethod",
