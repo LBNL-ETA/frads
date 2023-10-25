@@ -11,11 +11,11 @@ authors = [
 ]
 description = "Framework for lighting and energy simulations"
 dependencies = [
-    "epmodel>=0.2.5",
+    "epmodel>=0.4.0",
     "numpy>=1.24.4",
     "pyradiance >= 0.3.0",
     "pywincalc>=3.1.0",
-    "pyenergyplus_lbnl",
+    "pyenergyplus_lbnl>=23.2.0",
     "scipy~=1.10.1",
 ]
 license = {"file"= "license.txt"}
