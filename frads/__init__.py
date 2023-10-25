@@ -84,7 +84,7 @@ from .utils import gen_grid, unpack_primitives
 
 from .window import create_glazing_system, Gap, Gas, GlazingSystem, AIR, ARGON, KRYPTON, XENON
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 
 logger: logging.Logger = logging.getLogger(__name__)
 
