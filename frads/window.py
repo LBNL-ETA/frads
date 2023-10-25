@@ -136,7 +136,21 @@ class GlazingSystem:
         """Load a glazing system from a JSON file."""
         with open(path, "r") as f:
             data = json.load(f)
-        return cls(**data)
+        layers = data.pop("layers")
+        layer_instances = []
+        for layer in layers:
+            rgb = layer.pop("rgb")
+            layer_instances.append(Layer(rgb=PaneRGB(**rgb), **layer))
+        gaps = data.pop("gaps")
+        gap_instances = []
+        for gap in gaps:
+            gas_instances = []
+            gases = gap.pop("gas")
+            for gs in gases:
+                gas_instances.append(Gas(**gs))
+            gap_instances.append(Gap(gas=gas_instances, **gap))
+        return cls(layers=layer_instances, gaps=gap_instances, **data)
+
 
     def get_brtdfunc(self) -> pr.Primitive:
         """Get a BRTDfunc primitive for the glazing system."""
