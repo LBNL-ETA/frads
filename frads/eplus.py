@@ -437,6 +437,7 @@ class EnergyPlusSetup:
     def _request_variables_from_callback(self, callable_nodes: List[ast.Call]) -> None:
         key_value_pairs = set()
         for node in callable_nodes:
+            key_value_dict = {}
             if node.func.attr == "get_variable_value":
                 if len(node.args) == 2:
                     key_value_dict = {
@@ -450,24 +451,14 @@ class EnergyPlusSetup:
                     }
                 else:
                     raise ValueError(f"Invalid number of arguments in {func}.")
-                key_value_pairs.add(key_value_dict)
+                self.request_variable(**key_value_dict)
             elif node.func.attr == "get_diffuse_horizontal_irradiance":
-                key_value_pairs.add(
-                    {"name": "Site Diffuse Solar Radiation Rate per Area", "key": "Environment"}
-                )
+                self.request_variable(name="Site Diffuse Solar Radiation Rate per Area", key="Environment")
             elif node.func.attr == "get_direct_normal_irradiance":
-                key_value_pairs.add(
-                    {"name": "Site Direct Solar Radiation Rate per Area", "key": "Environment"}
-                )
+                self.request_variable(name="Site Direct Solar Radiation Rate per Area", key="Environment")
             elif node.func.attr in ("calculate_wpi", "calculate_edgps"):
-                key_value_pairs.add(
-                    {"name": "Site Diffuse Solar Radiation Rate per Area", "key": "Environment"}
-                )
-                key_value_pairs.add(
-                    {"name": "Site Direct Solar Radiation Rate per Area", "key": "Environment"}
-                )
-        for key_value_dict in key_value_pairs:
-            self.request_variable(**key_value_dict)
+                self.request_variable(name="Site Diffuse Solar Radiation Rate per Area", key="Environment")
+                self.request_variable(name="Site Direct Solar Radiation Rate per Area", key="Environment")
 
 
     def _check_actuators_from_callback(self, callable_nodes: List[ast.Call]) -> None:
