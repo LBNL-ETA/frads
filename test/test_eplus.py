@@ -81,6 +81,7 @@ def test_output_meter(medium_office):
 def test_energyplussetup(medium_office):
     """Test running EnergyPlusSetup."""
 
+    breakpoint()
     ep = EnergyPlusSetup(medium_office)
     ep.run(design_day=True)
     assert Path("eplusout.csv").exists()

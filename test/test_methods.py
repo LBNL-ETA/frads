@@ -1,14 +1,14 @@
 from datetime import datetime
-import os
 
 from frads.methods import TwoPhaseMethod, ThreePhaseMethod, WorkflowConfig
-from frads.window import GlazingSystem, create_glazing_system, Gap, Gas
+from frads.window import create_glazing_system, Gap, Gas
 from frads.ep2rad import epmodel_to_radmodel
 from frads.eplus import load_energyplus_model
 import frads as fr
 import numpy as np
 import pytest
 from pyenergyplus.dataset import ref_models, weather_files
+import pyradiance as pr
 
 
 @pytest.fixture
@@ -72,13 +72,17 @@ def test_two_phase(cfg):
     assert res.shape == (195, 1)
 
 
-def test_three_phase(cfg, objects_dir):
+def test_three_phase(cfg, resources_dir, objects_dir):
     time = datetime(2023, 1, 1, 12)
     dni = 800
     dhi = 100
     config = WorkflowConfig.from_dict(cfg)
     lower_glass = objects_dir / "lower_glass.rad"
     upper_glass = objects_dir / "upper_glass.rad"
+    blind_prim = pr.Primitive(
+        "void", "aBSDF", "blinds30", [str(resources_dir/"blinds30.xml"), "0", "0", "1", "."], [])
+    config.model.windows["lower_glass"].glazing_material = {"blinds30": blind_prim}
+    config.model.windows["upper_glass"].glazing_material = {"blinds30": blind_prim}
     with ThreePhaseMethod(config) as workflow:
         workflow.generate_matrices(view_matrices=False)
         workflow.calculate_sensor(
@@ -90,7 +94,6 @@ def test_three_phase(cfg, objects_dir):
         )
         res = workflow.calculate_edgps(
             "view1",
-            [lower_glass, upper_glass],
             {"upper_glass": "blinds30", "lower_glass": "blinds30"},
             time,
             dni,
@@ -121,6 +124,9 @@ def test_eprad_threephase(resources_dir):
     zone_dict = rad_models[zone]
     zone_dict["model"]["views"]["view1"] = {"file": view_path, "xres": 16, "yres": 16}
     zone_dict["model"]["sensors"]["view1"] = {"data": [[17, 5, 4, 1, 0, 0]]}
+    zone_dict["model"]["materials"]["matrices"] = {
+        "ec60": {"matrix_file": shade_bsdf_path}
+    }
     rad_cfg = WorkflowConfig.from_dict(zone_dict)
     rad_cfg.settings.sensor_window_matrix = ["-ab", "0"]
     rad_cfg.settings.view_window_matrix = ["-ab", "0"]
@@ -130,11 +136,9 @@ def test_eprad_threephase(resources_dir):
         dni = 800
         dhi = 100
         dt = datetime(2023, 1, 1, 12)
-        tmx = fr.load_matrix(shade_bsdf_path)
         edgps = rad_workflow.calculate_edgps(
             view="view1",
-            shades=[shade_path],
-            bsdf={f"{zone}_Wall_South_Window": tmx},
+            bsdf={f"{zone}_Wall_South_Window": "ec60"},
             date_time=dt,
             dni=dni,
             dhi=dhi,
@@ -149,8 +153,6 @@ def test_eprad_threephase(resources_dir):
     assert rad_workflow.view_senders["view1"].view.vert == 180
     assert rad_workflow.view_senders["view1"].xres == 16
 
-    assert np.sum(tmx) != 0
-    assert tmx.shape == (145, 145, 3)
     assert list(rad_workflow.daylight_matrices.values())[0].array.shape == (145, 146, 3)
     assert (
         list(rad_workflow.sensor_window_matrices.values())[0].ncols == [145]

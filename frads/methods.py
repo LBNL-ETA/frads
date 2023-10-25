@@ -1,7 +1,7 @@
 """Typical Radiance matrix-based simulation workflows
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 import hashlib
 import logging
@@ -85,13 +85,14 @@ class SceneConfig:
 @dataclass
 class MatrixConfig:
     matrix_file: Union[str, Path] = ""
-    matrix_data: Optional[np.ndarray] = None
+    matrix_data: np.ndarray = field(default_factory=lambda: np.ones((145, 145, 3)))
 
     def __post_init__(self):
         if self.matrix_data is None:
             self.matrix_data = load_matrix(self.matrix_file)
         elif isinstance(self.matrix_data, list):
             self.matrix_data = np.array(self.matrix_data)
+
 
 @dataclass
 class ShadingGeometryConfig:
@@ -100,6 +101,7 @@ class ShadingGeometryConfig:
 
     def __post_init__(self):
         ...
+
 
 @dataclass
 class MaterialConfig:
@@ -150,8 +152,8 @@ class WindowConfig:
     file: Union[str, Path] = ""
     bytes: ByteString = b""
     matrix_file: str = ""
-    shading_geometry: Dict[str, ShadingGeometryConfig] = field(default_factory=dict)
-    tensor_tree_file: Union[str, Path] = ""
+    proxy_geometry: Dict[str, List[pr.Primitive]] = field(default_factory=dict)
+    glazing_material: Dict[str, pr.Primitive] = field(default_factory=dict)
     files_mtime: List[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
@@ -159,9 +161,6 @@ class WindowConfig:
             self.files_mtime.append(os.path.getmtime(self.file))
             if not isinstance(self.file, Path):
                 self.file = Path(self.file)
-        for k, v in self.shading_geometry.items():
-            if isinstance(v, dict):
-                self.shading_geometry[k] = ShadingGeometryConfig(**v)
         if self.bytes == b"":
             with open(self.file, "rb") as f:
                 self.bytes = f.read()
@@ -899,7 +898,7 @@ class ThreePhaseMethod(PhaseMethod):
     def calculate_sensor(
         self,
         sensor: str,
-        bsdf: Dict[str, Union[np.ndarray, str]],
+        bsdf: Dict[str, str],
         time: datetime,
         dni: float,
         dhi: float,
@@ -921,14 +920,7 @@ class ThreePhaseMethod(PhaseMethod):
             if len(bsdf) != len(self.config.model.windows):
                 raise ValueError("Number of BSDF should match number of windows.")
         for idx, _name in enumerate(self.config.model.windows):
-            if _name not in bsdf:
-                raise ValueError(f"Missing BSDF for window {_name}")
-            if isinstance(bsdf[_name], str):
-                _bsdf = self.config.model.materials.matrices[bsdf[_name]].matrix_data
-            elif isinstance(bsdf[_name], np.ndarray):
-                _bsdf = bsdf[_name]
-            else:
-                raise ValueError(f"Invalid BSDF for window {_name}")
+            _bsdf = self.config.model.materials.matrices[bsdf[_name]].matrix_data
             res.append(
                 matrix_multiply_rgb(
                     self.sensor_window_matrices[sensor].array[idx],
@@ -1023,13 +1015,12 @@ class ThreePhaseMethod(PhaseMethod):
     def calculate_edgps(
         self,
         view: str,
-        # shades: Union[List[pr.Primitive], List[str], List[Path]],
-        # bsdf: Union[np.ndarray, List[np.ndarray]],
-        bsdf: Dict[str, Union[np.ndarray, str]],
+        bsdf: Dict[str, str],
         date_time: datetime,
         dni: float,
         dhi: float,
         ambient_bounce: int = 1,
+        save_hdr: Optional[Union[str, Path]] = None,
     ) -> float:
         """Calculate enhanced simplified daylight glare probability (EDGPs) for a view.
 
@@ -1049,32 +1040,34 @@ class ThreePhaseMethod(PhaseMethod):
             EDGPs
         """
         # generate octree with bsdf
-        stdin = b""
-        stdin += gen_perez_sky(
+        stdins = []
+        stdins.append(gen_perez_sky(
             date_time,
             self.wea_metadata.latitude,
             self.wea_metadata.longitude,
             self.wea_metadata.timezone,
             dirnorm=dni,
             diffhor=dhi,
-        )
-        shade_paths = []
-        for shade in shades:
-            if isinstance(shade, pr.Primitive):
-                stdin += shade.bytes
-            elif isinstance(shade, (str, Path)):
-                shade_paths.append(str(shade))
-            else:
-                raise ValueError("Shade must be either a primitive or a file path")
+        ))
+        for wname, sname in bsdf.items():
+            if (_gms := self.config.model.windows[wname].glazing_material) != {}:
+                gmaterial = _gms[sname]
+                stdins.append(gmaterial.bytes)
+                for prim in self.window_senders[wname].surfaces:
+                    stdins.append(replace(prim, modifier=gmaterial.identifier).bytes)
+            if (_pgs := self.config.model.windows[wname].proxy_geometry) != {}:
+                for prim in _pgs[sname]:
+                    stdins.append(prim.bytes)
+
         octree = "test.oct"
         with open(octree, "wb") as f:
-            f.write(pr.oconv(*shade_paths, stdin=stdin, octree=self.octree))
+            f.write(pr.oconv(stdin=b"".join(stdins), octree=self.octree))
+
         # render image with -ab 1
         params = ["-ab", str(ambient_bounce)]
         hdr = pr.rpict(
             self.view_senders[view].view.args(),
             octree,
-            # fix resolution. Evalglare would complain if resolution too small
             xres=800,
             yres=800,
             params=params,
@@ -1086,8 +1079,12 @@ class ThreePhaseMethod(PhaseMethod):
             dni,
             dhi,
         )
+        if save_hdr is not None:
+            with open(save_hdr, "wb") as f:
+                f.write(hdr)
         res = pr.evalglare(hdr, ev=float(ev))
         edgps = float(res.split(b":")[1].split()[0])
+        os.remove(octree)
         return edgps
 
     def save_matrices(self):
