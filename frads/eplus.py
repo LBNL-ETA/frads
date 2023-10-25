@@ -526,7 +526,7 @@ class EnergyPlusSetup:
             if isinstance(node, ast.Call) and hasattr(node.func, "attr"):
                 callable_nodes.append(node)
         self._request_variables_from_callback(callable_nodes)
-        self._check_actuators_from_callback(callable_nodes)
+        # self._check_actuators_from_callback(callable_nodes)
 
 
     def get_direct_normal_irradiance(self) -> float:
