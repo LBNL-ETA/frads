@@ -470,7 +470,7 @@ class EnergyPlusSetup:
                     node.keywords[i].arg: node.keywords[i].value.value
                     for i in range(2)
                 }
-                zone = key_value_dict["zone"]
+                zone = key_value_dict.get("zone", key_value_dict.get("surface", None))
             else:
                 raise ValueError(f"Invalid number of arguments in {node}.")
             return zone
