@@ -70,8 +70,14 @@ class EnergyPlusSetup:
             self.rmodels = epmodel_to_radmodel(
                 epmodel, epw_file=weather_file, add_views=True
             )
-            self.rconfigs = {}
-            self.rworkflows = {}
+            self.rconfigs = {
+                k: WorkflowConfig.from_dict(v) for k, v in self.rmodels.items()
+            }
+            # Default to Three-Phase Method
+            self.rworkflows = {k: ThreePhaseMethod(v) for k, v in self.rconfigs.items()}
+            for v in self.rworkflows.values():
+                v.config.settings.save_matrices = True
+                v.generate_matrices(view_matrices=False)
         self.api = EnergyPlusAPI()
         self.epw = weather_file
         self.state = self.api.state_manager.new_state()
@@ -100,13 +106,6 @@ class EnergyPlusSetup:
 
     def initialize_radiance(self):
         """Initialize Radiance for Three-Phase Method."""
-        self.rconfigs = {
-            k: WorkflowConfig.from_dict(v) for k, v in self.rmodels.items()
-        }
-        # Default to Three-Phase Method
-        self.rworkflows = {k: ThreePhaseMethod(v) for k, v in self.rconfigs.items()}
-        for v in self.rworkflows.values():
-            v.generate_matrices(view_matrices=False)
 
     def close(self):
         self.api.state_manager.delete_state(self.state)
