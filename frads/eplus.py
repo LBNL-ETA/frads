@@ -5,241 +5,19 @@ Class and functions for accessing EnergyPlus Python API
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
-from typing import List, Optional, Callable, Union
+from typing import Dict, List, Optional, Callable, Union
 import inspect
 import ast
 
 from epmodel import epmodel as epm
-import epmodel
 from frads import sky
-from frads.window import GlazingSystem
-import copy
+from frads.ep2rad import epmodel_to_radmodel
+from frads.methods import (
+    WorkflowConfig,
+    ThreePhaseMethod,
+)
+from frads.eplus_model import EnergyPlusModel
 from pyenergyplus.api import EnergyPlusAPI
-
-
-class EnergyPlusModel(epmodel.EnergyPlusModel):
-    """EnergyPlus Model object
-
-    Attributes:
-        cfs: list of complex fenestration states
-        windows: list of windows
-        walls_window: list of walls with windows
-        floors: list of floors
-        lighting_zone: list of lighting zones
-        zones: list of zones
-    """
-
-    @property
-    def window_walls(self) -> List[str]:
-        """
-        Example:
-            >>> model.window_walls
-        """
-        if self.fenestration_surface_detailed is None:
-            return []
-        wndo_walls = {
-            srf.building_surface_name
-            for srf in self.fenestration_surface_detailed.values()
-        }
-        return list(wndo_walls)
-
-    @property
-    def floors(self):
-        """
-        Examples:
-            >>> model.floors
-        """
-        floors = []
-        if self.building_surface_detailed is None:
-            return []
-        for k, v in self.building_surface_detailed.items():
-            if v.surface_type == epm.SurfaceType.floor:
-                floors.append(k)
-        return floors
-
-    def add_glazing_system(self, glzsys: GlazingSystem):
-        """Add glazing system to EnergyPlusModel's epjs dictionary.
-
-        Args:
-            glzsys: GlazingSystem object
-
-        Raises:
-            ValueError: If solar and photopic results are not computed.
-
-        Example:
-            >>> model = load_energyplus_model(Path("model.idf"))
-            >>> model.add_glazing_system(glazing_system1)
-        """
-
-        name = glzsys.name
-        gap_inputs = []
-        for i, gap in enumerate(glzsys.gaps):
-            gap_inputs.append(
-                epmodel.ConstructionComplexFenestrationStateGapInput(
-                    gas=gap.gas[0].gas.capitalize(), thickness=gap.thickness
-                )
-            )
-        layer_inputs: List[epmodel.ConstructionComplexFenestrationStateLayerInput] = []
-        for i, layer in enumerate(glzsys.layers):
-            layer_inputs.append(
-                epmodel.ConstructionComplexFenestrationStateLayerInput(
-                    name=f"{glzsys.name}_layer_{i}",
-                    product_type=layer.product_type,
-                    thickness=layer.thickness,
-                    conductivity=layer.conductivity,
-                    emissivity_front=layer.emissivity_front,
-                    emissivity_back=layer.emissivity_back,
-                    infrared_transmittance=layer.ir_transmittance,
-                    directional_absorptance_front=glzsys.solar_front_absorptance[i],
-                    directional_absorptance_back=glzsys.solar_back_absorptance[i],
-                )
-            )
-        input = epmodel.ConstructionComplexFenestrationStateInput(
-            gaps=gap_inputs,
-            layers=layer_inputs,
-            solar_reflectance_back=glzsys.solar_back_reflectance,
-            solar_transmittance_back=glzsys.solar_back_transmittance,
-            visible_transmittance_back=glzsys.visible_back_reflectance,
-            visible_transmittance_front=glzsys.visible_front_transmittance,
-        )
-        self.add_construction_complex_fenestration_state(name, input)
-
-    def add_lighting(self, zone: str, replace: bool = False):
-        """Add lighting object to EnergyPlusModel's epjs dictionary.
-
-        Args:
-            zone: Zone name to add lighting to.
-            replace: If True, replace existing lighting object in zone.
-
-        Raises:
-            ValueError: If zone not found in model.
-            ValueError: If lighting already exists in zone and replace is False.
-
-        Example:
-            >>> model.add_lighting("Zone1")
-        """
-        if self.zone is None:
-            raise ValueError("Zone not found in model.")
-        if zone not in self.zone:
-            raise ValueError(f"{zone} not found in model.")
-        if self.lights is None:
-            raise ValueError("Lights not found in model.")
-        dict2 = copy.deepcopy(self.lights)
-
-        if self.lights is not None:
-            for light in dict2.values():
-                if light.zone_or_zonelist_or_space_or_spacelist_name == zone:
-                    if replace:
-                        del light
-                    else:
-                        raise ValueError(
-                            f"Lighting already exists in zone = {zone}. "
-                            "To replace, set replace=True."
-                        )
-
-        # Add lighting schedule type limit to epjs dictionary
-        self.add(
-            "schedule_type_limits",
-            "on_off",
-            epm.ScheduleTypeLimits(
-                lower_limit_value=0,
-                upper_limit_value=1,
-                numeric_type=epm.NumericType.discrete,
-                unit_type=epm.UnitType.availability,
-            ),
-        )
-
-        # Add lighting schedule to epjs dictionary
-        self.add(
-            "schedule_constant",
-            "constant_off",
-            epm.ScheduleConstant(
-                schedule_type_limits_name="on_off",
-                hourly_value=0,
-            ),
-        )
-
-        # Add lighting to epjs dictionary
-        self.add(
-            "lights",
-            f"Light_{zone}",
-            epm.Lights(
-                design_level_calculation_method=epm.DesignLevelCalculationMethod.lighting_level,
-                fraction_radiant=0,
-                fraction_replaceable=1,
-                fraction_visible=1,
-                lighting_level=0,
-                return_air_fraction=0,
-                schedule_name="constant_off",
-                zone_or_zonelist_or_space_or_spacelist_name=zone,
-            ),
-        )
-
-    def add_output(
-        self, output_type: str, output_name: str, reporting_frequency: str = "Timestep"
-    ):
-        """Add an output variable or meter to the epjs dictionary.
-
-        Args:
-            output_type: Type of the output. "variable" or "meter".
-            output_name: Name of the output variable or meter.
-            reporting_frequency: Reporting frequency of the output variable or meter.
-
-        Raises:
-            ValueError: If output_type is not "variable" or "meter".
-
-        Example:
-            >>> model.add_output("Zone Mean Air Temperature", "variable")
-            >>> model.add_output("Cooling:Electricity", "meter")
-        """
-
-        if output_type == "variable":
-            self._add_output_variable(output_name, reporting_frequency)
-        elif output_type == "meter":
-            self._add_output_meter(output_name, reporting_frequency)
-        else:
-            raise ValueError("output_type must be 'variable' or 'meter'.")
-
-    def _add_output_variable(self, output_name: str, reporting_frequency):
-        """Add an output variable to the epjs dictionary.
-
-        Args:
-            output_name: Name of the output variable.
-            reporting_frequency: Reporting frequency of the output variable.
-        """
-        i = 1
-        if self.output_variable is None:
-            self.output_variable = {}
-        for output in self.output_variable.values():
-            i += 1
-            if output.variable_name == output_name:
-                break
-        else:
-            self.output_variable[f"Output:Variable {i}"] = epm.OutputVariable(
-                key_value="*",
-                reporting_frequency=reporting_frequency,
-                variable_name=output_name,
-            )
-
-    def _add_output_meter(self, output_name: str, reporting_frequency):
-        """Add an output meter to the epjs dictionary.
-
-        Args:
-            output_name: Name of the output meter.
-            reporting_frequency: Reporting frequency of the output meter.
-        """
-        i = 1
-        if self.output_meter is None:
-            self.output_meter = {}
-        for output in self.output_meter.values():
-            i += 1
-            if output.key_name == output_name:
-                break
-        else:
-            self.output_meter[f"Output:Meter {i}"] = epm.OutputMeter(
-                key_name=output_name,
-                reporting_frequency=reporting_frequency,
-            )
 
 
 def ep_datetime_parser(inp: str):
@@ -273,7 +51,12 @@ class EnergyPlusSetup:
         wea_meta: WeaMetaData object
     """
 
-    def __init__(self, epmodel: EnergyPlusModel, weather_file: Optional[str] = None):
+    def __init__(
+        self,
+        epmodel: EnergyPlusModel,
+        weather_file: Optional[str] = None,
+        enable_radiance: bool = False,
+    ):
         """Class for setting up and running EnergyPlus simulations.
 
         Args:
@@ -283,6 +66,17 @@ class EnergyPlusSetup:
             >>> epsetup = EnergyPlusSetup(epmodel, epw="USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
         """
         self.model = epmodel
+        if enable_radiance:
+            self.rmodels = epmodel_to_radmodel(
+                epmodel, epw_file=weather_file, add_views=True
+            )
+            self.rconfigs = {
+                k: WorkflowConfig.from_dict(v) for k, v in self.rmodels.items()
+            }
+            # Default to Three-Phase Method
+            self.rworkflows = {k: ThreePhaseMethod(v) for k, v in self.rconfigs.items()}
+            for v in self.rworkflows.values():
+                v.generate_matrices(view_matrices=False)
         self.api = EnergyPlusAPI()
         self.epw = weather_file
         self.state = self.api.state_manager.new_state()
@@ -290,6 +84,7 @@ class EnergyPlusSetup:
         self.variable_handles = {}
         self.actuator_handles = {}
         self.construction_handles = {}
+        self.enable_radiance = enable_radiance
 
         if self.model.site_location is None:
             raise ValueError("Site location not found in EnergyPlus model.")
@@ -395,24 +190,9 @@ class EnergyPlusSetup:
             zone: The name of the zone to set the cooling setpoint for.
             value: The value to set the cooling setpoint to.
 
-        Raises:
-            ValueError: If the zone is not found.
-            ValueError: If the zone does not have a thermostat.
-
         Example:
             >>> epsetup.actuate_cooling_setpoint("zone1", 24)
         """
-        zone_stat = set(
-            [
-                self.model.zone_control_thermostat[stat].zone_or_zonelist_name
-                for stat in self.model.zone_control_thermostat
-            ]
-        )
-        if zone not in self.model.zone:
-            raise ValueError(f"Zone {zone} not found in model.")
-        elif zone not in zone_stat:
-            raise ValueError(f"Zone {zone} does not have a thermostat.")
-
         self.actuate(
             component_type="Zone Temperature Control",
             name="Cooling Setpoint",
@@ -427,24 +207,9 @@ class EnergyPlusSetup:
             zone: The name of the zone to set the heating setpoint for.
             value: The value to set the heating setpoint to.
 
-        Raises:
-            ValueError: If the zone is not found.
-            ValueError: If the zone does not have a thermostat.
-
         Example:
             >>> epsetup.actuate_cooling_setpoint("zone1", 20)
         """
-        zone_stat = set(
-            [
-                self.model.zone_control_thermostat[stat].zone_or_zonelist_name
-                for stat in self.model.zone_control_thermostat
-            ]
-        )
-        if zone not in self.model.zone:
-            raise ValueError(f"Zone {zone} not found in model.")
-        elif zone not in zone_stat:
-            raise ValueError(f"Zone {zone} does not have a thermostat.")
-
         self.actuate(
             component_type="Zone Temperature Control",
             name="Heating Setpoint",
@@ -459,24 +224,9 @@ class EnergyPlusSetup:
             zone: The name of the zone to set the lighting power for.
             value: The value to set the lighting power to.
 
-        Raises:
-            ValueError: If the zone is not found.
-            ValueError: If the zone does not have lighting.
-
         Example:
             >>> epsetup.actuate_lighting_power("zone1", 1000)
         """
-        zone_lgt = set(
-            [
-                self.model.lights[lgt].zone_or_zonelist_or_space_or_spacelist_name
-                for lgt in self.model.lights
-            ]
-        )
-        if zone not in self.model.zone:
-            raise ValueError(f"Zone {zone} not found in model.")
-        elif zone not in zone_lgt:
-            raise ValueError(f"Zone {zone} does not have lighting.")
-
         self.actuate(
             component_type="Lights",
             name="Lighting Level",
@@ -491,20 +241,9 @@ class EnergyPlusSetup:
             surface: The name of the surface to set the cfs state for.
             construction_state: The name of the cfs state to set the surface to.
 
-        Raises:
-            ValueError: If the surface is not found.
-            ValueError: If the cfs state is not found.
-
         Example:
             >>> epsetup.actuate_construction_state("window1", "cfs1")
         """
-        if surface not in self.model.fenestration_surface_detailed:
-            raise ValueError(f"Surface {surface} not found in model.")
-        elif (
-            construction_state not in self.model.construction_complex_fenestration_state
-        ):
-            raise ValueError(f"CFS state {construction_state} not found in model.")
-
         self.actuate(
             component_type="Surface",
             name="Construction State",
@@ -589,19 +328,7 @@ class EnergyPlusSetup:
         hour = self.api.exchange.hour(self.state)
         minute = self.api.exchange.minutes(self.state)
 
-        date = datetime(year, month, day)
-
-        if minute == 60:
-            minute = 0
-            hour += 1
-
-        if hour == 24:
-            hour = 0
-            date += timedelta(days=1)
-
-        dt = date + timedelta(hours=hour, minutes=minute)
-
-        return dt
+        return datetime(year, month, day, hour, minute)
 
     def run(
         self,
@@ -700,6 +427,90 @@ class EnergyPlusSetup:
         # method(self.state, partial(func, self))
         method(self.state, func)
 
+    def _request_variables_from_callback(self, callable_nodes: List[ast.Call]) -> None:
+        key_value_pairs = set()
+        for node in callable_nodes:
+            if node.func.attr == "get_variable_value":
+                if len(node.args) == 2:
+                    key_value_dict = {
+                        "name": ast.literal_eval(node.args[0]),
+                        "key": ast.literal_eval(node.args[1]),
+                    }
+                elif len(node.keywords) == 2:
+                    key_value_dict = {
+                        node.keywords[0].arg: node.keywords[0].value.value,
+                        node.keywords[1].arg: node.keywords[1].value.value,
+                    }
+                else:
+                    raise ValueError(f"Invalid number of arguments in {func}.")
+                key_value_pairs.add(key_value_dict)
+            elif node.func.attr == "get_diffuse_horizontal_irradiance":
+                key_value_pairs.add(
+                    {"name": "Site Diffuse Solar Radiation Rate per Area", "key": "Environment"}
+                )
+            elif node.func.attr == "get_direct_normal_irradiance":
+                key_value_pairs.add(
+                    {"name": "Site Direct Solar Radiation Rate per Area", "key": "Environment"}
+                )
+            elif node.func.attr in ("calculate_wpi", "calculate_edgps"):
+                key_value_pairs.add(
+                    {"name": "Site Diffuse Solar Radiation Rate per Area", "key": "Environment"}
+                )
+                key_value_pairs.add(
+                    {"name": "Site Direct Solar Radiation Rate per Area", "key": "Environment"}
+                )
+        for key_value_dict in key_value_pairs:
+            self.request_variable(**key_value_dict)
+
+
+    def _check_actuators_from_callback(self, callable_nodes: List[ast.Call]) -> None:
+        def get_zone_from_pair_arg(node: ast.Call) -> str:
+            if len(node.args) == 2:
+                zone = ast.literal_eval(node.args[0])
+            elif len(node.keywords) == 2:
+                key_value_dict = {
+                    node.keywords[i].arg: node.keywords[i].value.value
+                    for i in range(2)
+                }
+                zone = key_value_dict["zone"]
+            else:
+                raise ValueError(f"Invalid number of arguments in {node}.")
+            return zone
+
+        for node in callable_nodes:
+            key_value = None
+            if node.func.attr == "actuate":
+                if len(node.args) == 4:
+                    key_value = [ast.literal_eval(node.args[i]) for i in range(3)]
+                elif len(node.keywords) == 4:
+                    key_value_dict = {
+                        node.keywords[i].arg: node.keywords[i].value.value
+                        for i in range(4)
+                    }
+                    key_value = [
+                        key_value_dict["component_type"],
+                        key_value_dict["name"],
+                        key_value_dict["key"],
+                    ]
+                else:
+                    raise ValueError(f"Invalid number of arguments in {node}.")
+            elif node.func.attr == "actuate_cfs_state":
+                zone = get_zone_from_pair_arg(node)
+                key_value = ["Surface", "Construction State", zone]
+            elif node.func.attr == "actuate_cooling_setpoint":
+                zone = get_zone_from_pair_arg(node)
+                key_value = ["Zone Temperature Control", "Cooling Setpoint", zone]
+            elif node.func.attr == "actuate_heating_setpoint":
+                zone = get_zone_from_pair_arg(node)
+                key_value = ["Zone Temperature Control", "Heating Setpoint", zone]
+            elif node.func.attr == "actuate_lighting_power":
+                zone = get_zone_from_pair_arg(node)
+                key_value = ["Lights", "Lighting Level", zone]
+            if key_value is None:
+                continue
+            if key_value not in self.actuators:
+                raise ValueError(f"Actuator {key_value} not found in model.")
+
     def _analyze_callback(self, func: Callable) -> None:
         """Request variables from callback function.
 
@@ -711,45 +522,93 @@ class EnergyPlusSetup:
         """
         source_code = inspect.getsource(func)
         tree = ast.parse(source_code)
-        key_value_pairs = []
+        callable_nodes = []
 
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and hasattr(node.func, "attr"):
-                if node.func.attr == "get_variable_value":
-                    if len(node.args) == 2:
-                        key_value_dict = {
-                            "name": ast.literal_eval(node.args[0]),
-                            "key": ast.literal_eval(node.args[1]),
-                        }
-                    elif len(node.keywords) == 2:
-                        key_value_dict = {
-                            node.keywords[0].arg: node.keywords[0].value.value,
-                            node.keywords[1].arg: node.keywords[1].value.value,
-                        }
-                    else:
-                        raise ValueError(f"Invalid number of arguments in {func}.")
-                    key_value_pairs.append(key_value_dict)
+                callable_nodes.append(node)
+        self._request_variables_from_callback(callable_nodes)
+        self._check_actuators_from_callback(callable_nodes)
 
-                elif node.func.attr == "actuate":
-                    if len(node.args) == 4:
-                        key_value = [ast.literal_eval(node.args[i]) for i in range(3)]
-                    elif len(node.keywords) == 4:
-                        key_value_dict = {
-                            node.keywords[i].arg: node.keywords[i].value.value
-                            for i in range(4)
-                        }
-                        key_value = [
-                            key_value_dict["component_type"],
-                            key_value_dict["name"],
-                            key_value_dict["key"],
-                        ]
-                    else:
-                        raise ValueError(f"Invalid number of arguments in {func}.")
-                    if key_value not in self.actuators:
-                        raise ValueError(f"Actuator {key_value} not found in model.")
 
-        for key_value_dict in key_value_pairs:
-            self.request_variable(**key_value_dict)
+    def get_direct_normal_irradiance(self) -> float:
+        """Get direct normal irradiance.
+
+        Returns:
+            Direct normal irradiance in W/m2.
+
+        Example:
+            >>> epsetup.get_direct_normal_irradiance()
+        """
+        return self.get_variable_value(
+            "Site Direct Solar Radiation Rate per Area", "Environment"
+        )
+
+
+    def get_diffuse_horizontal_irradiance(self) -> float:
+        """Get diffuse horizontal irradiance.
+
+        Returns:
+            Diffuse horizontal irradiance in W/m2.
+
+        Example:
+            >>> epsetup.get_diffuse_horizontal_irradiance()
+        """
+        return self.get_variable_value(
+            "Site Diffuse Solar Radiation Rate per Area", "Environment"
+        )
+
+    def calculate_wpi(
+        self, zone_name: str, cfs_name: Dict[str, str]
+    ):
+        """Calculate workplane illuminance in a zone.
+
+        Args:
+            zone_name: Name of the zone.
+            cfs_name: Name of the complex fenestration state.
+
+        Returns:
+            Workplane illuminance in lux.
+
+        Raises:
+            ValueError: If zone not found in model.
+
+        Example:
+            >>> epsetup.calculate_wpi("Zone1", "CFS1")
+        """
+        if not self.enable_radiance:
+            raise ValueError("Radiance is not enabled.")
+        date_time = self.get_datetime()
+        dni = self.get_direct_normal_irradiance()
+        dhi = self.get_diffuse_horizontal_irradiance()
+        sensor_name = next(iter(self.rconfigs[zone_name].model.sensors.keys()))
+        return self.rworkflows[zone_name].calculate_sensor(
+            sensor_name, cfs_name, date_time, dni, dhi
+        )
+
+    def calculate_edgps(self, zone_name: str, cfs_name: Dict[str, str]):
+        """Calculate enhanced simplified daylight glare probability in a zone.
+
+        Args:
+            zone_name: Name of the zone.
+            cfs_name: Dictionary of windows and their complex fenestration state.
+
+        Returns:
+            Enhanced simplified daylight glare probability.
+
+        Raises:
+            KeyError: If zone not found in model.
+
+        Example:
+            >>> epsetup.calculate_edgps("Zone1", "CFS1")
+        """
+        date_time = self.get_datetime()
+        dni = self.get_direct_normal_irradiance()
+        dhi = self.get_diffuse_horizontal_irradiance()
+        view_name = next(iter(self.rconfigs[zone_name].model.views.keys()))
+        return self.rworkflows[zone_name].calculate_edgps(
+            view_name, cfs_name, date_time, dni, dhi
+        )
 
 
 def load_idf(fpath: Union[str, Path]) -> dict:

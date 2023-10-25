@@ -1,4 +1,4 @@
-from dataclasses import asdict, is_dataclass, dataclass, field
+from dataclasses import asdict, dataclass, field
 import json
 from pathlib import Path
 import tempfile
@@ -123,20 +123,23 @@ class GlazingSystem:
                 )
 
     def save(self, out: Union[str, Path]):
+        """Save the glazing system to a file."""
         out = Path(out)
         if out.suffix == ".xml":
             self.to_xml(out)
-        elif out.suffix == ".json":
-            with open(out, "w") as f:
+        else:
+            with open(out.with_suffix(".json"), "w") as f:
                 json.dump(asdict(self), f)
 
     @classmethod
     def from_json(cls, path: Union[str, Path]):
+        """Load a glazing system from a JSON file."""
         with open(path, "r") as f:
             data = json.load(f)
         return cls(**data)
 
     def get_brtdfunc(self) -> pr.Primitive:
+        """Get a BRTDfunc primitive for the glazing system."""
         if any(layer.product_type != "glazing" for layer in self.layers):
             raise ValueError("Only glass layers supported.")
         if len(self.layers) > 2:
@@ -146,6 +149,7 @@ class GlazingSystem:
 
 
 def get_layers(input: List[pwc.ProductData]) -> List[Layer]:
+    """Create a list of layers from a list of pwc.ProductData."""
     layers = []
     for inp in input:
         layers.append(
@@ -239,6 +243,7 @@ def create_glazing_system(
 
 
 def get_layer_rgb(layer: pwc.ProductData) -> PaneRGB:
+    """Get the RGB values for a pane layer."""
     photopic_wvl = range(380, 781, 10)
     if isinstance(layer.measurements, pwc.DualBandBSDF):
         return PaneRGB(
