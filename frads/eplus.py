@@ -395,13 +395,12 @@ class EnergyPlusSetup:
                 )
             }
 
-        if self.model.output_control_timestamp is None:
-            self.model.output_control_timestamp = {
-                "OutputControl:Timestamp 1": epm.OutputControlTimestamp(
-                    iso_8601_format=epm.EPBoolean.yes,
-                    timestamp_at_beginning_of_interval=epm.EPBoolean.yes,
-                )
-            }
+        self.model.output_control_timestamp = {
+            "OutputControl:Timestamp 1": epm.OutputControlTimestamp(
+                iso_8601_format=epm.EPBoolean.yes,
+                timestamp_at_beginning_of_interval=epm.EPBoolean.yes,
+            )
+        }
 
         with open(f"{output_prefix}.json", "w") as wtr:
             wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
