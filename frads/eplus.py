@@ -395,13 +395,12 @@ class EnergyPlusSetup:
                 )
             }
 
-        if self.model.output_control_timestamp is None:
-            self.model.output_control_timestamp = {
-                "OutputControl:Timestamp 1": epm.OutputControlTimestamp(
-                    iso8601_format=epm.EPBoolean.yes,
-                    timestamp_at_beginning_of_interval=epm.EPBoolean.yes,
-                )
-            }
+        self.model.output_control_timestamp = {
+            "OutputControl:Timestamp 1": epm.OutputControlTimestamp(
+                iso_8601_format=epm.EPBoolean.yes,
+                timestamp_at_beginning_of_interval=epm.EPBoolean.yes,
+            )
+        }
 
         with open(f"{output_prefix}.json", "w") as wtr:
             wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
@@ -476,7 +475,7 @@ class EnergyPlusSetup:
                 key_value_dict = {
                     node.keywords[i].arg: node.keywords[i].value.value for i in range(2)
                 }
-                zone = key_value_dict["zone"]
+                zone = key_value_dict.get("zone", key_value_dict.get("surface", None))
             else:
                 raise ValueError(f"Invalid number of arguments in {node}.")
             return zone
@@ -532,7 +531,7 @@ class EnergyPlusSetup:
             if isinstance(node, ast.Call) and hasattr(node.func, "attr"):
                 callable_nodes.append(node)
         self._request_variables_from_callback(callable_nodes)
-        self._check_actuators_from_callback(callable_nodes)
+        # self._check_actuators_from_callback(callable_nodes)
 
     def get_direct_normal_irradiance(self) -> float:
         """Get direct normal irradiance.

@@ -329,7 +329,7 @@ class EnergyPlusToRadianceModelConverter:
                 cname,
                 "default",
                 layers,
-                sum(self.materials[layer].thickness for layer in layers),
+                sum(self.materials[layer.lower()].thickness for layer in layers),
             )
         cfs, matrices = parse_construction_complex_fenestration_state(self.model)
         for key, val in matrices.items():
@@ -356,7 +356,7 @@ class EnergyPlusToRadianceModelConverter:
             func = f"parse_{key}".lower()
             if (mdict := getattr(self.model, key)) is not None:
                 for name, material in mdict.items():
-                    materials[name] = globals()[func](name, material)
+                    materials[name.lower()] = globals()[func](name, material)
         return materials
 
     def _process_zone(self, zone_name: str) -> dict:
