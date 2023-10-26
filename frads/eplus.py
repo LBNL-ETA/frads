@@ -236,7 +236,7 @@ class EnergyPlusSetup:
         """
         self.actuate(
             component_type="Lights",
-            name="Lighting Level",
+            name="Electricity Rate",
             key=zone,
             value=value,
         )
@@ -453,13 +453,20 @@ class EnergyPlusSetup:
                     raise ValueError(f"Invalid number of arguments in {func}.")
                 self.request_variable(**key_value_dict)
             elif node.func.attr == "get_diffuse_horizontal_irradiance":
-                self.request_variable(name="Site Diffuse Solar Radiation Rate per Area", key="Environment")
+                self.request_variable(
+                    name="Site Diffuse Solar Radiation Rate per Area", key="Environment"
+                )
             elif node.func.attr == "get_direct_normal_irradiance":
-                self.request_variable(name="Site Direct Solar Radiation Rate per Area", key="Environment")
+                self.request_variable(
+                    name="Site Direct Solar Radiation Rate per Area", key="Environment"
+                )
             elif node.func.attr in ("calculate_wpi", "calculate_edgps"):
-                self.request_variable(name="Site Diffuse Solar Radiation Rate per Area", key="Environment")
-                self.request_variable(name="Site Direct Solar Radiation Rate per Area", key="Environment")
-
+                self.request_variable(
+                    name="Site Diffuse Solar Radiation Rate per Area", key="Environment"
+                )
+                self.request_variable(
+                    name="Site Direct Solar Radiation Rate per Area", key="Environment"
+                )
 
     def _check_actuators_from_callback(self, callable_nodes: List[ast.Call]) -> None:
         def get_zone_from_pair_arg(node: ast.Call) -> str:
@@ -467,8 +474,7 @@ class EnergyPlusSetup:
                 zone = ast.literal_eval(node.args[0])
             elif len(node.keywords) == 2:
                 key_value_dict = {
-                    node.keywords[i].arg: node.keywords[i].value.value
-                    for i in range(2)
+                    node.keywords[i].arg: node.keywords[i].value.value for i in range(2)
                 }
                 zone = key_value_dict["zone"]
             else:
@@ -528,7 +534,6 @@ class EnergyPlusSetup:
         self._request_variables_from_callback(callable_nodes)
         self._check_actuators_from_callback(callable_nodes)
 
-
     def get_direct_normal_irradiance(self) -> float:
         """Get direct normal irradiance.
 
@@ -541,7 +546,6 @@ class EnergyPlusSetup:
         return self.get_variable_value(
             "Site Direct Solar Radiation Rate per Area", "Environment"
         )
-
 
     def get_diffuse_horizontal_irradiance(self) -> float:
         """Get diffuse horizontal irradiance.
@@ -556,9 +560,7 @@ class EnergyPlusSetup:
             "Site Diffuse Solar Radiation Rate per Area", "Environment"
         )
 
-    def calculate_wpi(
-        self, zone_name: str, cfs_name: Dict[str, str]
-    ):
+    def calculate_wpi(self, zone_name: str, cfs_name: Dict[str, str]):
         """Calculate workplane illuminance in a zone.
 
         Args:
