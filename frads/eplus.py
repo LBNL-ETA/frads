@@ -224,11 +224,11 @@ class EnergyPlusSetup:
             value=value,
         )
 
-    def actuate_lighting_power(self, light_name: str, value: float):
+    def actuate_lighting_power(self, light: str, value: float):
         """Set lighting power for a zone.
 
         Args:
-            light_name: The name of the lighting object to set the lighting power for.
+            light: The name of the lighting object to set the lighting power for.
             value: The value to set the lighting power to.
 
         Example:
@@ -237,16 +237,16 @@ class EnergyPlusSetup:
         self.actuate(
             component_type="Lights",
             name="Electricity Rate",
-            key=light_name,
+            key=light,
             value=value,
         )
 
-    def actuate_cfs_state(self, surface: str, construction_state: str):
+    def actuate_cfs_state(self, window: str, cfs_state: str):
         """Set construction state for a surface.
 
         Args:
-            surface: The name of the surface to set the cfs state for.
-            construction_state: The name of the cfs state to set the surface to.
+            window: The name of the surface to set the cfs state for.
+            cfs_state: The name of the complex fenestration system (CFS) state to set the surface to.
 
         Example:
             >>> epsetup.actuate_construction_state("window1", "cfs1")
@@ -254,8 +254,8 @@ class EnergyPlusSetup:
         self.actuate(
             component_type="Surface",
             name="Construction State",
-            key=surface,
-            value=self.construction_handles[construction_state],
+            key=window,
+            value=self.construction_handles[cfs_state],
         )
 
     def get_variable_value(self, name: str, key: str) -> float:
@@ -559,11 +559,11 @@ class EnergyPlusSetup:
             "Site Diffuse Solar Radiation Rate per Area", "Environment"
         )
 
-    def calculate_wpi(self, zone_name: str, cfs_name: Dict[str, str]):
+    def calculate_wpi(self, zone: str, cfs_name: Dict[str, str]):
         """Calculate workplane illuminance in a zone.
 
         Args:
-            zone_name: Name of the zone.
+            zone: Name of the zone.
             cfs_name: Name of the complex fenestration state.
 
         Returns:
@@ -580,16 +580,16 @@ class EnergyPlusSetup:
         date_time = self.get_datetime()
         dni = self.get_direct_normal_irradiance()
         dhi = self.get_diffuse_horizontal_irradiance()
-        sensor_name = next(iter(self.rconfigs[zone_name].model.sensors.keys()))
-        return self.rworkflows[zone_name].calculate_sensor(
+        sensor_name = next(iter(self.rconfigs[zone].model.sensors.keys()))
+        return self.rworkflows[zone].calculate_sensor(
             sensor_name, cfs_name, date_time, dni, dhi
         )
 
-    def calculate_edgps(self, zone_name: str, cfs_name: Dict[str, str]):
+    def calculate_edgps(self, zone: str, cfs_name: Dict[str, str]):
         """Calculate enhanced simplified daylight glare probability in a zone.
 
         Args:
-            zone_name: Name of the zone.
+            zone: Name of the zone.
             cfs_name: Dictionary of windows and their complex fenestration state.
 
         Returns:
@@ -604,8 +604,8 @@ class EnergyPlusSetup:
         date_time = self.get_datetime()
         dni = self.get_direct_normal_irradiance()
         dhi = self.get_diffuse_horizontal_irradiance()
-        view_name = next(iter(self.rconfigs[zone_name].model.views.keys()))
-        return self.rworkflows[zone_name].calculate_edgps(
+        view_name = next(iter(self.rconfigs[zone].model.views.keys()))
+        return self.rworkflows[zone].calculate_edgps(
             view_name, cfs_name, date_time, dni, dhi
         )
 
