@@ -275,7 +275,7 @@ def parse_construction_complex_fenestration_state(
     for key, val in construction.items():
         names = {
             "tvf": val.visible_optical_complex_front_transmittance_matrix_name,
-            "tvb": val.visible_optical_complex_back_transmittance_matrix_name,
+            "rvb": val.visible_optical_complex_back_transmittance_matrix_name,
             "tsf": val.solar_optical_complex_front_transmittance_matrix_name,
             "rsb": val.solar_optical_complex_back_reflectance_matrix_name,
         }
@@ -334,7 +334,7 @@ class EnergyPlusToRadianceModelConverter:
         cfs, matrices = parse_construction_complex_fenestration_state(self.model)
         for key, val in matrices.items():
             nested = []
-            mtx = val["tvb"]
+            mtx = val["tvf"]
             for i in range(0, len(mtx["values"]), mtx["nrows"]):
                 nested.append(mtx["values"][i : i + mtx["ncolumns"]])
             self.matrices[key] = {
