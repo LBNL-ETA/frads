@@ -260,7 +260,7 @@ class Settings:
     """
 
     name: str = field(default="")
-    num_processors: int = 1
+    num_processors: int = 4
     method: str = field(default="3phase")
     overwrite: bool = False
     save_matrices: bool = False
