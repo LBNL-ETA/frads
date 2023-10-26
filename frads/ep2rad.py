@@ -152,7 +152,7 @@ def surface_to_polygon(srf: BuildingSurfaceDetailed) -> Polygon:
 
 
 def thicken(
-    surface: Polygon, windows: List[Polygon], thickness: float
+    surface: Polygon, windows: List[Polygon], thickness: float,
 ) -> List[Polygon]:
     """Thicken window-wall."""
     direction = surface.normal * thickness

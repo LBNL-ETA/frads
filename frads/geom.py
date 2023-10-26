@@ -60,22 +60,22 @@ class Polygon:
 
         """
         pt1 = self._vertices[0]
-        distances1 = np.linalg.norm(other.vertices - pt1, axis=1)
+        distances1 = np.linalg.norm(other._vertices - pt1, axis=1)
         idx_min = np.argmin(distances1)
         new_other_vert = np.concatenate(
-            (other.vertices[idx_min:], other.vertices[:idx_min])
+            (other._vertices[idx_min:], other._vertices[:idx_min])
         )
         results = [pt1]
         results.append(new_other_vert[0])
         results.extend(reversed(new_other_vert[1:]))
         results.append(new_other_vert[0])
-        results.extend(self.vertices)
+        results.extend(self._vertices)
         return Polygon(results)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Polygon):
             return NotImplemented
-        if len(other.vertices) != len(self.vertices):
+        if len(other._vertices) != len(self._vertices):
             return False
         if set(map(tuple, self._vertices)) == set(map(tuple, other.vertices)):
             return True
@@ -83,8 +83,12 @@ class Polygon:
 
     def _calculate_normal(self):
         vector1 = self._vertices[1] - self._vertices[0]
-        vector2 = self._vertices[2] - self._vertices[0]
-        normal_vector = np.cross(vector1, vector2)
+        normal_vector = np.array((0.0, 0.0, 0.0))
+        for i in range(2, len(self._vertices)):
+            vector2 = self._vertices[i] - self._vertices[0]
+            normal_vector = np.cross(vector1, vector2)
+            if np.linalg.norm(normal_vector) > 0:
+                break
         return normal_vector / np.linalg.norm(normal_vector)
 
     def _calculate_area(self) -> np.ndarray:
@@ -122,12 +126,12 @@ class Polygon:
         """
         Return the extreme values of the polygon.
         """
-        xmin = self.vertices[:, 0].min()
-        xmax = self.vertices[:, 0].max()
-        ymin = self.vertices[:, 1].min()
-        ymax = self.vertices[:, 1].max()
-        zmin = self.vertices[:, 2].min()
-        zmax = self.vertices[:, 2].max()
+        xmin = self._vertices[:, 0].min()
+        xmax = self._vertices[:, 0].max()
+        ymin = self._vertices[:, 1].min()
+        ymax = self._vertices[:, 1].max()
+        zmin = self._vertices[:, 2].min()
+        zmax = self._vertices[:, 2].max()
         return xmin, xmax, ymin, ymax, zmin, zmax
 
     def rotate(self, center, vector, angle) -> "Polygon":
@@ -161,26 +165,26 @@ class Polygon:
 
         """
         polygons = [self]
-        polygon2 = Polygon(([i + vector for i in self.vertices]))
+        polygon2 = Polygon(([i + vector for i in self._vertices]))
         polygons.append(polygon2)
-        for i in range(len(self.vertices) - 1):
+        for i in range(len(self._vertices) - 1):
             polygons.append(
                 Polygon(
                     [
-                        self.vertices[i],
-                        polygon2.vertices[i],
-                        polygon2.vertices[i + 1],
-                        self.vertices[i + 1],
+                        self._vertices[i],
+                        polygon2._vertices[i],
+                        polygon2._vertices[i + 1],
+                        self._vertices[i + 1],
                     ]
                 )
             )
         polygons.append(
             Polygon(
                 [
-                    self.vertices[-1],
-                    polygon2.vertices[-1],
-                    polygon2.vertices[0],
-                    self.vertices[0],
+                    self._vertices[-1],
+                    polygon2._vertices[-1],
+                    polygon2._vertices[0],
+                    self._vertices[0],
                 ]
             )
         )
