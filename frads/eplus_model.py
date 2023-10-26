@@ -115,10 +115,10 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
         dict2 = copy.deepcopy(self.lights)
 
         if self.lights is not None:
-            for light in dict2.values():
-                if light.zone_or_zonelist_or_space_or_spacelist_name == zone:
+            for k, v in dict2.items():
+                if v.zone_or_zonelist_or_space_or_spacelist_name == zone:
                     if replace:
-                        del light
+                        del self.lights[k]
                     else:
                         raise ValueError(
                             f"Lighting already exists in zone = {zone}. "
@@ -150,7 +150,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
         # Add lighting to epjs dictionary
         self.add(
             "lights",
-            f"Light_{zone}",
+            zone,
             epm.Lights(
                 design_level_calculation_method=epm.DesignLevelCalculationMethod.lighting_level,
                 fraction_radiant=0,

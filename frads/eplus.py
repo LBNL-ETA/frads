@@ -224,11 +224,11 @@ class EnergyPlusSetup:
             value=value,
         )
 
-    def actuate_lighting_power(self, zone: str, value: float):
+    def actuate_lighting_power(self, light_name: str, value: float):
         """Set lighting power for a zone.
 
         Args:
-            zone: The name of the zone to set the lighting power for.
+            light_name: The name of the lighting object to set the lighting power for.
             value: The value to set the lighting power to.
 
         Example:
@@ -237,7 +237,7 @@ class EnergyPlusSetup:
         self.actuate(
             component_type="Lights",
             name="Electricity Rate",
-            key=zone,
+            key=light_name,
             value=value,
         )
 
@@ -508,7 +508,7 @@ class EnergyPlusSetup:
                 key_value = ["Zone Temperature Control", "Heating Setpoint", zone]
             elif node.func.attr == "actuate_lighting_power":
                 zone = get_zone_from_pair_arg(node)
-                key_value = ["Lights", "Lighting Level", zone]
+                key_value = ["Lights", "Electricity Rate", zone]
             if key_value is None:
                 continue
             if key_value not in self.actuators:
