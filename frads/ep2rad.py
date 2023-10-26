@@ -524,7 +524,7 @@ class EnergyPlusToRadianceModelConverter:
         self, name: str, fenestration: FenestrationSurfaceDetailed, zone_center: np.ndarray
     ) -> Tuple[Polygon, pr.Primitive]:
         fenenstration_polygon = fenestration_to_polygon(fenestration)
-        if not check_outward(fenenstration_polygon, zone_center):
+        if check_outward(fenenstration_polygon, zone_center):
             fenenstration_polygon = fenenstration_polygon.flip()
         _construction = self.constructions[fenestration.construction_name]
         if _construction.type == "cfs":
