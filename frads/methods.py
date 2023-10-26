@@ -45,7 +45,6 @@ from pyradiance.model import parse_view
 from scipy.sparse import csr_matrix
 
 
-
 logger: logging.Logger = logging.getLogger("frads.methods")
 
 
@@ -840,11 +839,20 @@ class ThreePhaseMethod(PhaseMethod):
             return
         if view_matrices:
             for _, mtx in self.view_window_matrices.items():
-                mtx.generate(self.config.settings.view_window_matrix)
+                mtx.generate(
+                    self.config.settings.view_window_matrix,
+                    nproc=self.config.settings.num_processors,
+                )
         for _, mtx in self.sensor_window_matrices.items():
-            mtx.generate(self.config.settings.sensor_window_matrix)
+            mtx.generate(
+                self.config.settings.sensor_window_matrix,
+                nproc=self.config.settings.num_processors,
+            )
         for _, mtx in self.daylight_matrices.items():
-            mtx.generate(self.config.settings.daylight_matrix)
+            mtx.generate(
+                self.config.settings.daylight_matrix,
+                nproc=self.config.settings.num_processors,
+            )
         if self.config.settings.save_matrices:
             self.save_matrices()
 
@@ -1042,14 +1050,16 @@ class ThreePhaseMethod(PhaseMethod):
         """
         # generate octree with bsdf
         stdins = []
-        stdins.append(gen_perez_sky(
-            date_time,
-            self.wea_metadata.latitude,
-            self.wea_metadata.longitude,
-            self.wea_metadata.timezone,
-            dirnorm=dni,
-            diffhor=dhi,
-        ))
+        stdins.append(
+            gen_perez_sky(
+                date_time,
+                self.wea_metadata.latitude,
+                self.wea_metadata.longitude,
+                self.wea_metadata.timezone,
+                dirnorm=dni,
+                diffhor=dhi,
+            )
+        )
         for wname, sname in bsdf.items():
             if (_gms := self.config.model.materials.glazing_materials) != {}:
                 gmaterial = _gms[sname]
@@ -1342,12 +1352,22 @@ class FivePhaseMethod(PhaseMethod):
         logger.info("Generating matrices...")
         logger.info("Step 1/5: Generating view matrices...")
         for mtx in self.view_window_matrices.values():
-            mtx.generate(self.config.settings.view_window_matrix, memmap=True)
+            mtx.generate(
+                self.config.settings.view_window_matrix,
+                memmap=True,
+                nproc=self.config.settings.num_processors,
+            )
         for mtx in self.sensor_window_matrices.values():
-            mtx.generate(self.config.settings.sensor_window_matrix)
+            mtx.generate(
+                self.config.settings.sensor_window_matrix,
+                nproc=self.config.settings.num_processors,
+            )
         logger.info("Step 2/5: Generating daylight matrices...")
         for mtx in self.daylight_matrices.values():
-            mtx.generate(self.config.settings.daylight_matrix)
+            mtx.generate(
+                self.config.settings.daylight_matrix,
+                nproc=self.config.settings.num_processors,
+            )
         logger.info("Step 3/5: Generating direct view matrices...")
         for _, mtx in self.view_window_direct_matrices.items():
             mtx.generate(["-ab", "1"], sparse=True)

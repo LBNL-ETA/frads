@@ -82,7 +82,16 @@ from .sky import (
 
 from .utils import gen_grid, unpack_primitives
 
-from .window import create_glazing_system, Gap, Gas, GlazingSystem, AIR, ARGON, KRYPTON, XENON
+from .window import (
+    create_glazing_system,
+    Gap,
+    Gas,
+    GlazingSystem,
+    AIR,
+    ARGON,
+    KRYPTON,
+    XENON,
+)
 
 __version__ = "1.1.0"
 

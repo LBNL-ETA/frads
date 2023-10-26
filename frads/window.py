@@ -151,7 +151,6 @@ class GlazingSystem:
             gap_instances.append(Gap(gas=gas_instances, **gap))
         return cls(layers=layer_instances, gaps=gap_instances, **data)
 
-
     def get_brtdfunc(self) -> pr.Primitive:
         """Get a BRTDfunc primitive for the glazing system."""
         if any(layer.product_type != "glazing" for layer in self.layers):
