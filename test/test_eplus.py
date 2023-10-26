@@ -5,18 +5,17 @@ from frads.window import create_glazing_system
 from pyenergyplus.dataset import ref_models
 import pytest
 
-test_dir = Path(__file__).resolve().parent
-resource_dir = test_dir / "Resources"
-
-idf_path = resource_dir / "RefBldgMediumOfficeNew2004_southzone.idf"
-glazing_path = resource_dir / "igsdb_product_7406.json"
 
 @pytest.fixture
 def medium_office():
     return load_energyplus_model(ref_models["medium_office"])
 
+@pytest.fixture
+def glazing_path(resources_dir):
+    return resources_dir / "igsdb_product_7406.json"
 
-def test_add_glazingsystem(medium_office):
+
+def test_add_glazingsystem(medium_office, glazing_path):
     gs = create_glazing_system(
         name="test",
         layers=[glazing_path],

@@ -4,8 +4,6 @@ from frads.methods import TwoPhaseMethod, ThreePhaseMethod, WorkflowConfig
 from frads.window import create_glazing_system, Gap, Gas
 from frads.ep2rad import epmodel_to_radmodel
 from frads.eplus import load_energyplus_model
-import frads as fr
-import numpy as np
 import pytest
 from pyenergyplus.dataset import ref_models, weather_files
 import pyradiance as pr
@@ -72,17 +70,14 @@ def test_two_phase(cfg):
     assert res.shape == (195, 1)
 
 
-def test_three_phase(cfg, resources_dir, objects_dir):
+def test_three_phase(cfg, resources_dir):
     time = datetime(2023, 1, 1, 12)
     dni = 800
     dhi = 100
     config = WorkflowConfig.from_dict(cfg)
-    lower_glass = objects_dir / "lower_glass.rad"
-    upper_glass = objects_dir / "upper_glass.rad"
     blind_prim = pr.Primitive(
         "void", "aBSDF", "blinds30", [str(resources_dir/"blinds30.xml"), "0", "0", "1", "."], [])
-    config.model.windows["lower_glass"].glazing_material = {"blinds30": blind_prim}
-    config.model.windows["upper_glass"].glazing_material = {"blinds30": blind_prim}
+    config.model.materials.glazing_materials = {"blinds30": blind_prim}
     with ThreePhaseMethod(config) as workflow:
         workflow.generate_matrices(view_matrices=False)
         workflow.calculate_sensor(
@@ -109,7 +104,6 @@ def test_eprad_threephase(resources_dir):
     view_path = resources_dir / "view1.vf"
     clear_glass_path = resources_dir / "CLEAR_3.DAT"
     product_7406_path = resources_dir / "igsdb_product_7406.json"
-    shade_path = resources_dir / "ec60.rad"
     shade_bsdf_path = resources_dir / "ec60.xml"
 
     epmodel = load_energyplus_model(ref_models["medium_office"])

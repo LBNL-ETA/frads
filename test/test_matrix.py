@@ -2,29 +2,35 @@ from pathlib import Path
 from frads import geom, matrix
 import pyradiance as pr
 import numpy as np
+import pytest
 
-window_polygon = [
-    geom.Polygon([np.array((0, 0, 0)),
-                  np.array((0, 0, 3)),
-                  np.array((2, 0, 3)),
-                  np.array((2, 0, 0)),
-                  ]),
-    geom.Polygon([np.array((3, 0, 0)),
-                  np.array((3, 0, 3)),
-                  np.array((5, 0, 3)),
-                  np.array((5, 0, 0)),
-                  ])
-]
-window_primitives = [
-    pr.Primitive("void", "polygon", "window1", ("0"), window_polygon[0].coordinates),
-    pr.Primitive("void", "polygon", "window2", ("0"), window_polygon[1].coordinates)
-]
+@pytest.fixture
+def window_polygon():
+    return [
+        geom.Polygon([np.array((0, 0, 0)),
+                      np.array((0, 0, 3)),
+                      np.array((2, 0, 3)),
+                      np.array((2, 0, 0)),
+                      ]),
+        geom.Polygon([np.array((3, 0, 0)),
+                      np.array((3, 0, 3)),
+                      np.array((5, 0, 3)),
+                      np.array((5, 0, 0)),
+                      ])
+    ]
 
-def test_surface_as_sender():
+@pytest.fixture
+def window_primitives(window_polygon):
+    return [
+        pr.Primitive("void", "polygon", "window1", ("0"), window_polygon[0].coordinates),
+        pr.Primitive("void", "polygon", "window2", ("0"), window_polygon[1].coordinates)
+    ]
+
+def test_surface_as_sender(window_primitives):
     basis = "kf"
     sender = matrix.SurfaceSender(
-        window_primitives, 
-        basis, 
+        window_primitives,
+        basis,
     )
     assert sender.basis == "kf"
     assert sender.content is not None
@@ -48,7 +54,7 @@ def test_point_as_sender():
     sender = matrix.SensorSender(pts_list, ray_cnt)
     assert sender.yres == len(pts_list)
 
-def test_surface_as_receiver():
+def test_surface_as_receiver(window_primitives):
     basis = "kf"
     out = None
     offset = 0.1
