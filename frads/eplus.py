@@ -2,7 +2,7 @@
 Class and functions for accessing EnergyPlus Python API
 """
 
-from datetime import datetime, timedelta
+import datetime
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Callable, Union
@@ -323,8 +323,11 @@ class EnergyPlusSetup:
 
         return callback_function
 
-    def get_datetime(self) -> datetime:
+    def get_datetime(self) -> datetime.datetime:
         """Get the current date and time from EnergyPlus
+        Run time datatime format with iso_8601_format = yes.
+        hour 0-23, minute 10 - 60
+        v23.2.0
 
         Returns:
             datetime object
@@ -335,7 +338,17 @@ class EnergyPlusSetup:
         hour = self.api.exchange.hour(self.state)
         minute = self.api.exchange.minutes(self.state)
 
-        return datetime(year, month, day, hour, minute)
+        _date = datetime.date(year, month, day)
+
+        if minute == 60:
+            minute = 0
+            hour += 1
+        if hour == 24:
+            hour = 0
+            _date += datetime.timedelta(days=1)
+        _time = datetime.time(hour, minute)
+
+        return datetime.datetime.combine(_date, _time)
 
     def run(
         self,
