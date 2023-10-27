@@ -152,7 +152,9 @@ def surface_to_polygon(srf: BuildingSurfaceDetailed) -> Polygon:
 
 
 def thicken(
-    surface: Polygon, windows: List[Polygon], thickness: float,
+    surface: Polygon,
+    windows: List[Polygon],
+    thickness: float,
 ) -> List[Polygon]:
     """Thicken window-wall."""
     direction = surface.normal * thickness
@@ -449,7 +451,9 @@ class EnergyPlusToRadianceModelConverter:
         if not check_outward(surface_polygon, zone_center):
             surface_polygon = surface_polygon.flip()
         for fname, fene in fenestrations.items():
-            fenestration_polygon, window = self._process_fenestration(fname, fene, zone_center)
+            fenestration_polygon, window = self._process_fenestration(
+                fname, fene, zone_center
+            )
             window_polygons.append(fenestration_polygon)
             surface_polygon -= fenestration_polygon
             windows[fname] = {"bytes": window.bytes}
@@ -521,7 +525,10 @@ class EnergyPlusToRadianceModelConverter:
         return surface_fenestrations
 
     def _process_fenestration(
-        self, name: str, fenestration: FenestrationSurfaceDetailed, zone_center: np.ndarray
+        self,
+        name: str,
+        fenestration: FenestrationSurfaceDetailed,
+        zone_center: np.ndarray,
     ) -> Tuple[Polygon, pr.Primitive]:
         fenenstration_polygon = fenestration_to_polygon(fenestration)
         if check_outward(fenenstration_polygon, zone_center):
