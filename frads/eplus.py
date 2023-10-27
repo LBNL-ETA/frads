@@ -63,7 +63,7 @@ class EnergyPlusSetup:
             epmodel: EnergyPlusModel object
 
         Example:
-            >>> epsetup = EnergyPlusSetup(epmodel, epw="USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
+            >>> epsetup = EnergyPlusSetup(epmodel, weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
         """
         self.model = epmodel
         if enable_radiance:
@@ -598,7 +598,7 @@ class EnergyPlusSetup:
             sensor_name, cfs_name, date_time, dni, dhi
         )
 
-    def calculate_edgps(self, zone: str, cfs_name: Dict[str, str]):
+    def calculate_edgps(self, zone: str, cfs_name: Dict[str, str]) -> float:
         """Calculate enhanced simplified daylight glare probability in a zone.
 
         Args:
