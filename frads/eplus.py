@@ -379,7 +379,7 @@ class EnergyPlusSetup:
 
         if self.epw is not None:
             opt.extend(["-w", self.epw])
-        elif design_day:
+        if design_day:
             if self.model.sizing_period_design_day is not None:
                 opt.append("-D")
             else:
@@ -387,7 +387,7 @@ class EnergyPlusSetup:
                     "Design day simulation requested, "
                     "but no design day found in EnergyPlus model."
                 )
-        else:
+        if self.epw is None and not design_day:
             raise ValueError(
                 "Specify weather file in EnergyPlusSetup or "
                 "run with design_day = True for design-day-only simulation."
