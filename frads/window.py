@@ -2,7 +2,7 @@ from dataclasses import asdict, dataclass, field
 import json
 from pathlib import Path
 import tempfile
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import pyradiance as pr
 import pywincalc as pwc
@@ -30,6 +30,18 @@ class PaneRGB:
     trans_rgb: Tuple[float, float, float]
     coated_side: Optional[str] = None
 
+@dataclass
+class MeasurementComponent:
+    transmittance_front: float
+    transmittance_back: float
+    reflectance_front: float
+    reflectance_back: float
+
+@dataclass
+class WavelengthData:
+    direct_component: Optional[MeasurementComponent]
+    diffuse_component: Optional[MeasurementComponent]
+
 
 @dataclass
 class Layer:
@@ -40,7 +52,17 @@ class Layer:
     emissivity_front: float
     emissivity_back: float
     ir_transmittance: float
+
+
+@dataclass
+class GlazingLayer(Layer):
+    measurements: Dict[float, WavelengthData]
     rgb: PaneRGB
+
+
+@dataclass
+class ShadingLayer(Layer):
+    measurements: Dict[float, WavelengthData]
 
 
 @dataclass
@@ -71,7 +93,7 @@ class Gap:
 class GlazingSystem:
     name: str
     thickness: float = 0
-    layers: List[Layer] = field(default_factory=list)
+    layers: List[Union[ShadingLayer, GlazingLayer]] = field(default_factory=list)
     gaps: List[Gap] = field(default_factory=list)
     visible_front_transmittance: List[List[float]] = field(default_factory=list)
     visible_back_transmittance: List[List[float]] = field(default_factory=list)
@@ -153,30 +175,81 @@ class GlazingSystem:
 
     def get_brtdfunc(self) -> pr.Primitive:
         """Get a BRTDfunc primitive for the glazing system."""
-        if any(layer.product_type != "glazing" for layer in self.layers):
-            raise ValueError("Only glass layers supported.")
+        if not all(isinstance(layer, GlazingLayer) for layer in self.layers):
+            raise ValueError("Only glazing layers supported.")
         if len(self.layers) > 2:
             raise ValueError("Only double pane supported.")
         rgb = [layer.rgb for layer in self.layers]
         return get_glazing_primitive(self.name, rgb)
 
 
+def get_glazing_measurements(
+    measurements: List[pwc.WavelengthData],
+) -> Dict[float, WavelengthData]:
+    """Get the measurements from a pwc.ProductMeasurements object."""
+    parsed = {}
+    for data in measurements:
+        _dc = None
+        _df = None
+        if (ddc := data.direct_component) is not None:
+            _dc = MeasurementComponent(
+                ddc.transmittance_front,
+                ddc.transmittance_back,
+                ddc.reflectance_front,
+                ddc.reflectance_back,
+            )
+        if (dfc := data.diffuse_component) is not None:
+            _df = MeasurementComponent(
+                dfc.transmittance_front,
+                dfc.transmittance_back,
+                dfc.reflectance_front,
+                dfc.reflectance_back,
+            )
+        parsed[data.wavelength * 1e3] = WavelengthData(
+            direct_component=_dc, diffuse_component=_df)
+    return parsed
+
+
+def get_shading_measurements(
+    measurements,
+) -> Dict[float, WavelengthData]:
+    """Get the measurements from a pwc.ProductMeasurements object."""
+    return {
+        d.wavelength * 1e3: WavelengthData(
+            direct_component=d.direct_component.transmittance_front,
+            diffuse_component=d.diffuse_component.transmittance_front,
+        )
+        for d in measurements
+    }
+
 def get_layers(input: List[pwc.ProductData]) -> List[Layer]:
     """Create a list of layers from a list of pwc.ProductData."""
     layers = []
     for inp in input:
-        layers.append(
-            Layer(
-                product_name=inp.product_name,
-                thickness=inp.thickness,
-                product_type=inp.product_type,
-                conductivity=inp.conductivity,
-                emissivity_front=inp.emissivity_front,
-                emissivity_back=inp.emissivity_back,
-                ir_transmittance=inp.ir_transmittance,
-                rgb=get_layer_rgb(inp),
+        params = {
+            "product_name": inp.product_name,
+            "thickness": inp.thickness,
+            "product_type": inp.product_type,
+            "conductivity": inp.conductivity,
+            "emissivity_front": inp.emissivity_front,
+            "emissivity_back": inp.emissivity_back,
+            "ir_transmittance": inp.ir_transmittance,
+        }
+        if inp.product_type.lower() == "glazing":
+            layers.append(
+                GlazingLayer(
+                    rgb=get_layer_rgb(inp),
+                    measurements=get_glazing_measurements(inp.measurements),
+                    **params,
+                )
             )
-        )
+        else:
+            layers.append(
+                ShadingLayer(
+                    measurements=get_shading_measurements(inp.measurements),
+                    **params,
+                )
+            )
     return layers
 
 
@@ -364,3 +437,18 @@ def get_glazing_primitive(name: str, panes: List[PaneRGB]) -> pr.Primitive:
         ]
         real_arg = [0, 0, 0, 0, 0, 0, 0, 0, 0]
     return pr.Primitive("void", "BRTDfunc", name, str_arg, real_arg)
+
+
+def laminate(sub: GlazingLayer, lam) -> GlazingLayer:
+    """Laminate a glazing layer."""
+    return GlazingLayer(
+        product_name=sub.product_name,
+        thickness=sub.thickness,
+        product_type=sub.product_type,
+        conductivity=sub.conductivity,
+        emissivity_front=sub.emissivity_front,
+        emissivity_back=sub.emissivity_back,
+        ir_transmittance=sub.ir_transmittance,
+        measurements=sub.measurements,
+        rgb=sub.rgb,
+    )
