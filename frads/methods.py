@@ -1035,11 +1035,7 @@ class ThreePhaseMethod(PhaseMethod):
 
         Args:
             view: view name, must be in config.model.views
-            shades: list of shades, either primitves or file paths. This is used
-                for high resolution direct sun calculation.
-            bsdf: bsdf matrix, either a single matrix or a list of matrices depending
-                on the number of windows This is used to calculate the vertical
-                illuminance.
+            bsdf: a dictionary of window name as key and bsdf matrix or matrix name as value
             date_time: datetime object
             dni: direct normal irradiance
             dhi: diffuse horizontal irradiance
