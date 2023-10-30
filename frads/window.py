@@ -33,6 +33,18 @@ class PaneRGB:
 
 @dataclass
 class Layer:
+    """Layer data object.
+
+    Attributes:
+        product_name: Name of the product.
+        thickness: Thickness of the layer.
+        product_type: Type of product.
+        conductivity: Conductivity of the layer.
+        emissivity_front: Front emissivity of the layer.
+        emissivity_back: Back emissivity of the layer.
+        ir_transmittance: IR transmittance of the layer.
+        rgb: PaneRGB object.
+    """
     product_name: str
     thickness: float
     product_type: str
@@ -45,6 +57,12 @@ class Layer:
 
 @dataclass
 class Gas:
+    """Gas data object.
+
+    Attributes:
+        gas: Gas type.
+        ratio: Gas ratio.
+    """
     gas: str
     ratio: float
 
@@ -57,6 +75,12 @@ class Gas:
 
 @dataclass
 class Gap:
+    """Gap data object.
+
+    Attributes:
+        gas: List of Gas objects.
+        thickness: Thickness of the gap.
+    """
     gas: List[Gas]
     thickness: float
 
@@ -69,6 +93,25 @@ class Gap:
 
 @dataclass
 class GlazingSystem:
+    """Glazing system data object.
+
+    Attributes:
+        name: Name of the glazing system.
+        thickness: Thickness of the glazing system.
+        layers: List of Layer objects.
+        gaps: List of Gap objects.
+        visible_front_transmittance: Visible front transmittance matrix.
+        visible_back_transmittance: Visible back transmittance matrix.
+        visible_front_reflectance: Visible front reflectance matrix.
+        visible_back_reflectance: Visible back reflectance matrix.
+        solar_front_transmittance: Solar front transmittance matrix.
+        solar_back_transmittance: Solar back transmittance matrix.
+        solar_front_reflectance: Solar front reflectance matrix.
+        solar_back_reflectance: Solar back reflectance matrix.
+        solar_front_absorptance: Solar front absorptance matrix by layer.
+        solar_back_absorptance: Solar back absorptance matrix by layer.
+    """
+
     name: str
     thickness: float = 0
     layers: List[Layer] = field(default_factory=list)
@@ -195,7 +238,28 @@ def create_pwc_gaps(gaps: List[Gap]):
 def create_glazing_system(
     name: str, layers: List[Union[Path, bytes]], gaps: Optional[List[Gap]] = None
 ) -> GlazingSystem:
-    """Create a glazing system from a list of layers and gaps."""
+    """Create a glazing system from a list of layers and gaps.
+
+    Args:
+        name: Name of the glazing system.
+        layers: List of layers.
+        gaps: List of gaps.
+
+    Returns:
+        GlazingSystem object.
+
+    Raises:
+        ValueError: Invalid layer type.
+
+    Examples:
+        >>> create_glazing_system(
+        ...     "test",
+        ...     [
+        ...         Path("glass.json"),
+        ...         Path("venetian.xml"),
+        ...     ],
+        ... )
+    """
     if gaps is None:
         gaps = [Gap([Gas("air", 1)], 0.0127) for _ in range(len(layers) - 1)]
     layer_data = []

@@ -593,14 +593,20 @@ def create_settings(ep_model: EnergyPlusModel, epw_file: Optional[str]) -> dict:
 def epmodel_to_radmodel(
     ep_model: EnergyPlusModel, epw_file: Optional[str] = None, add_views: bool = True
 ) -> dict:
-    """Convert EnergyPlus model to Radiance model.
+    """Convert EnergyPlus model to Radiance models where each zone is a separate model.
 
     Args:
         ep_model: EnergyPlus model.
         epw_file: EnergyPlus weather file path. Defaults to None.
+        add_views: Add views to the model. Such views will be positioned
+            at the center of the zone facing windows weighted by window
+            area. Defaults to True.
 
     Returns:
-        dict: Radiance model.
+        dict: Radiance models.
+
+    Examples:
+        >>> radmodels = epmodel_to_radmodel(ep_model, epw_file)
     """
     model_parser = EnergyPlusToRadianceModelConverter(ep_model)
     zone_models = model_parser.parse()

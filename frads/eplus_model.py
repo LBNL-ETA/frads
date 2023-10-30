@@ -9,8 +9,6 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
     """EnergyPlus Model object
 
     Attributes:
-        cfs: list of complex fenestration states
-        windows: list of windows
         walls_window: list of walls with windows
         floors: list of floors
         lighting_zone: list of lighting zones
@@ -19,10 +17,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
 
     @property
     def window_walls(self) -> List[str]:
-        """
-        Example:
-            >>> model.window_walls
-        """
+        """Get list of walls with windows."""
         if self.fenestration_surface_detailed is None:
             return []
         wndo_walls = {
@@ -33,10 +28,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
 
     @property
     def floors(self):
-        """
-        Examples:
-            >>> model.floors
-        """
+        """Get all of the floor names."""
         floors = []
         if self.building_surface_detailed is None:
             return []
@@ -54,7 +46,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
         Raises:
             ValueError: If solar and photopic results are not computed.
 
-        Example:
+        Examples:
             >>> model = load_energyplus_model(Path("model.idf"))
             >>> model.add_glazing_system(glazing_system1)
         """
@@ -103,7 +95,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
             ValueError: If zone not found in model.
             ValueError: If lighting already exists in zone and replace is False.
 
-        Example:
+        Examples:
             >>> model.add_lighting("Zone1")
         """
         if self.zone is None:
@@ -176,7 +168,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
         Raises:
             ValueError: If output_type is not "variable" or "meter".
 
-        Example:
+        Examples:
             >>> model.add_output("Zone Mean Air Temperature", "variable")
             >>> model.add_output("Cooling:Electricity", "meter")
         """

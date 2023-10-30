@@ -911,7 +911,7 @@ class ThreePhaseMethod(PhaseMethod):
         time: datetime,
         dni: float,
         dhi: float,
-    ) -> float:
+    ) -> np.ndarray:
         """Calculate illuminance for a sensor.
 
         Args:

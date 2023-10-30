@@ -8,15 +8,16 @@ from pathlib import Path
 from typing import Dict, List, Optional, Callable, Union
 import inspect
 import ast
+import tempfile
 
 from epmodel import epmodel as epm
-from frads import sky
 from frads.ep2rad import epmodel_to_radmodel
 from frads.methods import (
     WorkflowConfig,
     ThreePhaseMethod,
 )
 from frads.eplus_model import EnergyPlusModel
+import numpy as np
 from pyenergyplus.api import EnergyPlusAPI
 
 
@@ -30,9 +31,11 @@ def ep_datetime_parser(inp: str):
     month, day = [int(i) for i in date.split("/")]
     hr, mi, sc = [int(i) for i in time.split(":")]
     if hr == 24 and mi == 0 and sc == 0:
-        return datetime(1900, month, day, 0, mi, sc) + timedelta(days=1)
+        return datetime.datetime(1900, month, day, 0, mi, sc) + datetime.timedelta(
+            days=1
+        )
     else:
-        return datetime(1900, month, day, hr, mi, sc)
+        return datetime.datetime(1900, month, day, hr, mi, sc)
 
 
 class EnergyPlusResult:
@@ -45,10 +48,14 @@ class EnergyPlusSetup:
 
     Attributes:
         api: EnergyPlusAPI object
-        epjs: EnergyPlusJSON object
+        epw: Weather file path
+        actuator_handles: Actuator Handles
+        variable_handles: Variable handles
+        construction_handles: Construction Handles
+        actuators: List of actuators available
+        model: EnergyPlusModel object
         state: EnergyPlusState object
         handles: Handles object
-        wea_meta: WeaMetaData object
     """
 
     def __init__(
@@ -61,11 +68,17 @@ class EnergyPlusSetup:
 
         Args:
             epmodel: EnergyPlusModel object
+            weather_file: Weather file path. (default: None)
+            enable_radiance: If True, enable Radiance for Three-Phase Method. (default: False)
 
-        Example:
+        Examples:
             >>> epsetup = EnergyPlusSetup(epmodel, weather_file="USA_CA_Oakland.Intl.AP.724930_TMY3.epw")
         """
         self.model = epmodel
+
+        if self.model.site_location is None:
+            raise ValueError("Site location not found in EnergyPlus model.")
+
         if enable_radiance:
             self.rmodels = epmodel_to_radmodel(
                 epmodel, epw_file=weather_file, add_views=True
@@ -86,26 +99,9 @@ class EnergyPlusSetup:
         self.actuator_handles = {}
         self.construction_handles = {}
         self.enable_radiance = enable_radiance
-
-        if self.model.site_location is None:
-            raise ValueError("Site location not found in EnergyPlus model.")
-
-        city, location = next(iter(self.model.site_location.items()))
-        self.wea_meta = sky.WeaMetaData(
-            city=city,
-            country="",
-            elevation=location.elevation or 0,
-            latitude=location.latitude or 0,
-            longitude=-(location.longitude or 0),
-            timezone=-(location.time_zone or 0) * 15,
-        )
-
         self.api.runtime.callback_begin_new_environment(self.state, self._get_handles())
         self.actuators = []
         self._get_list_of_actuators()
-
-    def initialize_radiance(self):
-        """Initialize Radiance for Three-Phase Method."""
 
     def close(self):
         self.api.state_manager.delete_state(self.state)
@@ -114,7 +110,7 @@ class EnergyPlusSetup:
         return self
 
     def __exit__(self, exc_type, exc_value, exc_tb):
-        self.api.state_manager.delete_state(self.state)
+        self.close()
 
     def _actuator_func(self, state):
         if len(self.actuators) == 0:
@@ -129,26 +125,28 @@ class EnergyPlusSetup:
             self.api.api.stopSimulation(state)
 
     def _get_list_of_actuators(self):
-        with open("epmodel.json", "w") as wtr:
-            wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
-
         actuator_state = self.api.state_manager.new_state()
         self.api.runtime.set_console_output_status(actuator_state, False)
         self.api.runtime.callback_end_zone_timestep_after_zone_reporting(
             actuator_state, self._actuator_func
         )
 
-        if self.epw is not None:
-            self.api.runtime.run_energyplus(
-                actuator_state, ["-p", "actuator", "-w", self.epw, "epmodel.json"]
-            )
-        elif self.model.sizing_period_design_day is not None:
-            self.api.runtime.run_energyplus(actuator_state, ["-D", "epmodel.json"])
-        else:
-            raise ValueError(
-                "Specify weather file in EnergyPlusSetup "
-                "or model design day in EnergyPlusModel."
-            )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            inp = Path(tmpdir) / "in.json"
+            with open(inp, "w") as wtr:
+                wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
+
+            if self.epw is not None:
+                self.api.runtime.run_energyplus(
+                    actuator_state, ["-p", "actuator", "-w", self.epw, str(inp)]
+                )
+            elif self.model.sizing_period_design_day is not None:
+                self.api.runtime.run_energyplus(actuator_state, ["-D", str(inp)])
+            else:
+                raise ValueError(
+                    "Specify weather file in EnergyPlusSetup "
+                    "or model design day in EnergyPlusModel."
+                )
         self.api.state_manager.delete_state(actuator_state)
 
     def actuate(self, component_type: str, name: str, key: str, value: float):
@@ -166,7 +164,7 @@ class EnergyPlusSetup:
         Raises:
             ValueError: If the actuator is not found
 
-        Example:
+        Examples:
             >>> epsetup.actuate("Weather Data", "Outdoor Dew Point", "Environment", 10)
         """
         if key not in self.actuator_handles:  # check if key exists in actuator handles
@@ -190,14 +188,14 @@ class EnergyPlusSetup:
             self.state, self.actuator_handles[key][name], value
         )
 
-    def actuate_cooling_setpoint(self, zone: str, value: float):
+    def actuate_cooling_setpoint(self, zone: str, value: float) -> None:
         """Set cooling setpoint for a zone.
 
         Args:
             zone: The name of the zone to set the cooling setpoint for.
             value: The value to set the cooling setpoint to.
 
-        Example:
+        Examples:
             >>> epsetup.actuate_cooling_setpoint("zone1", 24)
         """
         self.actuate(
@@ -215,7 +213,7 @@ class EnergyPlusSetup:
             value: The value to set the heating setpoint to.
 
         Example:
-            >>> epsetup.actuate_cooling_setpoint("zone1", 20)
+            epsetup.actuate_cooling_setpoint("zone1", 20)
         """
         self.actuate(
             component_type="Zone Temperature Control",
@@ -231,7 +229,7 @@ class EnergyPlusSetup:
             light: The name of the lighting object to set the lighting power for.
             value: The value to set the lighting power to.
 
-        Example:
+        Examples:
             >>> epsetup.actuate_lighting_power("zone1", 1000)
         """
         self.actuate(
@@ -248,7 +246,7 @@ class EnergyPlusSetup:
             window: The name of the surface to set the cfs state for.
             cfs_state: The name of the complex fenestration system (CFS) state to set the surface to.
 
-        Example:
+        Examples:
             >>> epsetup.actuate_construction_state("window1", "cfs1")
         """
         self.actuate(
@@ -260,6 +258,9 @@ class EnergyPlusSetup:
 
     def get_variable_value(self, name: str, key: str) -> float:
         """Get the value of a variable in the EnergyPlus model during runtime.
+        The variable must be requested before it can be retrieved.
+        If this method is called in a callback function, the variable will be requested automatically.
+        So avoid having other methods called get_variable_value in the callback function.
 
         Args:
             name: The name of the variable to retrieve, e.g. "Outdoor Dew Point"
@@ -272,21 +273,24 @@ class EnergyPlusSetup:
             KeyError: If the key is not found
             ValueError: If the variable is not found
 
-        Example:
+        Examples:
             >>> epsetup.get_variable_value("Outdoor Dew Point", "Environment")
         """
         return self.api.exchange.get_variable_value(
             self.state, self.variable_handles[key][name]
         )
 
-    def request_variable(self, name: str, key: str):
-        """Request a variable from the EnergyPlus model during runtime.
+    def request_variable(self, name: str, key: str) -> None:
+        """Request a variable from the EnergyPlus model for access during runtime.
 
         Args:
             name: The name of the variable to retrieve, e.g. "Outdoor Dew Point"
             key: The instance of the variable to retrieve, e.g. "Environment"
 
-        Example:
+        Returns:
+            None
+
+        Examples:
             >>> epsetup.request_variable("Outdoor Dew Point", "Environment")
         """
         if key not in self.variable_handles:
@@ -372,7 +376,7 @@ class EnergyPlusSetup:
             annual: If True, force run annual simulation. (default: False)
             design_day: If True, force run design-day-only simulation. (default: False)
 
-        Example:
+        Examples:
             >>> epsetup.run(output_prefix="test1", silent=True)
         """
         opt = ["-d", output_directory, "-p", output_prefix, "-s", output_suffix]
@@ -431,7 +435,7 @@ class EnergyPlusSetup:
         Raises:
             AttributeError: If method_name is not found in EnergyPlus runtime API.
 
-        Example:
+        Examples:
             >>> epsetup.set_callback("callback_begin_system_timestep_before_predictor", func)
         """
         try:
@@ -532,9 +536,6 @@ class EnergyPlusSetup:
 
         Args:
             func: Callback function.
-
-        Example:
-            >>> epsetup._analyze_callback(func)
         """
         source_code = inspect.getsource(func)
         tree = ast.parse(source_code)
@@ -552,7 +553,7 @@ class EnergyPlusSetup:
         Returns:
             Direct normal irradiance in W/m2.
 
-        Example:
+        Examples:
             >>> epsetup.get_direct_normal_irradiance()
         """
         return self.get_variable_value(
@@ -566,13 +567,13 @@ class EnergyPlusSetup:
             Diffuse horizontal irradiance in W/m2.
 
         Example:
-            >>> epsetup.get_diffuse_horizontal_irradiance()
+            epsetup.get_diffuse_horizontal_irradiance()
         """
         return self.get_variable_value(
             "Site Diffuse Solar Radiation Rate per Area", "Environment"
         )
 
-    def calculate_wpi(self, zone: str, cfs_name: Dict[str, str]):
+    def calculate_wpi(self, zone: str, cfs_name: Dict[str, str]) -> np.ndarray:
         """Calculate workplane illuminance in a zone.
 
         Args:
@@ -585,7 +586,7 @@ class EnergyPlusSetup:
         Raises:
             ValueError: If zone not found in model.
 
-        Example:
+        Examples:
             >>> epsetup.calculate_wpi("Zone1", "CFS1")
         """
         if not self.enable_radiance:
@@ -600,6 +601,8 @@ class EnergyPlusSetup:
 
     def calculate_edgps(self, zone: str, cfs_name: Dict[str, str]) -> float:
         """Calculate enhanced simplified daylight glare probability in a zone.
+        The view is positioned at the center of the zone with direction facing
+        the windows, weighted by the window area.
 
         Args:
             zone: Name of the zone.
@@ -611,7 +614,7 @@ class EnergyPlusSetup:
         Raises:
             KeyError: If zone not found in model.
 
-        Example:
+        Examples:
             >>> epsetup.calculate_edgps("Zone1", "CFS1")
         """
         date_time = self.get_datetime()
@@ -639,8 +642,8 @@ def load_idf(fpath: Union[str, Path]) -> dict:
         FileNotFoundError: If IDF file not found.
         FileNotFoundError: If converted epJSON file not found.
 
-    Example:
-        >>> json_data = load_idf_as_json(Path("model.idf"))
+    Examples:
+        >>> json_data = load_idf(Path("model.idf"))
     """
     fpath = Path(fpath) if isinstance(fpath, str) else fpath
     if fpath.suffix != ".idf":
@@ -673,8 +676,8 @@ def load_energyplus_model(fpath: Union[str, Path]) -> EnergyPlusModel:
     Raises:
         ValueError: If file is not an IDF or epJSON file.
 
-    Example:
-        >>> model = load_energyplus_model(Path("model.json"))
+    Examples:
+        >>> model = load_energyplus_model("model.json")
     """
     fpath = Path(fpath) if isinstance(fpath, str) else fpath
     if fpath.suffix == ".idf":

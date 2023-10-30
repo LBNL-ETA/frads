@@ -54,6 +54,8 @@ from .ep2rad import epmodel_to_radmodel
 
 from .eplus import load_energyplus_model, EnergyPlusSetup, ep_datetime_parser
 
+from .eplus_model import EnergyPlusModel
+
 from .matrix import (
     load_matrix,
     load_binary_matrix,
@@ -101,12 +103,11 @@ logger: logging.Logger = logging.getLogger(__name__)
 __all__ = [
     "AIR",
     "ARGON",
-    "create_glazing_system",
-    "Gap",
-    "Gas",
-    "load_energyplus_model",
+    "EnergyPlusModel",
     "EnergyPlusSetup",
     "FivePhaseMethod",
+    "Gap",
+    "Gas",
     "GlazingSystem",
     "KRYPTON",
     "Matrix",
@@ -123,12 +124,14 @@ __all__ = [
     "WeaMetaData",
     "WorkflowConfig",
     "XENON",
+    "create_glazing_system",
     "ep_datetime_parser",
     "epmodel_to_radmodel",
     "gen_grid",
     "gen_perez_sky",
     "genskymtx",
     "load_binary_matrix",
+    "load_energyplus_model",
     "load_matrix",
     "matrix_multiply_rgb",
     "parse_epw",

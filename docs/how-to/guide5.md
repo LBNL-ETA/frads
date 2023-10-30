@@ -1,7 +1,7 @@
 # How to model dynamic shading control and daylight dimming with EnergyPlus?
 
 
-The example demonstrates how to use a controller function to control the shading state, cooling setpoint temperature, and electric lighting power intensity during simulation. At the beginning of each timestep, EnergyPlus will call the controller function that operates the facade shading state based on exterior solar irradiance, cooling setpoint temperature based on time of day (pre-cooling), and electric lighting power intensity based on occupancy and workplane illuminance (daylight dimming). The workplane illuminance is calculated using the three-phase method through Radiance. 
+The example demonstrates how to use a controller function to control the shading state, cooling setpoint temperature, and electric lighting power intensity during simulation. At the beginning of each timestep, EnergyPlus will call the controller function that operates the facade shading state based on exterior solar irradiance, cooling setpoint temperature based on time of day (pre-cooling), and electric lighting power intensity based on occupancy and workplane illuminance (daylight dimming). The workplane illuminance is calculated using the three-phase method through Radiance.
 
 **Workflow**
 
@@ -27,7 +27,7 @@ graph LR
     R[Workplane Illuminance]
     end
     subgraph <b>EnergyPlus</b>
-    E[EnergyPlusModel]<--> K[Step 2.2 & 2.3 controller function<br/> <br/> * switch shading state <br/> * daylight dimming <br/>* pre-cooling <br/>] 
+    E[EnergyPlusModel]<--> K[Step 2.2 & 2.3 controller function<br/> <br/> * switch shading state <br/> * daylight dimming <br/>* pre-cooling <br/>]
     E <--> R
     K <--> R;
     end
@@ -68,7 +68,7 @@ Initialize an EnergyPlus model by calling `load_energyplus_model` and passing in
 epmodel = fr.load_energyplus_model(ref_models["medium_office"])
 ```
 
-or 
+or
 
 ```python
 epmodel = fr.load_energyplus_model("medium_office.idf")
@@ -78,7 +78,7 @@ epmodel = fr.load_energyplus_model("medium_office.idf")
 
 !!! example "Create four glazing systems for the four electrochromic tinted states"
     Each glazing system consists of:
-    
+
     * One layer of electrochromic glass
     * One gap (10% air and 90% argon) at 0.0127 m thickness
     * One layer of clear glass
@@ -135,7 +135,7 @@ gs_ec01 = fr.create_glazing_system(
     gs_ec60 = fr.create_glazing_system(
         name="ec60",
         layers=[
-            Patha("products/igsdb_product_7406.json"),
+            Path("products/igsdb_product_7406.json"),
             Path("products/CLEAR_3.DAT"),
         ],
         gaps=[
@@ -187,22 +187,22 @@ eps = fr.EnergyPlusSetup(
 
 ### 2.2 Define control algorithms using a controller function
 
-The controller function will control the facade shading state, cooling setpoint temperature, and electric lighting power intensity in the EnergyPlus model during simulation. 
+The controller function will control the facade shading state, cooling setpoint temperature, and electric lighting power intensity in the EnergyPlus model during simulation.
 
 !!! example "Controller function"
-    The example shows how to implement control algorithms for zone "Perimeter_bot_ZN_1", which has window "Perimeter_bot_ZN_1_Wall_South_Window" and lighting "Perimeter_bot_ZN_1_Lights". 
-    
+    The example shows how to implement control algorithms for zone "Perimeter_bot_ZN_1", which has window "Perimeter_bot_ZN_1_Wall_South_Window" and lighting "Perimeter_bot_ZN_1_Lights".
+
     * **Facade CFS state** based on exterior solar irradiance
     * **Cooling setpoint temperature** based on time of day (pre-cooling)
     * **Electric lighting power intensity** based on occupancy and workplane illuminance (daylight dimming)
 
 !!! notes "Actuate"
-    * **Gerneric actuator**
+    * **Generic actuator**
 
     Use `EnergyPlusSetup.actuate` to set or update the operating value of an actuator in the EnergyPlus model. `EnergyPlusSetup.actuate` takes in a component type, name, key, and value. The component type is the actuator category, e.g. "Weather Data". The name is the name of the actuator, e.g. "Outdoor Dew Point". The key is the instance of the variable to retrieve, e.g. "Environment". The value is the value to set the actuator to.
 
     * **Special actuator**
-    
+
         * **Facade CFS state**
 
         `EnergyPlusSetup.actuate_cfs_state` takes in a window name and a CFS state (the name of the glazing system).
@@ -254,7 +254,7 @@ def controller(state):
         cfs_state=cfs_state,
     )
 
-    # control cooling setpoint temperature based on the time of day 
+    # control cooling setpoint temperature based on the time of day
     # pre-cooling
     # get the current time
     datetime = ep.get_datetime()
