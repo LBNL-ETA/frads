@@ -30,12 +30,14 @@ class PaneRGB:
     trans_rgb: Tuple[float, float, float]
     coated_side: Optional[str] = None
 
+
 @dataclass
 class MeasurementComponent:
     transmittance_front: float
     transmittance_back: float
     reflectance_front: float
     reflectance_back: float
+
 
 @dataclass
 class WavelengthData:
@@ -93,7 +95,9 @@ class Gap:
 class GlazingSystem:
     name: str
     thickness: float = 0
-    layers: List[Union[ShadingLayer, GlazingLayer]] = field(default_factory=list)
+    layers: List[str] = field(default_factory=list)
+    shading_layers: Dict[str, ShadingLayer] = field(default_factory=dict)
+    glazing_layers: Dict[str, GlazingLayer] = field(default_factory=dict)
     gaps: List[Gap] = field(default_factory=list)
     visible_front_transmittance: List[List[float]] = field(default_factory=list)
     visible_back_transmittance: List[List[float]] = field(default_factory=list)
@@ -144,8 +148,14 @@ class GlazingSystem:
                     )
                 )
 
-    def save(self, out: Union[str, Path]):
-        """Save the glazing system to a file."""
+    def save(self, out: Union[str, Path]) -> None:
+        """Save the glazing system to a file.
+        If the file extension is .xml, save as an XML file.
+        Otherwise, save as a JSON file.
+
+        Args:
+            out: The path to save the file to.
+        """
         out = Path(out)
         if out.suffix == ".xml":
             self.to_xml(out)
@@ -158,11 +168,19 @@ class GlazingSystem:
         """Load a glazing system from a JSON file."""
         with open(path, "r") as f:
             data = json.load(f)
-        layers = data.pop("layers")
-        layer_instances = []
-        for layer in layers:
+        shading_layers = data.pop("shading_layers")
+        glazing_layers = data.pop("glazing_layers")
+        shading_layer_instances = {}
+        glazing_layer_instances = {}
+        for layer in glazing_layers:
             rgb = layer.pop("rgb")
-            layer_instances.append(Layer(rgb=PaneRGB(**rgb), **layer))
+            measurements = layer.pop("measurements")
+            glazing_layer_instances[layer.name] = GlazingLayer(
+                rgb=PaneRGB(**rgb), **layer
+            )
+        for layer in shading_layers:
+            measurements = layer.pop("measurements")
+            shading_layer_instances[layer.name] = ShadingLayer(**layer)
         gaps = data.pop("gaps")
         gap_instances = []
         for gap in gaps:
@@ -171,7 +189,12 @@ class GlazingSystem:
             for gs in gases:
                 gas_instances.append(Gas(**gs))
             gap_instances.append(Gap(gas=gas_instances, **gap))
-        return cls(layers=layer_instances, gaps=gap_instances, **data)
+        return cls(
+            shading_layers=shading_layer_instances,
+            glazing_layers=glazing_layer_instances,
+            gaps=gap_instances,
+            **data,
+        )
 
     def get_brtdfunc(self) -> pr.Primitive:
         """Get a BRTDfunc primitive for the glazing system."""
@@ -179,7 +202,7 @@ class GlazingSystem:
             raise ValueError("Only glazing layers supported.")
         if len(self.layers) > 2:
             raise ValueError("Only double pane supported.")
-        rgb = [layer.rgb for layer in self.layers]
+        rgb = [self.glazing_layers[name].rgb for name in self.layers]
         return get_glazing_primitive(self.name, rgb)
 
 
@@ -206,7 +229,8 @@ def get_glazing_measurements(
                 dfc.reflectance_back,
             )
         parsed[data.wavelength * 1e3] = WavelengthData(
-            direct_component=_dc, diffuse_component=_df)
+            direct_component=_dc, diffuse_component=_df
+        )
     return parsed
 
 
@@ -215,12 +239,14 @@ def get_shading_measurements(
 ) -> Dict[float, WavelengthData]:
     """Get the measurements from a pwc.ProductMeasurements object."""
     return {
-        d.wavelength * 1e3: WavelengthData(
+        d.wavelength
+        * 1e3: WavelengthData(
             direct_component=d.direct_component.transmittance_front,
             diffuse_component=d.diffuse_component.transmittance_front,
         )
         for d in measurements
     }
+
 
 def get_layers(input: List[pwc.ProductData]) -> List[Layer]:
     """Create a list of layers from a list of pwc.ProductData."""
@@ -253,7 +279,7 @@ def get_layers(input: List[pwc.ProductData]) -> List[Layer]:
     return layers
 
 
-def create_pwc_gaps(gaps: List[Gap]):
+def create_pwc_gaps(gaps: List[Gap]) -> List[pwc.Layers.gap]:
     """Create a list of pwc gaps from a list of gaps."""
     pwc_gaps = []
     for gap in gaps:
@@ -265,10 +291,112 @@ def create_pwc_gaps(gaps: List[Gap]):
     return pwc_gaps
 
 
+def get_default_gaps(nlayers: int) -> List[Gap]:
+    """Get a list of default gaps."""
+    return [Gap([Gas("air", 1)], 0.0127) for _ in range(nlayers - 1)]
+
+
+def get_solar_photopic_results(
+    layers: List[pwc.ProductData], gaps: List[pwc.Layers.gap]
+) -> Dict[str, List[List[float]]]:
+    """Get the solar and photopic results.
+
+    Args:
+        layers: A list of pwc.ProductData objects.
+        gaps: A list of pwc.Layers.gap objects.
+
+    Returns:
+        A tuple of pwc.OpticalMethodResults objects.
+    """
+    glzsys = pwc.GlazingSystem(
+        solid_layers=layers,
+        gap_layers=gaps,
+        width_meters=1,
+        height_meters=1,
+        environment=pwc.nfrc_shgc_environments(),
+        bsdf_hemisphere=pwc.BSDFHemisphere.create(pwc.BSDFBasisType.FULL),
+    )
+    solres = glzsys.optical_method_results("SOLAR")
+    visres = glzsys.optical_method_results("PHOTOPIC")
+    solsys = solres.system_results
+    vissys = visres.system_results
+
+    return {
+        "solar_front_absorptance": [
+            alpha.front.absorptance.angular_total for alpha in solres.layer_results
+        ],
+        "solar_back_absorptance": [
+            alpha.back.absorptance.angular_total for alpha in solres.layer_results
+        ],
+        "visible_back_reflectance": vissys.back.reflectance.matrix,
+        "visible_front_reflectance": vissys.front.reflectance.matrix,
+        "visible_back_transmittance": vissys.back.transmittance.matrix,
+        "visible_front_transmittance": vissys.front.transmittance.matrix,
+        "solar_back_reflectance": solsys.back.reflectance.matrix,
+        "solar_front_reflectance": solsys.front.reflectance.matrix,
+        "solar_back_transmittance": solsys.back.transmittance.matrix,
+        "solar_front_transmittance": solsys.front.transmittance.matrix,
+    }
+
+
 def create_glazing_system(
+    name: str,
+    layers: List[Union[GlazingLayer, ShadingLayer]],
+    gaps: Optional[List[Gap]] = None,
+) -> GlazingSystem:
+    """Create a glazing system from a list of layers and gaps.
+
+    Args:
+        name: The name of the glazing system.
+        layers: A list of GlazingLayer or ShadingLayer objects.
+        gaps: A list of Gap objects.
+
+    Returns:
+        A GlazingSystem object.
+    """
+    if gaps is None:
+        gaps = get_default_gaps(len(layers))
+
+    thickness = sum(layer.thickness for layer in layers)
+    shading_layers = {}
+    glazing_layers = {}
+    for layer in layers:
+        if isinstance(layer, ShadingLayer):
+            shading_layers[layer.product_name] = layer
+        elif isinstance(layer, GlazingLayer):
+            glazing_layers[layer.product_name] = layer
+        else:
+            raise ValueError("Invalid layer type")
+    layer_by_names = [layer.product_name for layer in layers]
+    results = get_solar_photopic_results(
+        layers=[layer.to_pwc() for layer in layers],
+        gaps=create_pwc_gaps(gaps),
+    )
+
+    return GlazingSystem(
+        name=name,
+        thickness=thickness,
+        layers=layer_by_names,
+        shading_layers=shading_layers,
+        glazing_layers=glazing_layers,
+        gaps=gaps,
+        **results,
+    )
+
+
+def create_glazing_system_from_file(
     name: str, layers: List[Union[Path, bytes]], gaps: Optional[List[Gap]] = None
 ) -> GlazingSystem:
-    """Create a glazing system from a list of layers and gaps."""
+    """Create a glazing system from a list of layers as fils and gaps.
+
+    Args:
+        name: The name of the glazing system.
+        layers: A list of Path or bytes objects.
+        gaps: A list of Gap objects.
+
+    Returns:
+        A GlazingSystem object.
+    """
     if gaps is None:
         gaps = [Gap([Gas("air", 1)], 0.0127) for _ in range(len(layers) - 1)]
     layer_data = []
@@ -292,52 +420,23 @@ def create_glazing_system(
         layer_data.append(product_data)
         thickness += product_data.thickness / 1000.0 or 0  # mm to m
 
-    glzsys = pwc.GlazingSystem(
-        solid_layers=layer_data,
-        gap_layers=create_pwc_gaps(gaps),
-        width_meters=1,
-        height_meters=1,
-        environment=pwc.nfrc_shgc_environments(),
-        bsdf_hemisphere=pwc.BSDFHemisphere.create(pwc.BSDFBasisType.FULL),
-    )
-
-    solres = glzsys.optical_method_results("SOLAR")
-    solsys = solres.system_results
-    visres = glzsys.optical_method_results("PHOTOPIC")
-    vissys = visres.system_results
+    pwc_gaps = create_pwc_gaps(gaps)
+    results = get_solar_photopic_results(layer_data, pwc_gaps)
 
     return GlazingSystem(
         name=name,
         thickness=thickness,
         layers=get_layers(layer_data),
+        shading_layers={},
+        glazing_layers={},
         gaps=gaps,
-        solar_front_absorptance=[
-            alpha.front.absorptance.angular_total for alpha in solres.layer_results
-        ],
-        solar_back_absorptance=[
-            alpha.back.absorptance.angular_total for alpha in solres.layer_results
-        ],
-        visible_back_reflectance=vissys.back.reflectance.matrix,
-        visible_front_reflectance=vissys.front.reflectance.matrix,
-        visible_back_transmittance=vissys.back.transmittance.matrix,
-        visible_front_transmittance=vissys.front.transmittance.matrix,
-        solar_back_reflectance=solsys.back.reflectance.matrix,
-        solar_front_reflectance=solsys.front.reflectance.matrix,
-        solar_back_transmittance=solsys.back.transmittance.matrix,
-        solar_front_transmittance=solsys.front.transmittance.matrix,
+        **results,
     )
 
 
-def get_layer_rgb(layer: pwc.ProductData) -> PaneRGB:
+def get_pane_rgb(layer: pwc.ProductData) -> PaneRGB:
     """Get the RGB values for a pane layer."""
     photopic_wvl = range(380, 781, 10)
-    if isinstance(layer.measurements, pwc.DualBandBSDF):
-        return PaneRGB(
-            coated_rgb=(0, 0, 0),
-            glass_rgb=(0, 0, 0),
-            trans_rgb=(0, 0, 0),
-            coated_side=None,
-        )
     hemi = {
         d.wavelength
         * 1e3: (
@@ -368,8 +467,6 @@ def get_layer_rgb(layer: pwc.ProductData) -> PaneRGB:
 
 def get_glazing_primitive(name: str, panes: List[PaneRGB]) -> pr.Primitive:
     """Generate a BRTDfunc to represent a glazing system."""
-    if len(panes) > 2:
-        raise ValueError("Only double pane supported")
     if len(panes) == 1:
         str_arg = [
             "sr_clear_r",
@@ -399,7 +496,7 @@ def get_glazing_primitive(name: str, panes: List[PaneRGB]) -> pr.Primitive:
             *[round(i, 3) for i in panes[0].coated_rgb],
             *[round(i, 3) for i in panes[0].trans_rgb],
         ]
-    else:
+    elif len(panes) == 2:
         s12t_r, s12t_g, s12t_b = panes[0].trans_rgb
         s34t_r, s34t_g, s34t_b = panes[1].trans_rgb
         if panes[0].coated_side == "back":
@@ -436,11 +533,15 @@ def get_glazing_primitive(name: str, panes: List[PaneRGB]) -> pr.Primitive:
             "glaze2.cal",
         ]
         real_arg = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    else:
+        raise ValueError("Only double pane supported")
     return pr.Primitive("void", "BRTDfunc", name, str_arg, real_arg)
 
 
-def laminate(sub: GlazingLayer, lam) -> GlazingLayer:
+def laminate(sub: GlazingLayer, lam: GlazingLayer, side: pwc.CoatedSide) -> GlazingLayer:
     """Laminate a glazing layer."""
+    optical_data = pwc.ProductDataOpticalNBand()
+    layer = pwc.ProductDataOpticalAndThermal()
     return GlazingLayer(
         product_name=sub.product_name,
         thickness=sub.thickness,
