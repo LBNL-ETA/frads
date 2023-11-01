@@ -47,6 +47,7 @@ graph LR
 ## 0. Import required Python libraries
 
 ```python
+from pathlib import Path
 import frads as fr
 
 ```
