@@ -2,7 +2,8 @@ import argparse
 import os
 from pathlib import Path
 import sys
-sys.path.append('.')
+
+sys.path.append(".")
 import shutil
 
 from frads import cli
@@ -61,6 +62,7 @@ def test_three_phase():
     shutil.rmtree("Results")
     os.chdir("..")
 
+
 def test_five_phase():
     os.chdir("test")
     args = argparse.Namespace()
@@ -72,6 +74,7 @@ def test_five_phase():
     shutil.rmtree("Matrices")
     shutil.rmtree("Results")
     os.chdir("..")
+
 
 def test_five_phase2():
     os.chdir("test")

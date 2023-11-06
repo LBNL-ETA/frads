@@ -9,6 +9,7 @@ def test_help():
     cmd = ["gen", "-h"]
     sp.run(cmd, check=True, stderr=sp.PIPE, stdout=sp.PIPE)
 
+
 def test_matrix_point_sky():
     grid_path = Path("test", "Resources", "grid.pts")
     sys_paths = [
@@ -21,4 +22,3 @@ def test_matrix_point_sky():
     sp.run(cmd, check=True)
     assert os.path.isfile("grid_r4sky.mtx")
     os.remove("grid_r4sky.mtx")
-

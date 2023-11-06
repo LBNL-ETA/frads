@@ -44,7 +44,9 @@ def cfg(resources_dir, objects_dir):
             },
             "materials": {
                 "files": [objects_dir / "materials.mat"],
-                "matrices": {"blinds30": {"matrix_file": resources_dir / "blinds30.xml"}},
+                "matrices": {
+                    "blinds30": {"matrix_file": resources_dir / "blinds30.xml"}
+                },
             },
             "sensors": {
                 "wpi": {"file": resources_dir / "grid.txt"},
@@ -76,7 +78,12 @@ def test_three_phase(cfg, resources_dir):
     dhi = 100
     config = WorkflowConfig.from_dict(cfg)
     blind_prim = pr.Primitive(
-        "void", "aBSDF", "blinds30", [str(resources_dir/"blinds30.xml"), "0", "0", "1", "."], [])
+        "void",
+        "aBSDF",
+        "blinds30",
+        [str(resources_dir / "blinds30.xml"), "0", "0", "1", "."],
+        [],
+    )
     config.model.materials.glazing_materials = {"blinds30": blind_prim}
     with ThreePhaseMethod(config) as workflow:
         workflow.generate_matrices(view_matrices=False)
@@ -113,7 +120,9 @@ def test_eprad_threephase(resources_dir):
         gaps=[Gap([Gas("air", 0.1), Gas("argon", 0.9)], 0.0127)],
     )
     epmodel.add_glazing_system(gs_ec60)
-    rad_models = epmodel_to_radmodel(epmodel, epw_file=weather_files["usa_ca_san_francisco"])
+    rad_models = epmodel_to_radmodel(
+        epmodel, epw_file=weather_files["usa_ca_san_francisco"]
+    )
     zone = "Perimeter_bot_ZN_1"
     zone_dict = rad_models[zone]
     zone_dict["model"]["views"]["view1"] = {"file": view_path, "xres": 16, "yres": 16}

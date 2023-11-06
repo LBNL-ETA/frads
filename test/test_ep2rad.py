@@ -9,9 +9,7 @@ def test_cfscase(resources_dir):
     epjson1 = resources_dir / "CmplxGlz_SingleZone_DoubleClearAir.epJSON"
     epmodel = load_energyplus_model(epjson1)
     rad_model = epmodel_to_radmodel(epmodel)
-    assert (
-        rad_model["Room 102"]["model"]["sensors"]["Room102 Floor"] is not None
-    )
+    assert rad_model["Room 102"]["model"]["sensors"]["Room102 Floor"] is not None
 
 
 def test_refcase(resources_dir):
@@ -19,8 +17,6 @@ def test_refcase(resources_dir):
     epmodel = load_energyplus_model(epjson2)
     rad_model = epmodel_to_radmodel(epmodel)
     assert (
-        rad_model["Perimeter_bot_ZN_1"]["model"]["sensors"][
-            "Perimeter_bot_ZN_1_Floor"
-        ]
+        rad_model["Perimeter_bot_ZN_1"]["model"]["sensors"]["Perimeter_bot_ZN_1_Floor"]
         is not None
     )

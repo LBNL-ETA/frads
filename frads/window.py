@@ -1,114 +1,399 @@
-from dataclasses import asdict, dataclass, field
+from enum import Enum
 import json
 from pathlib import Path
+import re
 import tempfile
 from typing import Dict, List, Optional, Tuple, Union
 
+from lxml import etree
+from pydantic import BaseModel
 import pyradiance as pr
-import pywincalc as pwc
+import pywincalc as wc
 
 
-AIR = pwc.PredefinedGasType.AIR
-KRYPTON = pwc.PredefinedGasType.KRYPTON
-XENON = pwc.PredefinedGasType.XENON
-ARGON = pwc.PredefinedGasType.ARGON
+class GasType(str, Enum):
+    air = "air"
+    krypton = "krypton"
+    xenon = "xenon"
+    argon = "argon"
 
 
-@dataclass
-class PaneRGB:
-    """Pane color data object.
-
-    Attributes:
-        measured_data: measured data as a PaneProperty object.
-        coated_rgb: Coated side RGB.
-        glass_rgb: Non-coated side RGB.
-        trans_rgb: Transmittance RGB.
-    """
-
-    coated_rgb: Tuple[float, float, float]
-    glass_rgb: Tuple[float, float, float]
-    trans_rgb: Tuple[float, float, float]
-    coated_side: Optional[str] = None
+class OpticalComponent(Enum):
+    transmittance = "transmittance"
+    reflectance = "reflectance"
 
 
-@dataclass
-class MeasurementComponent:
-    transmittance_front: float
-    transmittance_back: float
-    reflectance_front: float
-    reflectance_back: float
+class OpticalDirection(Enum):
+    front = "front"
+    back = "back"
 
 
-@dataclass
-class WavelengthData:
-    direct_component: Optional[MeasurementComponent]
-    diffuse_component: Optional[MeasurementComponent]
+class WavelengthIntegral(Enum):
+    solar = "solar"
+    visible = "visible"
 
 
-@dataclass
-class Layer:
-    product_name: str
+class WavelengthData(BaseModel):
+    component: OpticalComponent
+    direction: OpticalDirection
+    wavelength: WavelengthIntegral
+    data: List[float]
+
+
+class RGBFloat(BaseModel):
+    red: float
+    green: float
+    blue: float
+
+
+class ShadingXMLParser:
+    def __init__(self, file_path):
+        self.name = ""
+        self.manufacturer = ""
+        self.element_type = ""
+        self.thickness = 0.0
+        self.device_type = None
+        self.thermal_conductivity = None
+        self.emissivity_front = None
+        self.emissivity_back = None
+        self.tir = None
+        self.permeability_factor = None
+        self.aerc_acceptance = None
+        self.angle_basis_name = ""
+        self.thetas = []
+        self.nphis = []
+        self.wavelength_data = []
+        self.current_direction = None
+        self.current_component = None
+        self.current_spectrum = None
+
+        context = etree.iterparse(file_path, events=("end",))
+
+        for event, element in context:
+            tag = element.tag.split("}")[-1]
+
+            if handler := getattr(self, "_handle_" + tag, None):
+                handler(element)
+
+            element.clear()
+
+    def _handle_WindowElementType(self, element):
+        self.element_type = element.text
+
+    def _handle_Name(self, element):
+        self.name = element.text.strip()
+
+    def _handle_Manufacturer(self, element):
+        self.manufacturer = element.text.strip()
+
+    def _handle_Thickness(self, element):
+        self.thickness = float(element.text)
+
+    def _handle_DeviceType(self, element):
+        self.device_type = element.text.strip()
+
+    def _handle_ThermalConductivity(self, element):
+        self.thermal_conductivity = float(element.text)
+
+    def _handle_EmissivityFront(self, element):
+        self.emissivity_front = float(element.text)
+
+    def _handle_EmissivityBack(self, element):
+        self.emissivity_back = float(element.text)
+
+    def _handle_TIR(self, element):
+        self.tir = float(element.text)
+
+    def _handle_PermeabilityFactor(self, element):
+        self.permeability_factor = float(element.text)
+
+    def _handle_AERCAcceptance(self, element):
+        self.aerc_acceptance = element.text
+
+    def _handle_AngleBasisName(self, element):
+        self.angle_basis_name = element.text
+
+    def _handle_Theta(self, element):
+        self.thetas.append(float(element.text))
+
+    def _handle_nPhis(self, element):
+        self.nphis.append(int(element.text))
+
+    def _handle_WavelengthDataDirection(self, element):
+        comp, direction = element.text.strip().split()
+        self.current_direction = direction.lower()
+        if comp.lower() == "transmission":
+            self.current_component = "transmittance"
+        elif comp.lower() == "reflection":
+            self.current_component = "reflectance"
+        else:
+            raise ValueError(f"Unknown component: {comp}")
+
+    def _handle_Wavelength(self, element):
+        unit = element.attrib.get("unit")
+        self.current_spectrum = element.text.strip().lower()
+
+    def _handle_ScatteringData(self, element):
+        scattering_data = [
+            float(x) for x in re.split("[, \\n]", element.text.strip()) if x
+        ]
+        self.wavelength_data.append(
+            WavelengthData(
+                component=self.current_component,
+                direction=self.current_direction,
+                wavelength=self.current_spectrum,
+                data=scattering_data,
+            )
+        )
+
+
+class ShadingBSDF(BaseModel):
+    name: str
+    manufacturer: str
+    element_type: str
     thickness: float
-    product_type: str
-    conductivity: float
+    device_type: Optional[str]
+    thermal_conductivity: Optional[float]
+    emissivity_front: Optional[float]
+    emissivity_back: Optional[float]
+    tir: Optional[float]
+    permeability_factor: Optional[float]
+    aerc_acceptance: Optional[str]
+    angle_basis_name: str
+    thetas: Optional[List[float]]
+    nphis: Optional[List[int]]
+    wavelength_data: List[WavelengthData]
+
+    @classmethod
+    def from_xml(cls, file_path):
+        parser = ShadingXMLParser(file_path)
+        return cls(
+            name=parser.name,
+            manufacturer=parser.manufacturer,
+            element_type=parser.element_type,
+            thickness=parser.thickness,
+            device_type=parser.device_type,
+            thermal_conductivity=parser.thermal_conductivity,
+            emissivity_front=parser.emissivity_front,
+            emissivity_back=parser.emissivity_back,
+            tir=parser.tir,
+            permeability_factor=parser.permeability_factor,
+            aerc_acceptance=parser.aerc_acceptance,
+            angle_basis_name=parser.angle_basis_name,
+            thetas=parser.thetas,
+            nphis=parser.nphis,
+            wavelength_data=parser.wavelength_data,
+        )
+
+    def to_wincalc(self, flip=False) -> wc.ProductDataOpticalAndThermal:
+        data = {}
+        if self.nphis is None:
+            raise ValueError("nphis not found, may be not a matrix")
+        if len(self.wavelength_data) != 8:
+            raise ValueError("Wavelength data incomplete")
+        nrows = sum(self.nphis)
+        for wd in self.wavelength_data:
+            key = f"{wd.wavelength.value}_{wd.component.value}_{wd.direction.value}"
+            data[key] = [wd.data[i : i + nrows] for i in range(0, len(wd.data), nrows)]
+        optical_data = wc.ProductDataOpticalDualBandBSDF(
+            bsdf_hemisphere=wc.BSDFHemisphere.create(wc.BSDFBasisType.FULL),
+            thickness_meters=self.thickness / 1000,
+            ir_transmittance_front=self.tir,
+            ir_transmittance_back=self.tir,
+            emissivity_front=self.emissivity_front,
+            emissivity_back=self.emissivity_back,
+            permeability_factor=self.permeability_factor,
+            flipped=flip,
+            **data,
+        )
+        thermal_data = wc.ProductDataThermal(
+            conductivity=self.thermal_conductivity,
+            thickness_meters=self.thickness / 1000,
+            flipped=flip,
+        )
+        return wc.ProductDataOpticalAndThermal(optical_data, thermal_data)
+
+
+class IntegratedResultsSummary(BaseModel):
+    calculation_standard_name: str
+    tfsol: float
+    tbsol: Optional[float]
+    rfsol: float
+    rbsol: float
+    tfvis: float
+    tbvis: Optional[float]
+    rfvis: float
+    rbvis: float
+    tdw: float
+    tuv: float
+    tspf: float
+    tkr: Optional[float]
+    tciex: float
+    tciey: float
+    tciez: float
+    tf_r: Optional[float]
+    tf_g: Optional[float]
+    tf_b: Optional[float]
+    rfciex: float
+    rfciey: float
+    rfciez: float
+    rf_r: Optional[float]
+    rf_g: Optional[float]
+    rf_b: Optional[float]
+    rbciex: Optional[float]
+    rbciey: Optional[float]
+    rbciez: Optional[float]
+    rb_r: Optional[float]
+    rb_g: Optional[float]
+    rb_b: Optional[float]
+
+
+class MeasuredData(BaseModel):
+    is_specular: bool
+    thickness: float
+    tir_front: float
+    tir_back: Optional[float]
     emissivity_front: float
     emissivity_back: float
-    ir_transmittance: float
+    conductivity: float
+    permeability_factor: Optional[float]
 
 
-@dataclass
-class GlazingLayer(Layer):
-    measurements: Dict[float, WavelengthData]
-    rgb: PaneRGB
+class SpectralData(BaseModel):
+    T: float
+    Rf: float
+    Rb: float
+    wavelength: float
 
 
-@dataclass
-class ShadingLayer(Layer):
-    measurements: Dict[float, WavelengthData]
+class Pane(BaseModel):
+    product_id: int
+    name: str
+    product_name: Optional[str]
+    nfrc_id: int
+    igdb_database_version: str
+    acceptance: str
+    appearance: str
+    manufacturer_name: str
+    thickness: float
+    short_description: Optional[str]
+    type: str
+    subtype: str
+    deconstructable: bool
+    coating_name: str
+    coated_side: str
+    measured_data: MeasuredData
+    integrated_results_summary: List[IntegratedResultsSummary]
+    spectral_data: Dict[str, Union[List[SpectralData], dict]]
+    composition: Optional[list]
+    coated_side_rgb: Optional[RGBFloat]
+    glass_side_rgb: Optional[RGBFloat]
+    transmittance_rgb: Optional[RGBFloat]
+
+    @classmethod
+    def from_json(cls, file_path: Union[str, Path]):
+        with open(file_path, "r") as f:
+            data = json.load(f)
+        sdata = [SpectralData(**d) for d in data["spectral_data"]["spectral_data"]]
+        trgb, crgb, grgb = get_pane_rgb(sdata, data['coated_side'])
+        data["transmittance_rgb"] = trgb
+        data["coated_side_rgb"] = crgb
+        data["glass_side_rgb"] = grgb
+        data["thickness"] = data["measured_data"]["thickness"]
+        return cls.model_validate(data)
+
+    def to_wincalc(self, flip=False) -> wc.ProductDataOpticalAndThermal:
+        optical_data = wc.ProductDataOpticalNBand(
+            material_type=getattr(
+                wc.MaterialType, self.subtype.upper().replace("-", "_")
+            ),
+            thickness_meters=self.measured_data.thickness / 1e3,
+            wavelength_data=[
+                wc.WavelengthData(
+                    s.wavelength, wc.OpticalMeasurementComponent(s.T, s.T, s.Rf, s.Rb)
+                )
+                for s in self.spectral_data["spectral_data"]
+            ],
+            coated_side=getattr(wc.CoatedSide, self.coated_side.upper()),
+            ir_transmittance_front=self.measured_data.tir_front,
+            ir_transmittance_back=self.measured_data.tir_back
+            or self.measured_data.tir_front,
+            emissivity_front=self.measured_data.emissivity_front,
+            emissivity_back=self.measured_data.emissivity_back,
+            permeability_factor=self.measured_data.permeability_factor or 0,
+            flipped=flip,
+        )
+        thermal_data = wc.ProductDataThermal(
+            conductivity=self.measured_data.conductivity,
+            thickness_meters=self.measured_data.thickness / 1e3,
+            flipped=flip,
+        )
+        return wc.ProductDataOpticalAndThermal(optical_data, thermal_data)
 
 
-@dataclass
-class Gas:
-    gas: str
+def get_pane_rgb(
+    sdata: List[SpectralData],
+    coated_side: str
+) -> Tuple[RGBFloat, RGBFloat, RGBFloat]:
+    """Get the RGB values for a pane layer."""
+    photopic_wvl = range(380, 781, 10)
+    hemi = {d.wavelength * 1e3: (d.T, d.T, d.Rf, d.Rb) for d in sdata}
+    tvf = [hemi[w][0] for w in photopic_wvl]
+    rvf = [hemi[w][2] for w in photopic_wvl]
+    rvb = [hemi[w][3] for w in photopic_wvl]
+    tf_x, tf_y, tf_z = pr.spec_xyz(tvf, 380, 780)
+    rf_x, rf_y, rf_z = pr.spec_xyz(rvf, 380, 780)
+    rb_x, rb_y, rb_z = pr.spec_xyz(rvb, 380, 780)
+    tf_rgb = pr.xyz_rgb(tf_x, tf_y, tf_z)
+    rf_rgb = pr.xyz_rgb(rf_x, rf_y, rf_z)
+    rb_rgb = pr.xyz_rgb(rb_x, rb_y, rb_z)
+    if coated_side.lower() == "front":
+        coated_rgb = rf_rgb
+        glass_rgb = rb_rgb
+    else:
+        coated_rgb = rb_rgb
+        glass_rgb = rf_rgb
+    trgb = RGBFloat(red=tf_rgb[0], green=tf_rgb[1], blue=tf_rgb[2])
+    crgb = RGBFloat(red=coated_rgb[0], green=coated_rgb[1], blue=coated_rgb[2])
+    grgb = RGBFloat(red=glass_rgb[0], green=glass_rgb[1], blue=glass_rgb[2])
+    return trgb, crgb, grgb
+
+
+class Gas(BaseModel):
+    gas: GasType
     ratio: float
 
     def __post_init__(self):
         if self.ratio < 0 or self.ratio > 1:
             raise ValueError("Gas ratio must be between 0 and 1.")
-        if self.gas.lower() not in ("air", "argon", "krypton", "xenon"):
-            raise ValueError("Invalid gas type.")
 
 
-@dataclass
-class Gap:
-    gas: List[Gas]
+class Gap(BaseModel):
+    gases: List[Gas]
     thickness: float
 
     def __post_init__(self):
         if self.thickness <= 0:
             raise ValueError("Gap thickness must be greater than 0.")
-        if sum(g.ratio for g in self.gas) != 1:
+        if sum(gas.ratio for gas in self.gases) != 1:
             raise ValueError("The sum of the gas ratios must be 1.")
 
 
-@dataclass
-class GlazingSystem:
+class GlazingSystemBSDF(BaseModel):
     name: str
-    thickness: float = 0
-    layers: List[str] = field(default_factory=list)
-    shading_layers: Dict[str, ShadingLayer] = field(default_factory=dict)
-    glazing_layers: Dict[str, GlazingLayer] = field(default_factory=dict)
-    gaps: List[Gap] = field(default_factory=list)
-    visible_front_transmittance: List[List[float]] = field(default_factory=list)
-    visible_back_transmittance: List[List[float]] = field(default_factory=list)
-    visible_front_reflectance: List[List[float]] = field(default_factory=list)
-    visible_back_reflectance: List[List[float]] = field(default_factory=list)
-    solar_front_transmittance: List[List[float]] = field(default_factory=list)
-    solar_back_transmittance: List[List[float]] = field(default_factory=list)
-    solar_front_reflectance: List[List[float]] = field(default_factory=list)
-    solar_back_reflectance: List[List[float]] = field(default_factory=list)
-    solar_front_absorptance: List[List[float]] = field(default_factory=list)
-    solar_back_absorptance: List[List[float]] = field(default_factory=list)
+    thickness: float
+    layers: List[Union[Pane, ShadingBSDF]]
+    gaps: List[Gap]
+    visible_front_transmittance: List[List[float]]
+    visible_back_transmittance: List[List[float]]
+    visible_front_reflectance: List[List[float]]
+    visible_back_reflectance: List[List[float]]
+    solar_front_transmittance: List[List[float]]
+    solar_back_transmittance: List[List[float]]
+    solar_front_reflectance: List[List[float]]
+    solar_back_reflectance: List[List[float]]
+    solar_front_absorptance: List[List[float]]
+    solar_back_absorptance: List[List[float]]
 
     def _matrix_to_str(self, matrix: List[List[float]]) -> str:
         """Convert a matrix to a string."""
@@ -157,164 +442,69 @@ class GlazingSystem:
             out: The path to save the file to.
         """
         out = Path(out)
-        if out.suffix == ".xml":
-            self.to_xml(out)
-        else:
-            with open(out.with_suffix(".json"), "w") as f:
-                json.dump(asdict(self), f)
+        with open(out.with_suffix(".json"), "w") as f:
+            json.dump(self.model_dump(), f)
 
     @classmethod
-    def from_json(cls, path: Union[str, Path]):
-        """Load a glazing system from a JSON file."""
-        with open(path, "r") as f:
+    def from_json(cls, file_path: Union[str, Path]):
+        """Load a glazing system from a JSON file.
+
+        Args:
+            file_path: The path to the JSON file.
+        """
+        with open(file_path, "r") as f:
             data = json.load(f)
-        shading_layers = data.pop("shading_layers")
-        glazing_layers = data.pop("glazing_layers")
-        shading_layer_instances = {}
-        glazing_layer_instances = {}
-        for layer in glazing_layers:
-            rgb = layer.pop("rgb")
-            measurements = layer.pop("measurements")
-            glazing_layer_instances[layer.name] = GlazingLayer(
-                rgb=PaneRGB(**rgb), **layer
-            )
-        for layer in shading_layers:
-            measurements = layer.pop("measurements")
-            shading_layer_instances[layer.name] = ShadingLayer(**layer)
-        gaps = data.pop("gaps")
-        gap_instances = []
-        for gap in gaps:
-            gas_instances = []
-            gases = gap.pop("gas")
-            for gs in gases:
-                gas_instances.append(Gas(**gs))
-            gap_instances.append(Gap(gas=gas_instances, **gap))
-        return cls(
-            shading_layers=shading_layer_instances,
-            glazing_layers=glazing_layer_instances,
-            gaps=gap_instances,
-            **data,
-        )
+        return cls.model_validate(data)
 
     def get_brtdfunc(self) -> pr.Primitive:
         """Get a BRTDfunc primitive for the glazing system."""
-        if not all(isinstance(layer, GlazingLayer) for layer in self.layers):
-            raise ValueError("Only glazing layers supported.")
+        if not all(isinstance(layer, Pane) for layer in self.layers):
+            raise ValueError("No glazing layers found.")
         if len(self.layers) > 2:
             raise ValueError("Only double pane supported.")
-        rgb = [self.glazing_layers[name].rgb for name in self.layers]
-        return get_glazing_primitive(self.name, rgb)
+        return get_glazing_primitive(self.name, self.layers)
 
 
-def get_glazing_measurements(
-    measurements: List[pwc.WavelengthData],
-) -> Dict[float, WavelengthData]:
-    """Get the measurements from a pwc.ProductMeasurements object."""
-    parsed = {}
-    for data in measurements:
-        _dc = None
-        _df = None
-        if (ddc := data.direct_component) is not None:
-            _dc = MeasurementComponent(
-                ddc.transmittance_front,
-                ddc.transmittance_back,
-                ddc.reflectance_front,
-                ddc.reflectance_back,
-            )
-        if (dfc := data.diffuse_component) is not None:
-            _df = MeasurementComponent(
-                dfc.transmittance_front,
-                dfc.transmittance_back,
-                dfc.reflectance_front,
-                dfc.reflectance_back,
-            )
-        parsed[data.wavelength * 1e3] = WavelengthData(
-            direct_component=_dc, diffuse_component=_df
-        )
-    return parsed
-
-
-def get_shading_measurements(
-    measurements,
-) -> Dict[float, WavelengthData]:
-    """Get the measurements from a pwc.ProductMeasurements object."""
-    return {
-        d.wavelength
-        * 1e3: WavelengthData(
-            direct_component=d.direct_component.transmittance_front,
-            diffuse_component=d.diffuse_component.transmittance_front,
-        )
-        for d in measurements
-    }
-
-
-def get_layers(input: List[pwc.ProductData]) -> List[Layer]:
-    """Create a list of layers from a list of pwc.ProductData."""
-    layers = []
-    for inp in input:
-        params = {
-            "product_name": inp.product_name,
-            "thickness": inp.thickness,
-            "product_type": inp.product_type,
-            "conductivity": inp.conductivity,
-            "emissivity_front": inp.emissivity_front,
-            "emissivity_back": inp.emissivity_back,
-            "ir_transmittance": inp.ir_transmittance,
-        }
-        if inp.product_type.lower() == "glazing":
-            layers.append(
-                GlazingLayer(
-                    rgb=get_layer_rgb(inp),
-                    measurements=get_glazing_measurements(inp.measurements),
-                    **params,
-                )
-            )
-        else:
-            layers.append(
-                ShadingLayer(
-                    measurements=get_shading_measurements(inp.measurements),
-                    **params,
-                )
-            )
-    return layers
-
-
-def create_pwc_gaps(gaps: List[Gap]) -> List[pwc.Layers.gap]:
-    """Create a list of pwc gaps from a list of gaps."""
-    pwc_gaps = []
+def create_wc_gaps(gaps: List[Gap]) -> List[wc.Layers.gap]:
+    """Create a list of wc gaps from a list of gaps."""
+    wc_gaps = []
     for gap in gaps:
-        _gas = pwc.create_gas(
-            [[g.ratio, getattr(pwc.PredefinedGasType, g.gas.upper())] for g in gap.gas]
+        _gas = wc.create_gas(
+            [[gas.ratio, getattr(wc.PredefinedGasType, gas.gas.value.upper())] for gas in gap.gases]
         )
-        _gap = pwc.Layers.gap(gas=_gas, thickness=gap.thickness)
-        pwc_gaps.append(_gap)
-    return pwc_gaps
+        _gap = wc.Layers.gap(gas=_gas, thickness=gap.thickness)
+        wc_gaps.append(_gap)
+    return wc_gaps
 
 
-def get_default_gaps(nlayers: int) -> List[Gap]:
+def get_default_gaps(nlayers: int, thickness:float=0.0127) -> List[Gap]:
     """Get a list of default gaps."""
-    return [Gap([Gas("air", 1)], 0.0127) for _ in range(nlayers - 1)]
+    gaps = []
+    for _ in range(nlayers - 1):
+        _gas = Gas(gas=GasType.air, ratio=1)
+        gaps.append(Gap(gases=[_gas], thickness=thickness))
+    return gaps
 
 
 def get_solar_photopic_results(
-    layers: List[pwc.ProductData], gaps: List[pwc.Layers.gap]
+    layers: List[wc.ProductData], gaps: List[wc.Layers.gap]
 ) -> Dict[str, List[List[float]]]:
     """Get the solar and photopic results.
 
     Args:
-        layers: A list of pwc.ProductData objects.
-        gaps: A list of pwc.Layers.gap objects.
+        layers: A list of wc.ProductData objects.
+        gaps: A list of wc.Layers.gap objects.
 
     Returns:
-        A tuple of pwc.OpticalMethodResults objects.
+        A tuple of wc.OpticalMethodResults objects.
     """
-    glzsys = pwc.GlazingSystem(
+    glzsys = wc.GlazingSystem(
         solid_layers=layers,
         gap_layers=gaps,
         width_meters=1,
         height_meters=1,
-        environment=pwc.nfrc_shgc_environments(),
-        bsdf_hemisphere=pwc.BSDFHemisphere.create(pwc.BSDFBasisType.FULL),
+        environment=wc.nfrc_shgc_environments(),
+        bsdf_hemisphere=wc.BSDFHemisphere.create(wc.BSDFBasisType.FULL),
     )
     solres = glzsys.optical_method_results("SOLAR")
     visres = glzsys.optical_method_results("PHOTOPIC")
@@ -341,14 +531,14 @@ def get_solar_photopic_results(
 
 def create_glazing_system(
     name: str,
-    layers: List[Union[GlazingLayer, ShadingLayer]],
+    layers: List[Union[Pane, ShadingBSDF]],
     gaps: Optional[List[Gap]] = None,
-) -> GlazingSystem:
+) -> GlazingSystemBSDF:
     """Create a glazing system from a list of layers and gaps.
 
     Args:
         name: The name of the glazing system.
-        layers: A list of GlazingLayer or ShadingLayer objects.
+        layers: A list of Pane or ShadingBSDF objects.
         gaps: A list of Gap objects.
 
     Returns:
@@ -358,114 +548,83 @@ def create_glazing_system(
         gaps = get_default_gaps(len(layers))
 
     thickness = sum(layer.thickness for layer in layers)
-    shading_layers = {}
-    glazing_layers = {}
-    for layer in layers:
-        if isinstance(layer, ShadingLayer):
-            shading_layers[layer.product_name] = layer
-        elif isinstance(layer, GlazingLayer):
-            glazing_layers[layer.product_name] = layer
-        else:
-            raise ValueError("Invalid layer type")
-    layer_by_names = [layer.product_name for layer in layers]
+    thickness += sum(gap.thickness for gap in gaps)
     results = get_solar_photopic_results(
-        layers=[layer.to_pwc() for layer in layers],
-        gaps=create_pwc_gaps(gaps),
+        layers=[layer.to_wincalc() for layer in layers],
+        gaps=create_wc_gaps(gaps),
     )
 
-    return GlazingSystem(
+    return GlazingSystemBSDF(
         name=name,
         thickness=thickness,
-        layers=layer_by_names,
-        shading_layers=shading_layers,
-        glazing_layers=glazing_layers,
+        layers=layers,
         gaps=gaps,
         **results,
     )
 
 
-def create_glazing_system_from_file(
-    name: str, layers: List[Union[Path, bytes]], gaps: Optional[List[Gap]] = None
-) -> GlazingSystem:
+def create_glazing_system_from_files(
+    name: str, layers: List[Union[Path, str]], gaps: Optional[List[Gap]] = None
+) -> GlazingSystemBSDF:
     """Create a glazing system from a list of layers as fils and gaps.
 
     Args:
         name: The name of the glazing system.
-        layers: A list of Path or bytes objects.
+        layers: A list of Path objects.
         gaps: A list of Gap objects.
 
     Returns:
         A GlazingSystem object.
     """
     if gaps is None:
-        gaps = [Gap([Gas("air", 1)], 0.0127) for _ in range(len(layers) - 1)]
+        gaps = get_default_gaps(len(layers))
     layer_data = []
-    thickness = 0
-    for layer in layers:
+    for path in layers:
+        path = Path(path)
         product_data = None
-        if isinstance(layer, Path):
-            if layer.suffix == ".json":
-                product_data = pwc.parse_json_file(str(layer))
-            elif layer.suffix == ".xml":
-                product_data = pwc.parse_bsdf_xml_file(str(layer))
-            else:
-                product_data = pwc.parse_optics_file(str(layer))
-        elif isinstance(layer, bytes):
-            try:
-                product_data = pwc.parse_json(layer)
-            except json.JSONDecodeError:
-                product_data = pwc.parse_bsdf_xml_string(layer)
+        if path.suffix == ".json":
+            product_data = Pane.from_json(path)
+        elif path.suffix == ".xml":
+            product_data = ShadingBSDF.from_xml(path)
         if product_data is None:
             raise ValueError("Invalid layer type")
         layer_data.append(product_data)
-        thickness += product_data.thickness / 1000.0 or 0  # mm to m
 
-    pwc_gaps = create_pwc_gaps(gaps)
-    results = get_solar_photopic_results(layer_data, pwc_gaps)
-
-    return GlazingSystem(
-        name=name,
-        thickness=thickness,
-        layers=get_layers(layer_data),
-        shading_layers={},
-        glazing_layers={},
-        gaps=gaps,
-        **results,
-    )
+    return create_glazing_system(name, layer_data, gaps)
 
 
-def get_pane_rgb(layer: pwc.ProductData) -> PaneRGB:
-    """Get the RGB values for a pane layer."""
-    photopic_wvl = range(380, 781, 10)
-    hemi = {
-        d.wavelength
-        * 1e3: (
-            d.direct_component.transmittance_front,
-            d.direct_component.transmittance_back,
-            d.direct_component.reflectance_front,
-            d.direct_component.reflectance_back,
-        )
-        for d in layer.measurements
-    }
-    tvf = [hemi[w][0] for w in photopic_wvl]
-    rvf = [hemi[w][2] for w in photopic_wvl]
-    rvb = [hemi[w][3] for w in photopic_wvl]
-    tf_x, tf_y, tf_z = pr.spec_xyz(tvf, 380, 780)
-    rf_x, rf_y, rf_z = pr.spec_xyz(rvf, 380, 780)
-    rb_x, rb_y, rb_z = pr.spec_xyz(rvb, 380, 780)
-    tf_rgb = pr.xyz_rgb(tf_x, tf_y, tf_z)
-    rf_rgb = pr.xyz_rgb(rf_x, rf_y, rf_z)
-    rb_rgb = pr.xyz_rgb(rb_x, rb_y, rb_z)
-    if layer.coated_side == "front":
-        coated_rgb = rf_rgb
-        glass_rgb = rb_rgb
-    else:
-        coated_rgb = rb_rgb
-        glass_rgb = rf_rgb
-    return PaneRGB(coated_rgb, glass_rgb, tf_rgb, layer.coated_side)
+# def get_pane_rgb(layer: wc.ProductData):
+#     """Get the RGB values for a pane layer."""
+#     photopic_wvl = range(380, 781, 10)
+#     hemi = {
+#         d.wavelength
+#         * 1e3: (
+#             d.direct_component.transmittance_front,
+#             d.direct_component.transmittance_back,
+#             d.direct_component.reflectance_front,
+#             d.direct_component.reflectance_back,
+#         )
+#         for d in layer.measurements
+#     }
+#     tvf = [hemi[w][0] for w in photopic_wvl]
+#     rvf = [hemi[w][2] for w in photopic_wvl]
+#     rvb = [hemi[w][3] for w in photopic_wvl]
+#     tf_x, tf_y, tf_z = pr.spec_xyz(tvf, 380, 780)
+#     rf_x, rf_y, rf_z = pr.spec_xyz(rvf, 380, 780)
+#     rb_x, rb_y, rb_z = pr.spec_xyz(rvb, 380, 780)
+#     tf_rgb = pr.xyz_rgb(tf_x, tf_y, tf_z)
+#     rf_rgb = pr.xyz_rgb(rf_x, rf_y, rf_z)
+#     rb_rgb = pr.xyz_rgb(rb_x, rb_y, rb_z)
+#     if layer.coated_side == "front":
+#         coated_rgb = rf_rgb
+#         glass_rgb = rb_rgb
+#     else:
+#         coated_rgb = rb_rgb
+#         glass_rgb = rf_rgb
+#     # return PaneRGB(coated_rgb, glass_rgb, tf_rgb, layer.coated_side)
+#
 
-
-def get_glazing_primitive(name: str, panes: List[PaneRGB]) -> pr.Primitive:
+def get_glazing_primitive(name: str, panes: List[Pane]) -> pr.Primitive:
     """Generate a BRTDfunc to represent a glazing system."""
     if len(panes) == 1:
         str_arg = [
@@ -492,25 +651,25 @@ def get_glazing_primitive(name: str, panes: List[PaneRGB]) -> pr.Primitive:
             0,
             0,
             coated_real,
-            *[round(i, 3) for i in panes[0].glass_rgb],
-            *[round(i, 3) for i in panes[0].coated_rgb],
-            *[round(i, 3) for i in panes[0].trans_rgb],
+            *[round(i, 3) for i in panes[0].glass_side_rgb],
+            *[round(i, 3) for i in panes[0].coated_side_rgb],
+            *[round(i, 3) for i in panes[0].transmittance_rgb],
         ]
     elif len(panes) == 2:
-        s12t_r, s12t_g, s12t_b = panes[0].trans_rgb
-        s34t_r, s34t_g, s34t_b = panes[1].trans_rgb
+        s12t_r, s12t_g, s12t_b = panes[0].transmittance_rgb
+        s34t_r, s34t_g, s34t_b = panes[1].transmittance_rgb
         if panes[0].coated_side == "back":
-            s2r_r, s2r_g, s2r_b = panes[0].coated_rgb
-            s1r_r, s1r_g, s1r_b = panes[0].glass_rgb
+            s2r_r, s2r_g, s2r_b = panes[0].coated_side_rgb
+            s1r_r, s1r_g, s1r_b = panes[0].glass_side_rgb
         else:  # front or neither side coated
-            s2r_r, s2r_g, s2r_b = panes[0].glass_rgb
-            s1r_r, s1r_g, s1r_b = panes[0].coated_rgb
+            s2r_r, s2r_g, s2r_b = panes[0].glass_side_rgb
+            s1r_r, s1r_g, s1r_b = panes[0].coated_side_rgb
         if panes[1].coated_side == "back":
-            s4r_r, s4r_g, s4r_b = panes[1].coated_rgb
-            s3r_r, s3r_g, s3r_b = panes[1].glass_rgb
+            s4r_r, s4r_g, s4r_b = panes[1].coated_side_rgb
+            s3r_r, s3r_g, s3r_b = panes[1].glass_side_rgb
         else:  # front or neither side coated
-            s4r_r, s4r_g, s4r_b = panes[1].glass_rgb
-            s3r_r, s3r_g, s3r_b = panes[1].coated_rgb
+            s4r_r, s4r_g, s4r_b = panes[1].glass_side_rgb
+            s3r_r, s3r_g, s3r_b = panes[1].coated_side_rgb
         str_arg = [
             (
                 f"if(Rdot,cr(fr({s4r_r:.3f}),ft({s34t_r:.3f}),fr({s2r_r:.3f})),"
@@ -538,11 +697,11 @@ def get_glazing_primitive(name: str, panes: List[PaneRGB]) -> pr.Primitive:
     return pr.Primitive("void", "BRTDfunc", name, str_arg, real_arg)
 
 
-def laminate(sub: GlazingLayer, lam: GlazingLayer, side: pwc.CoatedSide) -> GlazingLayer:
+def laminate(sub: Pane, lam: Pane, side: wc.CoatedSide) -> Pane:
     """Laminate a glazing layer."""
-    optical_data = pwc.ProductDataOpticalNBand()
-    layer = pwc.ProductDataOpticalAndThermal()
-    return GlazingLayer(
+    optical_data = wc.ProductDataOpticalNBand()
+    layer = wc.ProductDataOpticalAndThermal()
+    return Pane(
         product_name=sub.product_name,
         thickness=sub.thickness,
         product_type=sub.product_type,

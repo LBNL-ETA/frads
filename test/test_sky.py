@@ -1,6 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 import sys
+
 sys.path.append(".")
 
 from frads import geom
@@ -45,12 +46,14 @@ wea_path = test_dir / "Resources" / "oak.wea"
 #     for aprim, prim in zip(prims, answer_prims):
 #         assert str(aprim) == str(prim)
 
+
 def test_gendaymtx():
     """Generate a psuedo reinhart 6 sun matrix file given lat, lon, etc..."""
     # sky.gendaymtx(
     #     sun_mtx, 6, data=wea_data, meta=wea_metadata, direct=True, onesun=True
     # )
     pass
+
 
 def test_filter_wea():
     """."""
@@ -59,21 +62,33 @@ def test_filter_wea():
     #     remove_zero=True, daylight_hours_only=True)
     pass
 
+
 # def test_check_sun_above_horizon():
 #     sky.check_sun_above_horizon()
 #     pass
 
+
 def test_gendaylit_cmd():
     """Get a gendaylit command as a list."""
     result = sky.gendaylit_cmd(
-        "1", "2", "13.5", "37", "122.2", "120", year="2022", dir_norm_ir="500", dif_hor_ir="300"
+        "1",
+        "2",
+        "13.5",
+        "37",
+        "122.2",
+        "120",
+        year="2022",
+        dir_norm_ir="500",
+        dif_hor_ir="300",
     )
     answer = "gendaylit 1 2 13.5 -a 37 -o 122.2 -m 120 -y 2022 -W 500 300"
     assert " ".join(result) == answer
 
+
 def test_solar_angle():
     # sky.filter_data_by_direct_sun()
     pass
+
 
 def test_start_end_hour():
     """Remove wea data entries outside of the
@@ -84,9 +99,11 @@ def test_start_end_hour():
     # result = makesky.start_end_hour(sh, eh, data)
     pass
 
+
 def test_check_sun_above_horizon():
     """Remove non-daylight hour entries."""
     pass
+
 
 def test_filter_wea_zero_entry():
     """Remove wea data entries with zero solar luminance.
@@ -96,6 +113,7 @@ def test_filter_wea_zero_entry():
     """
     pass
 
+
 def test_gen_sun_source_culled():
     # mf = 6
     # suns, mod, full_mod = sky.gen_sun_source_culled(mf, smx_path=self.sunmtx_path)
@@ -103,6 +121,7 @@ def test_gen_sun_source_culled():
     # assert Equal(len(mod.splitlines()), 615)
     # sun_mtx.unlink()
     pass
+
 
 # def test_filter_data_by_direct_sun():
 #     meta = WeaMetaData("Oakland", "USA", 37.72, 122.22, 120, 2)
@@ -126,6 +145,7 @@ def test_gen_sun_source_culled():
 #     for res, ans in zip(filtered, answer):
 #         assert res == ans
 
+
 def test_parser_epw():
     with open(epw_path) as rdr:
         wea_metadata, wea_data = sky.parse_epw(rdr.read())
@@ -133,6 +153,7 @@ def test_parser_epw():
     assert wea_data[-1].time.month == 12
     assert wea_data[-1].time.day == 31
     assert wea_metadata.latitude == 37.72
+
 
 def test_parser_wea():
     with open(wea_path) as rdr:

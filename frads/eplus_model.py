@@ -2,7 +2,7 @@ import copy
 from typing import List
 import epmodel
 import epmodel.epmodel as epm
-from frads.window import GlazingSystem
+from frads.window import GlazingSystemBSDF
 
 
 class EnergyPlusModel(epmodel.EnergyPlusModel):
@@ -45,7 +45,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                 floors.append(k)
         return floors
 
-    def add_glazing_system(self, glzsys: GlazingSystem):
+    def add_glazing_system(self, glzsys: GlazingSystemBSDF):
         """Add glazing system to EnergyPlusModel's epjs dictionary.
 
         Args:

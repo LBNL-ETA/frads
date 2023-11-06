@@ -86,11 +86,7 @@ from .window import (
     create_glazing_system,
     Gap,
     Gas,
-    GlazingSystem,
-    AIR,
-    ARGON,
-    KRYPTON,
-    XENON,
+    GlazingSystemBSDF,
 )
 
 __version__ = "1.1.0"
@@ -99,16 +95,13 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    "AIR",
-    "ARGON",
     "create_glazing_system",
     "Gap",
     "Gas",
     "load_energyplus_model",
     "EnergyPlusSetup",
     "FivePhaseMethod",
-    "GlazingSystem",
-    "KRYPTON",
+    "GlazingSystemBSDF",
     "Matrix",
     "SensorSender",
     "SkyReceiver",
@@ -122,7 +115,6 @@ __all__ = [
     "WeaData",
     "WeaMetaData",
     "WorkflowConfig",
-    "XENON",
     "ep_datetime_parser",
     "epmodel_to_radmodel",
     "gen_grid",

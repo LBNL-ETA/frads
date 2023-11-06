@@ -50,4 +50,3 @@ def test_merge_window():
     assert res12 == answer12
     assert res123 == answer123
     assert res1234 == answer1234
-

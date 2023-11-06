@@ -10,6 +10,7 @@ import pytest
 def medium_office():
     return load_energyplus_model(ref_models["medium_office"])
 
+
 @pytest.fixture
 def glazing_path(resources_dir):
     return resources_dir / "igsdb_product_7406.json"
@@ -54,7 +55,9 @@ def test_add_lighting2(medium_office):
 
 def test_output_variable(medium_office):
     """Test adding output variable to an EnergyPlusModel."""
-    medium_office.add_output(output_name="Zone Mean Air Temperature", output_type="variable")
+    medium_office.add_output(
+        output_name="Zone Mean Air Temperature", output_type="variable"
+    )
 
     assert "Zone Mean Air Temperature" in [
         i.variable_name for i in medium_office.output_variable.values()
@@ -69,9 +72,7 @@ def test_output_meter(medium_office):
         reporting_frequency="Hourly",
     )
 
-    assert "CO2:Facility" in [
-        i.key_name for i in medium_office.output_meter.values()
-    ]
+    assert "CO2:Facility" in [i.key_name for i in medium_office.output_meter.values()]
     assert "Hourly" in [
         i.reporting_frequency.value for i in medium_office.output_meter.values()
     ]
