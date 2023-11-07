@@ -6,7 +6,8 @@ import tempfile
 from typing import Dict, List, Optional, Tuple, Union
 
 from lxml import etree
-from pydantic import BaseModel
+import numpy as np
+from pydantic import BaseModel, field_validator
 import pyradiance as pr
 import pywincalc as wc
 
@@ -286,9 +287,10 @@ class Pane(BaseModel):
     integrated_results_summary: List[IntegratedResultsSummary]
     spectral_data: Dict[str, Union[List[SpectralData], dict]]
     composition: Optional[list]
-    coated_side_rgb: Optional[RGBFloat]
-    glass_side_rgb: Optional[RGBFloat]
-    transmittance_rgb: Optional[RGBFloat]
+    coated_side_rgb: RGBFloat
+    glass_side_rgb: RGBFloat
+    transmittance_rgb: RGBFloat
+    substrate: Optional["Pane"]
 
     @classmethod
     def from_json(cls, file_path: Union[str, Path]):
@@ -330,6 +332,43 @@ class Pane(BaseModel):
         )
         return wc.ProductDataOpticalAndThermal(optical_data, thermal_data)
 
+    def to_array(self) -> np.ndarray:
+        """Convert the pane to a 2D array."""
+        return np.array(
+            [
+                [s.T, s.Rf, s.Rb]
+                for s in self.spectral_data["spectral_data"]
+            ]
+        )
+
+    def to_brtdfunc(self, name=None) -> pr.Primitive:
+        real_arg = [0.0] * 9
+        str_arg = [
+            "sr_clear_r",
+            "sr_clear_g",
+            "sr_clear_b",
+            "st_clear_r",
+            "st_clear_g",
+            "st_clear_b",
+            "0",
+            "0",
+            "0",
+            "glaze1.cal",
+        ]
+        real_arg.extend([
+            1 if self.coated_side.lower() == "front" else -1,
+            self.glass_side_rgb.red,
+            self.glass_side_rgb.green,
+            self.glass_side_rgb.blue,
+            self.coated_side_rgb.red,
+            self.coated_side_rgb.green,
+            self.coated_side_rgb.blue,
+            self.transmittance_rgb.red,
+            self.transmittance_rgb.green,
+            self.transmittance_rgb.blue,
+        ])
+        return pr.Primitive("void", "BRTDfunc", name or self.name, str_arg, real_arg)
+
 
 def get_pane_rgb(
     sdata: List[SpectralData],
@@ -363,8 +402,10 @@ class Gas(BaseModel):
     gas: GasType
     ratio: float
 
-    def __post_init__(self):
-        if self.ratio < 0 or self.ratio > 1:
+    @field_validator("ratio")
+    @classmethod
+    def check_ratio(cls, v):
+        if v < 0 or v > 1:
             raise ValueError("Gas ratio must be between 0 and 1.")
 
 
@@ -372,11 +413,17 @@ class Gap(BaseModel):
     gases: List[Gas]
     thickness: float
 
-    def __post_init__(self):
-        if self.thickness <= 0:
-            raise ValueError("Gap thickness must be greater than 0.")
-        if sum(gas.ratio for gas in self.gases) != 1:
+    @field_validator("gases")
+    @classmethod
+    def check_gases(cls, v):
+        if sum(gas.ratio for gas in v) != 1:
             raise ValueError("The sum of the gas ratios must be 1.")
+
+    @field_validator("thickness")
+    @classmethod
+    def check_thickness(cls, v):
+        if v <= 0:
+            raise ValueError("Gap thickness must be greater than 0.")
 
 
 class GlazingSystemBSDF(BaseModel):
@@ -459,10 +506,13 @@ class GlazingSystemBSDF(BaseModel):
     def get_brtdfunc(self) -> pr.Primitive:
         """Get a BRTDfunc primitive for the glazing system."""
         if not all(isinstance(layer, Pane) for layer in self.layers):
-            raise ValueError("No glazing layers found.")
+            raise ValueError("ShadingBSDF layers found.")
         if len(self.layers) > 2:
             raise ValueError("Only double pane supported.")
-        return get_glazing_primitive(self.name, self.layers)
+        if len(self.layers) == 1:
+            return self.layers[0].to_brtdfunc(name=self.name)
+        else:
+            return get_double_pane_primitive(self.name, self.layers)
 
 
 def create_wc_gaps(gaps: List[Gap]) -> List[wc.Layers.gap]:
@@ -593,122 +643,41 @@ def create_glazing_system_from_files(
     return create_glazing_system(name, layer_data, gaps)
 
 
-# def get_pane_rgb(layer: wc.ProductData):
-#     """Get the RGB values for a pane layer."""
-#     photopic_wvl = range(380, 781, 10)
-#     hemi = {
-#         d.wavelength
-#         * 1e3: (
-#             d.direct_component.transmittance_front,
-#             d.direct_component.transmittance_back,
-#             d.direct_component.reflectance_front,
-#             d.direct_component.reflectance_back,
-#         )
-#         for d in layer.measurements
-#     }
-#     tvf = [hemi[w][0] for w in photopic_wvl]
-#     rvf = [hemi[w][2] for w in photopic_wvl]
-#     rvb = [hemi[w][3] for w in photopic_wvl]
-#     tf_x, tf_y, tf_z = pr.spec_xyz(tvf, 380, 780)
-#     rf_x, rf_y, rf_z = pr.spec_xyz(rvf, 380, 780)
-#     rb_x, rb_y, rb_z = pr.spec_xyz(rvb, 380, 780)
-#     tf_rgb = pr.xyz_rgb(tf_x, tf_y, tf_z)
-#     rf_rgb = pr.xyz_rgb(rf_x, rf_y, rf_z)
-#     rb_rgb = pr.xyz_rgb(rb_x, rb_y, rb_z)
-#     if layer.coated_side == "front":
-#         coated_rgb = rf_rgb
-#         glass_rgb = rb_rgb
-#     else:
-#         coated_rgb = rb_rgb
-#         glass_rgb = rf_rgb
-#     # return PaneRGB(coated_rgb, glass_rgb, tf_rgb, layer.coated_side)
-#
-
-def get_glazing_primitive(name: str, panes: List[Pane]) -> pr.Primitive:
+def get_double_pane_primitive(name: str, panes: List[Pane]) -> pr.Primitive:
     """Generate a BRTDfunc to represent a glazing system."""
-    if len(panes) == 1:
-        str_arg = [
-            "sr_clear_r",
-            "sr_clear_g",
-            "sr_clear_b",
-            "st_clear_r",
-            "st_clear_g",
-            "st_clear_b",
-            "0",
-            "0",
-            "0",
-            "glaze1.cal",
-        ]
-        coated_real = 1 if panes[0].coated_side == "front" else -1
-        real_arg = [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            coated_real,
-            *[round(i, 3) for i in panes[0].glass_side_rgb],
-            *[round(i, 3) for i in panes[0].coated_side_rgb],
-            *[round(i, 3) for i in panes[0].transmittance_rgb],
-        ]
-    elif len(panes) == 2:
-        s12t_r, s12t_g, s12t_b = panes[0].transmittance_rgb
-        s34t_r, s34t_g, s34t_b = panes[1].transmittance_rgb
-        if panes[0].coated_side == "back":
-            s2r_r, s2r_g, s2r_b = panes[0].coated_side_rgb
-            s1r_r, s1r_g, s1r_b = panes[0].glass_side_rgb
-        else:  # front or neither side coated
-            s2r_r, s2r_g, s2r_b = panes[0].glass_side_rgb
-            s1r_r, s1r_g, s1r_b = panes[0].coated_side_rgb
-        if panes[1].coated_side == "back":
-            s4r_r, s4r_g, s4r_b = panes[1].coated_side_rgb
-            s3r_r, s3r_g, s3r_b = panes[1].glass_side_rgb
-        else:  # front or neither side coated
-            s4r_r, s4r_g, s4r_b = panes[1].glass_side_rgb
-            s3r_r, s3r_g, s3r_b = panes[1].coated_side_rgb
-        str_arg = [
-            (
-                f"if(Rdot,cr(fr({s4r_r:.3f}),ft({s34t_r:.3f}),fr({s2r_r:.3f})),"
-                f"cr(fr({s1r_r:.3f}),ft({s12t_r:.3f}),fr({s3r_r:.3f})))"
-            ),
-            (
-                f"if(Rdot,cr(fr({s4r_g:.3f}),ft({s34t_g:.3f}),fr({s2r_g:.3f})),"
-                f"cr(fr({s1r_g:.3f}),ft({s12t_g:.3f}),fr({s3r_g:.3f})))"
-            ),
-            (
-                f"if(Rdot,cr(fr({s4r_b:.3f}),ft({s34t_b:.3f}),fr({s2r_b:.3f})),"
-                f"cr(fr({s1r_b:.3f}),ft({s12t_b:.3f}),fr({s3r_b:.3f})))"
-            ),
-            f"ft({s34t_r:.3f})*ft({s12t_r:.3f})",
-            f"ft({s34t_g:.3f})*ft({s12t_g:.3f})",
-            f"ft({s34t_b:.3f})*ft({s12t_b:.3f})",
-            "0",
-            "0",
-            "0",
-            "glaze2.cal",
-        ]
-        real_arg = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-    else:
-        raise ValueError("Only double pane supported")
+    str_arg = []
+    srf_rgb = []
+    for pane in panes:
+        if pane.coated_side == "back":
+            srf_rgb.append(pane.glass_side_rgb)
+            srf_rgb.append(pane.coated_side_rgb)
+        else:
+            srf_rgb.append(pane.coated_side_rgb)
+            srf_rgb.append(pane.glass_side_rgb)
+
+    # reflectance depending on viewing sides
+    for color in ["red", "green", "blue"]:
+        str_arg.append(
+            f"if(Rdot,cr(fr({getattr(srf_rgb[3], color):.3f}),ft({getattr(panes[1].transmittance_rgb, color):.3f}),fr({getattr(srf_rgb[1], color):.3f})),"
+            f"cr(fr({getattr(srf_rgb[0], color):.3f}),ft({getattr(panes[0].transmittance_rgb, color):.3f}),fr({getattr(srf_rgb[2], color):.3f})))"
+        )
+
+    # transmittance
+    for color in ["red", "green", "blue"]:
+        str_arg.append(
+            f"ft({getattr(panes[1].transmittance_rgb, color):.3f})*ft({getattr(panes[0].transmittance_rgb, color):.3f})",
+        )
+
+    str_arg.extend(["0", "0", "0", "glaze2.cal"])
+    real_arg = [.0] * 9
     return pr.Primitive("void", "BRTDfunc", name, str_arg, real_arg)
 
 
-def laminate(sub: Pane, lam: Pane, side: wc.CoatedSide) -> Pane:
+def laminate(base: Pane, lam: Pane, side: wc.CoatedSide) -> Pane:
     """Laminate a glazing layer."""
+    if lam.substrate is None:
+        raise ValueError("Laminate must have substrate data")
+    # deconstruct laminate
     optical_data = wc.ProductDataOpticalNBand()
     layer = wc.ProductDataOpticalAndThermal()
-    return Pane(
-        product_name=sub.product_name,
-        thickness=sub.thickness,
-        product_type=sub.product_type,
-        conductivity=sub.conductivity,
-        emissivity_front=sub.emissivity_front,
-        emissivity_back=sub.emissivity_back,
-        ir_transmittance=sub.ir_transmittance,
-        measurements=sub.measurements,
-        rgb=sub.rgb,
-    )
+    ...
