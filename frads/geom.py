@@ -27,7 +27,7 @@ class Polygon:
         return self._vertices
 
     @vertices.setter
-    def vertices(self, new_vertices):
+    def vertices(self, new_vertices: List[np.ndarray]):
         self._vertices = np.array(new_vertices)
         self._normal = self._calculate_normal()
         self._area = self._calculate_area()
@@ -134,7 +134,7 @@ class Polygon:
         zmax = self._vertices[:, 2].max()
         return xmin, xmax, ymin, ymax, zmin, zmax
 
-    def rotate(self, center, vector, angle) -> "Polygon":
+    def rotate(self, center: np.ndarray, vector: np.ndarray, angle: float) -> "Polygon":
         """
         Rotate the polygon.
 
@@ -164,7 +164,7 @@ class Polygon:
             Polygon (list): a list of polygons;
 
         """
-        polygons = [self]
+        polygons: List[Polygon] = [self]
         polygon2 = Polygon(([i + vector for i in self._vertices]))
         polygons.append(polygon2)
         for i in range(len(self._vertices) - 1):

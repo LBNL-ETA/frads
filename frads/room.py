@@ -1,9 +1,7 @@
-"""Generic room model"""
-from typing import List
-from typing import Optional
+from typing import List, Optional
 
 import pyradiance as pr
-from frads import geom
+from frads.geom import Polygon
 from frads import utils
 import numpy as np
 
@@ -11,13 +9,17 @@ import numpy as np
 class Surface:
     """Surface object."""
 
-    def __init__(self, base: geom.Polygon) -> None:
+    def __init__(self, base: Polygon) -> None:
         """."""
         self.base = base
         self._vertices = base.vertices
-        self._vect1 = (base.vertices[1] - base.vertices[0]).normalize()
-        self._vect2 = (base.vertices[2] - base.vertices[1]).normalize()
-        self.polygons: List[geom.Polygon] = [self.base]
+        self._vect1 = (base.vertices[1] - base.vertices[0]) / np.linalg.norm(
+            base.vertices[1] - base.vertices[0]
+        )
+        self._vect2 = (base.vertices[2] - base.vertices[1]) / np.linalg.norm(
+            base.vertices[2] - base.vertices[1]
+        )
+        self.polygons: List[Polygon] = [self.base]
         self.windows: List[Surface] = []
         self._modifier: str = "void"
         self._identifier: str = "void"
@@ -69,14 +71,10 @@ class Surface:
         self, dist_left: float, dist_bot: float, width: float, height: float
     ) -> None:
         """Make a window and punch a hole."""
-        win_pt1 = (
-            self._vertices[0]
-            + self._vect1.scale(dist_bot)
-            + self._vect2.scale(dist_left)
-        )
-        win_pt2 = win_pt1 + self._vect1.scale(height)
-        win_pt3 = win_pt1 + self._vect2.scale(width)
-        window_polygon = geom.Polygon.rectangle3pts(win_pt3, win_pt1, win_pt2)
+        win_pt1 = self._vertices[0] + self._vect1 * dist_bot + self._vect2 * dist_left
+        win_pt2 = win_pt1 + self._vect1 * height
+        win_pt3 = win_pt1 + self._vect2 * width
+        window_polygon = Polygon.rectangle3pts(win_pt3, win_pt1, win_pt2)
         self.base = self.base - window_polygon
         self.windows.append(Surface(window_polygon))
 
@@ -95,19 +93,29 @@ class Surface:
     def rotate(self, deg):
         """Rotate the surface counter clock-wise."""
         polygons = []
+        center = np.zeros(3)
+        zaxis = np.array((0, 0, 1))
         for plg in self.polygons:
-            polygons.append(plg.rotate(deg, np.array((0, 0, 1))))
+            polygons.append(plg.rotate(center, zaxis, deg))
         self.polygons = polygons
         for window in self.windows:
             wpolygons = []
             for plg in window.polygons:
-                wpolygons.append(plg.rotate(deg, np.array((0, 0, 1))))
+                wpolygons.append(plg.rotate(center, zaxis, deg))
 
 
 class Room:
     """Make a shoebox."""
 
-    def __init__(self, floor: Surface, ceiling, swall, ewall, nwall, wwall) -> None:
+    def __init__(
+        self,
+        floor: Surface,
+        ceiling: Surface,
+        swall: Surface,
+        ewall: Surface,
+        nwall: Surface,
+        wwall: Surface,
+    ) -> None:
         """."""
         self.floor = floor
         self.ceiling = ceiling
@@ -130,7 +138,7 @@ class Room:
         pt1 = np.array((0, 0, 0)) if origin is None else origin
         pt2 = pt1 + np.array((width, 0, 0))
         pt3 = pt2 + np.array((0, depth, 0))
-        floor = geom.Polygon.rectangle3pts(pt1, pt2, pt3)
+        floor = Polygon.rectangle3pts(pt1, pt2, pt3)
         _, ceiling, swall, ewall, nwall, wwall = floor.extrude(
             np.array((0, 0, floor_floor))
         )

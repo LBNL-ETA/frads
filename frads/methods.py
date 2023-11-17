@@ -224,6 +224,25 @@ class ViewConfig:
 
 
 @dataclass
+class SurfaceConfig:
+    file: Union[str, Path] = ""
+    primitives: List[pr.Primitive] = field(default_factory=list)
+    basis: str = "u"
+    file_mtime: float = field(init=False, default=0.0)
+
+    def __post_init__(self):
+        if self.file != "":
+            self.file_mtime = os.path.getmtime(self.file)
+        if not isinstance(self.file, Path):
+            self.file = Path(self.file)
+        if self.file.exists() and len(self.primitives) == 0:
+            self.primitives = pr.parse_primitive(self.file.read_text())
+        elif len(self.primitives) == 0:
+            raise ValueError("No primitives available")
+
+
+
+@dataclass
 class Settings:
     """Settings is a dataclass that holds the settings for a Radiance simulation.
 
@@ -348,6 +367,7 @@ class Model:
     materials: "MaterialConfig"
     sensors: Dict[str, "SensorConfig"]
     views: Dict[str, "ViewConfig"]
+    surfaces: Dict[str, "SurfaceConfig"]
 
     # Make Path() out of all path strings
     def __post_init__(self):
@@ -364,6 +384,10 @@ class Model:
         for k, v in self.views.items():
             if isinstance(v, dict):
                 self.views[k] = ViewConfig(**v)
+        for k, v in self.surfaces.items():
+            if isinstance(v, dict):
+                self.surfaces[k] = SurfaceConfig(**v)
+
 
 
 @dataclass
@@ -438,11 +462,17 @@ class PhaseMethod:
         # Setup the view and sensor senders
         self.view_senders = {}
         self.sensor_senders = {}
+        self.surface_senders = {}
         for name, sensors in self.config.model.sensors.items():
             self.sensor_senders[name] = SensorSender(sensors.data)
         for name, view in self.config.model.views.items():
             self.view_senders[name] = ViewSender(
                 view.view, xres=view.xres, yres=view.yres
+            )
+        for name, surface in self.config.model.surfaces.items():
+            self.surface_senders[name] = SurfaceSender(
+                surfaces=surface.primitives,
+                basis=surface.basis,
             )
 
         # Setup the sky receiver object
@@ -817,12 +847,17 @@ class ThreePhaseMethod(PhaseMethod):
             )
         self.view_window_matrices = {}
         self.sensor_window_matrices = {}
+        self.surface_window_matrices = {}
         for _v, sender in self.view_senders.items():
             self.view_window_matrices[_v] = Matrix(
                 sender, list(self.window_receivers.values()), self.octree
             )
         for _s, sender in self.sensor_senders.items():
             self.sensor_window_matrices[_s] = Matrix(
+                sender, list(self.window_receivers.values()), self.octree
+            )
+        for _s, sender in self.surface_senders.items():
+            self.surface_window_matrices[_s] = Matrix(
                 sender, list(self.window_receivers.values()), self.octree
             )
 
