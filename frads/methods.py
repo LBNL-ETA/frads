@@ -7,7 +7,7 @@ import hashlib
 import logging
 import os
 from pathlib import Path
-from typing import Any, ByteString, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from shutil import rmtree
 
 from frads.matrix import (
@@ -73,7 +73,7 @@ class SceneConfig:
     """
 
     files: List[Path] = field(default_factory=list)
-    bytes: ByteString = b""
+    bytes: bytes = b""
     files_mtime: List[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
@@ -118,7 +118,7 @@ class MaterialConfig:
     """
 
     files: List[Path] = field(default_factory=list)
-    bytes: ByteString = b""
+    bytes: bytes = b""
     matrices: Dict[str, MatrixConfig] = field(default_factory=dict)
     glazing_materials: Dict[str, pr.Primitive] = field(default_factory=dict)
     files_mtime: List[float] = field(init=False, default_factory=list)
@@ -151,7 +151,7 @@ class WindowConfig:
     """
 
     file: Union[str, Path] = ""
-    bytes: ByteString = b""
+    bytes: bytes = b""
     matrix_file: str = ""
     proxy_geometry: Dict[str, List[pr.Primitive]] = field(default_factory=dict)
     files_mtime: List[float] = field(init=False, default_factory=list)
@@ -239,7 +239,6 @@ class SurfaceConfig:
             self.primitives = pr.parse_primitive(self.file.read_text())
         elif len(self.primitives) == 0:
             raise ValueError("No primitives available")
-
 
 
 @dataclass
@@ -387,7 +386,6 @@ class Model:
         for k, v in self.surfaces.items():
             if isinstance(v, dict):
                 self.surfaces[k] = SurfaceConfig(**v)
-
 
 
 @dataclass
@@ -553,7 +551,7 @@ class PhaseMethod:
     def calculate_sensor(self, sensor, time, dni, dhi):
         raise NotImplementedError
 
-    def get_sky_matrix(self, time: datetime, dni: float, dhi: float) -> np.ndarray:
+    def get_sky_matrix(self, time: datetime, dni: float, dhi: float, solar_spectrum: bool = False) -> np.ndarray:
         """Generates a sky matrix based on the time, Direct Normal Irradiance (DNI), and
         Diffuse Horizontal Irradiance (DHI).
 
@@ -573,6 +571,7 @@ class PhaseMethod:
             outform="d",
             mfactor=int(self.config.settings.sky_basis[-1]),
             header=False,
+            solar_radiance=solar_spectrum,
         )
         return load_binary_matrix(
             smx,
@@ -900,6 +899,8 @@ class ThreePhaseMethod(PhaseMethod):
                 mtx.array = mdata[key]
         for sensor, mtx in self.sensor_window_matrices.items():
             mtx.array = mdata[f"{sensor}_window_matrix"]
+        for surface, mtx in self.surface_window_matrices.items():
+            mtx.array = mdata[f"{surface}_window_matrix"]
         for name, mtx in self.daylight_matrices.items():
             mtx.array = mdata[f"{name}_daylight_matrix"]
 
@@ -1053,6 +1054,33 @@ class ThreePhaseMethod(PhaseMethod):
                 self.daylight_matrices[_name].array,
                 sky_matrix,
                 weights=[47.4, 119.9, 11.6],
+            )
+        return res
+
+    def calculate_surface(
+        self,
+        surface: str,
+        bsdf: Dict[str, str],
+        time: datetime,
+        dni: float,
+        dhi: float,
+        solar_spectrum: bool = False,
+        sky_matrix: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        weights = [47.4, 119.9, 11.6]
+        if solar_spectrum:
+            weights = [1., 1., 1.]
+        if sky_matrix is None:
+            sky_matrix = self.get_sky_matrix(time, dni, dhi, solar_spectrum=solar_spectrum)
+        res = np.zeros((self.surface_senders[surface].yres, sky_matrix.shape[1]))
+        for idx, _name in enumerate(self.config.model.windows):
+            _bsdf = self.config.model.materials.matrices[bsdf[_name]].matrix_data
+            res += matrix_multiply_rgb(
+                self.surface_window_matrices[surface].array[idx],
+                _bsdf,
+                self.daylight_matrices[_name].array,
+                sky_matrix,
+                weights=weights,
             )
         return res
 
