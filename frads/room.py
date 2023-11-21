@@ -208,6 +208,25 @@ class Room:
         self.wwall.rotate(deg)
         self.nwall.rotate(deg)
 
+    def to_dict(self):
+        model = {}
+        model["materials"] = [prim.to_dict() for prim in self.materials.values()]
+        model["scene"] = [prim.to_dict() for prim in self.primitives]
+        model["windows"] = {
+            "ceiling": [prim.to_dict() for prim in self.ceiling.windows],
+            "swall": [prim.to_dict() for prim in self.swall.windows],
+            "ewall": [prim.to_dict() for prim in self.ewall.windows],
+            "nwall": [prim.to_dict() for prim in self.nwall.windows],
+            "wwall": [prim.to_dict() for prim in self.wwall.windows],
+        }
+        model["surfaces"] = {
+            "floor": {"bytes": self.floor.base.primitive.bytes},
+            "ceiling": {"bytes": self.ceiling.base.primitive.bytes},
+            "swall": {"bytes": self.swall.base.primitive.bytes},
+            "ewall": {"bytes": self.ewall.base.primitive.bytes},
+            "nwall": {"bytes": self.nwall.base.primitive.bytes},
+            "wwall": {"bytes": self.wwall.base.primitive.bytes},
+        }
 
 def make_room(
     width: float,
