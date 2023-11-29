@@ -115,12 +115,12 @@ class Room:
         for primitive in self.window_primitives():
             model["windows"][primitive.identifier] = {"bytes": primitive.bytes}
         model["surfaces"] = {
-            "floor": {"bytes": self.floor.base_primitive.bytes},
-            "ceiling": {"bytes": self.ceiling.base_primitive.bytes},
-            "swall": {"bytes": self.swall.base_primitive.bytes},
-            "ewall": {"bytes": self.ewall.base_primitive.bytes},
-            "nwall": {"bytes": self.nwall.base_primitive.bytes},
-            "wwall": {"bytes": self.wwall.base_primitive.bytes},
+            "floor": {"primitives": [self.floor.base_primitive]},
+            "ceiling": {"primitives": [self.ceiling.base_primitive]},
+            "swall": {"primitives": [self.swall.base_primitive]},
+            "ewall": {"primitives": [self.ewall.base_primitive]},
+            "nwall": {"primitives": [self.nwall.base_primitive]},
+            "wwall": {"primitives": [self.wwall.base_primitive]},
         }
         return model
 
