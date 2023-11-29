@@ -71,7 +71,12 @@ from .matrix import (
     surfaces_view_factor,
 )
 
-from .methods import WorkflowConfig, TwoPhaseMethod, ThreePhaseMethod, FivePhaseMethod
+from .methods import (
+    WorkflowConfig,
+    TwoPhaseMethod,
+    ThreePhaseMethod,
+    FivePhaseMethod,
+)
 
 from .sky import (
     gen_perez_sky,
@@ -95,7 +100,7 @@ from .window import (
     XENON,
 )
 
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 
 logger: logging.Logger = logging.getLogger(__name__)
 
