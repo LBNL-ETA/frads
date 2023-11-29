@@ -1,17 +1,36 @@
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 import pyradiance as pr
+from pyradiance.lib import Primitive
 from frads.geom import Polygon
 from frads import utils
 import numpy as np
+
+@dataclass
+class WindowSurface:
+    polygon: Polygon
+    primitive: pr.Primitive
+
+
+@dataclass
+class Surface2:
+    base: Polygon
+    base_primitive: pr.Primitive
+    polygons: List[Polygon]
+    windows: List[WindowSurface]
+    modifier: str
+    identifier: str
+    primitives: List[pr.Primitive]
 
 
 class Surface:
     """Surface object."""
 
-    def __init__(self, base: Polygon) -> None:
+    def __init__(self, base: Polygon, thickness:float =0) -> None:
         """."""
         self.base = base
+        self.thickness = thickness
         self._vertices = base.vertices
         self._vect1 = (base.vertices[1] - base.vertices[0]) / np.linalg.norm(
             base.vertices[1] - base.vertices[0]
@@ -23,7 +42,13 @@ class Surface:
         self.windows: List[Surface] = []
         self._modifier: str = "void"
         self._identifier: str = "void"
-        self._primitives: Optional[List[pr.Primitive]] = None
+        self._primitives: List[pr.Primitive] = [
+            utils.polygon_primitive(
+                polygon=self.base,
+                modifier=self._modifier,
+                identifier=self._identifier,
+            )
+        ]
 
     @property
     def modifier(self):
@@ -46,9 +71,8 @@ class Surface:
         self._identifier = identifier
 
     @property
-    def primitives(self) -> Optional[List[pr.Primitive]]:
+    def primitives(self) -> List[pr.Primitive]:
         """."""
-        self._primitives = []
         for idx, polygon in enumerate(self.polygons):
             self._primitives.append(
                 pr.Primitive(
@@ -78,9 +102,9 @@ class Surface:
         self.base = self.base - window_polygon
         self.windows.append(Surface(window_polygon))
 
-    def thicken(self, thickness: float) -> None:
+    def thicken(self) -> None:
         """Thicken the surface."""
-        direction = self.base.normal * thickness
+        direction = self.base.normal * self.thickness
         polygons = self.base.extrude(direction)
         counts = [polygons.count(plg) for plg in polygons]
         self.polygons = [plg for plg, cnt in zip(polygons, counts) if cnt == 1]
@@ -102,6 +126,54 @@ class Surface:
             wpolygons = []
             for plg in window.polygons:
                 wpolygons.append(plg.rotate(center, zaxis, deg))
+
+
+@dataclass
+class Room2:
+    floor: Surface2
+    ceiling: Surface2
+    swall: Surface2
+    ewall: Surface2
+    nwall: Surface2
+    wwall: Surface2
+    materials: List[Primitive]
+
+    def primitives(self) -> List[pr.Primitive]:
+        return [
+            *self.floor.primitives,
+            *self.ceiling.primitives,
+            *self.swall.primitives,
+            *self.ewall.primitives,
+            *self.nwall.primitives,
+            *self.wwall.primitives,
+        ]
+
+    def window_primitives(self) -> List[pr.Primitive]:
+        return [
+            *[srf.primitive for srf in self.ceiling.windows],
+            *[srf.primitive for srf in self.swall.windows],
+            *[srf.primitive for srf in self.ewall.windows],
+            *[srf.primitive for srf in self.nwall.windows],
+            *[srf.primitive for srf in self.wwall.windows],
+        ]
+
+
+    def model_dump(self) -> dict:
+        model = {}
+        model["materials"] = {"bytes": b" ".join(p.bytes for p in self.materials)}
+        model["scene"] = {"bytes": b" ".join(p.bytes for p in self.primitives())}
+        model["windows"] = {}
+        for primitive in self.window_primitives():
+            model["windows"][primitive.identifier] = {"bytes": primitive.bytes}
+        model["surfaces"] = {
+            "floor": {"bytes": self.floor.base_primitive.bytes},
+            "ceiling": {"bytes": self.ceiling.base_primitive.bytes},
+            "swall": {"bytes": self.swall.base_primitive.bytes},
+            "ewall": {"bytes": self.ewall.base_primitive.bytes},
+            "nwall": {"bytes": self.nwall.base_primitive.bytes},
+            "wwall": {"bytes": self.wwall.base_primitive.bytes},
+        }
+        return model
 
 
 class Room:
@@ -208,25 +280,179 @@ class Room:
         self.wwall.rotate(deg)
         self.nwall.rotate(deg)
 
-    def to_dict(self):
-        model = {}
-        model["materials"] = [prim.to_dict() for prim in self.materials.values()]
-        model["scene"] = [prim.to_dict() for prim in self.primitives]
-        model["windows"] = {
-            "ceiling": [prim.to_dict() for prim in self.ceiling.windows],
-            "swall": [prim.to_dict() for prim in self.swall.windows],
-            "ewall": [prim.to_dict() for prim in self.ewall.windows],
-            "nwall": [prim.to_dict() for prim in self.nwall.windows],
-            "wwall": [prim.to_dict() for prim in self.wwall.windows],
-        }
-        model["surfaces"] = {
-            "floor": {"bytes": self.floor.base.primitive.bytes},
-            "ceiling": {"bytes": self.ceiling.base.primitive.bytes},
-            "swall": {"bytes": self.swall.base.primitive.bytes},
-            "ewall": {"bytes": self.ewall.base.primitive.bytes},
-            "nwall": {"bytes": self.nwall.base.primitive.bytes},
-            "wwall": {"bytes": self.wwall.base.primitive.bytes},
-        }
+
+
+def thicken(base, thickness) -> List[Polygon]:
+    """Thicken the surface."""
+    direction = base.normal * thickness
+    polygons = base.extrude(direction)
+    # Remove duplicates.
+    counts = [polygons.count(plg) for plg in polygons]
+    polygons = [plg for plg, cnt in zip(polygons, counts) if cnt == 1]
+    return polygons
+
+
+def make_window(
+    base: Polygon,
+    vertices: np.ndarray,
+    vec1: np.ndarray,
+    vec2: np.ndarray,
+    dist_left: float,
+    dist_bot: float,
+    width: float,
+    height: float
+) -> Tuple[Polygon, WindowSurface]:
+    """Make a window and punch a hole."""
+    win_pt1 = vertices[0] + vec1 * dist_bot + vec2 * dist_left
+    win_pt2 = win_pt1 + vec1 * height
+    win_pt3 = win_pt1 + vec2 * width
+    window_polygon = Polygon.rectangle3pts(win_pt3, win_pt1, win_pt2)
+    new_base = base - window_polygon
+    return new_base, WindowSurface(
+        polygon=window_polygon,
+        primitive=utils.polygon_primitive(
+            polygon=window_polygon,
+            modifier="glass_60",
+            identifier="void",
+        )
+    )
+
+def make_window_wwr(
+    base: Polygon,
+    wwr: float
+) -> Tuple[Polygon, WindowSurface]:
+    window_polygon = base.scale(np.array((wwr, wwr, wwr)), base.centroid)
+    base = base - window_polygon
+    return base, WindowSurface(
+        polygon=window_polygon,
+        primitive=utils.polygon_primitive(
+            polygon=window_polygon,
+            modifier="glass_60",
+            identifier="void",
+        )
+    )
+
+
+def create_surface(
+    base: Polygon,
+    thickness: float = 0,
+    modifier: str = "void",
+    identifier: str = "void",
+    wpd: Optional[List[List[float]]] = None,
+    wwr: Optional[float] = None,
+) -> Surface2:
+    vertices = base.vertices
+    vec1 = (vertices[1] - vertices[0]) / np.linalg.norm(
+        vertices[1] - vertices[0]
+    )
+    vec2 = (vertices[2] - vertices[1]) / np.linalg.norm(
+        vertices[2] - vertices[1]
+    )
+    polygons = [base]
+    windows = []
+    base_primitive = utils.polygon_primitive(
+        polygon=base,
+        modifier=modifier,
+        identifier=identifier,
+    )
+    primitives = [
+        utils.polygon_primitive(
+            polygon=base,
+            modifier=modifier,
+            identifier=identifier,
+        )
+    ]
+    if wpd is not None:
+        # Make a window based on window position and dimension.
+        for pd in wpd:
+            base, _window = make_window(base, vertices, vec1, vec2, *pd)
+            windows.append(_window)
+    elif wwr is not None:
+        # Make a window based on window-to-wall ratio.
+        base, _window = make_window_wwr(base, wwr)
+        windows.append(_window)
+    if thickness > 0:
+        polygons = thicken(base, thickness)
+        primitives = [
+            utils.polygon_primitive(
+                polygon=polygon,
+                modifier=modifier,
+                identifier=f"{identifier}_{i}",
+            )
+            for i, polygon in enumerate(polygons)
+        ]
+    return Surface2(
+        base,
+        base_primitive,
+        polygons,
+        windows,
+        modifier,
+        identifier,
+        primitives,
+    )
+
+
+def create_south_facing_room(
+    width: float,
+    depth: float,
+    floor_floor: float,
+    floor_ceiling: float,
+    swall_thickness: float = 0,
+    wpd: Optional[List[List[float]]] = None,
+    wwr: Optional[float] = None,
+) -> Room2:
+    materials = utils.material_lib()
+    pt1 = np.array((0, 0, 0))
+    pt2 = pt1 + np.array((width, 0, 0))
+    pt3 = pt2 + np.array((0, depth, 0))
+    base_floor = Polygon.rectangle3pts(pt1, pt2, pt3)
+    _, base_ceiling, base_swall, base_ewall, base_nwall, base_wwall = base_floor.extrude(
+        np.array((0, 0, floor_floor))
+    )
+    base_ceiling = base_ceiling.move(np.array((0, 0, floor_ceiling - floor_floor)))
+    floor = create_surface(
+        base_floor,
+        modifier="neutral_lambertian_0.2",
+        identifier="floor",
+    )
+    ceiling = create_surface(
+        base_ceiling,
+        modifier="neutral_lambertian_0.7",
+        identifier="ceiling",
+    )
+    nwall = create_surface(
+        base_nwall,
+        modifier="neutral_lambertian_0.5",
+        identifier="nwall",
+    )
+    ewall = create_surface(
+        base_ewall,
+        modifier="neutral_lambertian_0.5",
+        identifier="ewall",
+    )
+    wwall = create_surface(
+        base_wwall,
+        modifier="neutral_lambertian_0.5",
+        identifier="wwall",
+    )
+    swall = create_surface(
+        base_swall,
+        thickness=swall_thickness,
+        modifier="neutral_lambertian_0.5",
+        identifier="swall",
+        wpd=wpd,
+        wwr=wwr,
+    )
+    return Room2(
+        floor,
+        ceiling,
+        swall,
+        ewall,
+        nwall,
+        wwall,
+        materials.values(),
+    )
+
 
 def make_room(
     width: float,

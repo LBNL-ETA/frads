@@ -455,7 +455,7 @@ def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> List[List[
     return grid
 
 
-def material_lib() -> Dict[str, Any]:
+def material_lib() -> Dict[str, Primitive]:
     """Generate a list of generic material primitives."""
     tmis = 0.6 * 1.08981
     return {
