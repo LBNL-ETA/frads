@@ -341,8 +341,7 @@ def get_layer_rgb(layer: pwc.ProductData) -> PaneRGB:
             coated_side=None,
         )
     hemi = {
-        d.wavelength
-        * 1e3: (
+        int(round(d.wavelength * 1e3)): (
             d.direct_component.transmittance_front,
             d.direct_component.transmittance_back,
             d.direct_component.reflectance_front,
