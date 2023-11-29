@@ -45,6 +45,7 @@ class Layer:
         ir_transmittance: IR transmittance of the layer.
         rgb: PaneRGB object.
     """
+
     product_name: str
     thickness: float
     product_type: str
@@ -63,6 +64,7 @@ class Gas:
         gas: Gas type.
         ratio: Gas ratio.
     """
+
     gas: str
     ratio: float
 
@@ -81,6 +83,7 @@ class Gap:
         gas: List of Gas objects.
         thickness: Thickness of the gap.
     """
+
     gas: List[Gas]
     thickness: float
 
@@ -228,7 +231,10 @@ def create_pwc_gaps(gaps: List[Gap]):
     pwc_gaps = []
     for gap in gaps:
         _gas = pwc.create_gas(
-            [[g.ratio, getattr(pwc.PredefinedGasType, g.gas.upper())] for g in gap.gas]
+            [
+                [g.ratio, getattr(pwc.PredefinedGasType, g.gas.upper())]
+                for g in gap.gas
+            ]
         )
         _gap = pwc.Layers.gap(gas=_gas, thickness=gap.thickness)
         pwc_gaps.append(_gap)
@@ -236,7 +242,9 @@ def create_pwc_gaps(gaps: List[Gap]):
 
 
 def create_glazing_system(
-    name: str, layers: List[Union[Path, bytes]], gaps: Optional[List[Gap]] = None
+    name: str,
+    layers: List[Union[Path, bytes]],
+    gaps: Optional[List[Gap]] = None,
 ) -> GlazingSystem:
     """Create a glazing system from a list of layers and gaps.
 
@@ -281,7 +289,8 @@ def create_glazing_system(
         if product_data is None:
             raise ValueError("Invalid layer type")
         layer_data.append(product_data)
-        thickness += product_data.thickness / 1000.0 or 0  # mm to m
+        product_data.thickness = product_data.thickness / 1000.0 or 0  # mm to m
+        thickness += product_data.thickness
 
     glzsys = pwc.GlazingSystem(
         solid_layers=layer_data,
@@ -303,10 +312,12 @@ def create_glazing_system(
         layers=get_layers(layer_data),
         gaps=gaps,
         solar_front_absorptance=[
-            alpha.front.absorptance.angular_total for alpha in solres.layer_results
+            alpha.front.absorptance.angular_total
+            for alpha in solres.layer_results
         ],
         solar_back_absorptance=[
-            alpha.back.absorptance.angular_total for alpha in solres.layer_results
+            alpha.back.absorptance.angular_total
+            for alpha in solres.layer_results
         ],
         visible_back_reflectance=vissys.back.reflectance.matrix,
         visible_front_reflectance=vissys.front.reflectance.matrix,
@@ -330,8 +341,7 @@ def get_layer_rgb(layer: pwc.ProductData) -> PaneRGB:
             coated_side=None,
         )
     hemi = {
-        d.wavelength
-        * 1e3: (
+        int(round(d.wavelength * 1e3)): (
             d.direct_component.transmittance_front,
             d.direct_component.transmittance_back,
             d.direct_component.reflectance_front,
