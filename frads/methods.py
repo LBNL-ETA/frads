@@ -565,11 +565,13 @@ class PhaseMethod:
                 BASIS_DIMENSION setting for the current sky_basis configuration.
         """
         _wea = self.wea_header
+        _ncols = 1
         if isinstance(time, datetime) and isinstance(dni, float) and isinstance(dhi, float):
             _wea += str(WeaData(time, dni, dhi))
         elif isinstance(time, list) and isinstance(dni, list) and isinstance(dhi, list):
             rows = [str(WeaData(t, n, d)) for t, n, d in zip(time, dni, dhi)]
             _wea += "\n".join(rows)
+            _ncols = len(time)
         else:
             raise ValueError("Time, DNI, and DHI must be either single values or lists of values")
         smx = pr.gendaymtx(
@@ -582,7 +584,7 @@ class PhaseMethod:
         return load_binary_matrix(
             smx,
             nrows=BASIS_DIMENSION[self.config.settings.sky_basis] + 1,
-            ncols=1,
+            ncols=_ncols,
             ncomp=3,
             dtype="d",
         )
