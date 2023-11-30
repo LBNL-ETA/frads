@@ -1177,6 +1177,8 @@ class ThreePhaseMethod(PhaseMethod):
             matrices[f"{view}_window_matrix"] = mtx.array
         for sensor, mtx in self.sensor_window_matrices.items():
             matrices[f"{sensor}_window_matrix"] = mtx.array
+        for surface, mtx in self.surface_window_matrices.items():
+            matrices[f"{surface}_window_matrix"] = mtx.array
         for window, mtx in self.daylight_matrices.items():
             matrices[f"{window}_daylight_matrix"] = mtx.array
         np.savez(self.mfile, **matrices)
