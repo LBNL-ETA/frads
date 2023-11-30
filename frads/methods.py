@@ -551,7 +551,7 @@ class PhaseMethod:
     def calculate_sensor(self, sensor, time, dni, dhi):
         raise NotImplementedError
 
-    def get_sky_matrix(self, time: datetime, dni: float, dhi: float, solar_spectrum: bool = False) -> np.ndarray:
+    def get_sky_matrix(self, time: Union[datetime, List[datetime]], dni: Union[float, List[float]], dhi: Union[float, List[float]], solar_spectrum: bool = False) -> np.ndarray:
         """Generates a sky matrix based on the time, Direct Normal Irradiance (DNI), and
         Diffuse Horizontal Irradiance (DHI).
 
@@ -565,7 +565,13 @@ class PhaseMethod:
                 BASIS_DIMENSION setting for the current sky_basis configuration.
         """
         _wea = self.wea_header
-        _wea += str(WeaData(time, dni, dhi))
+        if isinstance(time, datetime) and isinstance(dni, float) and isinstance(dhi, float):
+            _wea += str(WeaData(time, dni, dhi))
+        elif isinstance(time, list) and isinstance(dni, list) and isinstance(dhi, list):
+            rows = [str(WeaData(t, n, d)) for t, n, d in zip(time, dni, dhi)]
+            _wea += "\n".join(rows)
+        else:
+            raise ValueError("Time, DNI, and DHI must be either single values or lists of values")
         smx = pr.gendaymtx(
             _wea.encode(),
             outform="d",
