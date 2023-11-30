@@ -337,6 +337,9 @@ class Settings:
     sensor_window_matrix: List[str] = field(
         default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
     )
+    surface_window_matrix: List[str] = field(
+        default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5", "-c", "10000"]
+    )
     view_window_matrix: List[str] = field(
         default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
     )
@@ -888,6 +891,11 @@ class ThreePhaseMethod(PhaseMethod):
         for _, mtx in self.sensor_window_matrices.items():
             mtx.generate(
                 self.config.settings.sensor_window_matrix,
+                nproc=self.config.settings.num_processors,
+            )
+        for _, mtx in self.surface_window_matrices.items():
+            mtx.generate(
+                self.config.settings.surface_window_matrix,
                 nproc=self.config.settings.num_processors,
             )
         for _, mtx in self.daylight_matrices.items():
