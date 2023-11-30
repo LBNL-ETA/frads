@@ -155,6 +155,7 @@ def thicken(base, thickness) -> List[Polygon]:
 
 
 def make_window(
+    name: str,
     base: Polygon,
     vertices: np.ndarray,
     vec1: np.ndarray,
@@ -186,8 +187,6 @@ def make_window(
         dist_bot: The distance from the bottom edge of the base polygon.
         width: The width of the window.
         height: The height of the window.
-
-
     """
     win_pt1 = vertices[0] + vec1 * dist_bot + vec2 * dist_left
     win_pt2 = win_pt1 + vec1 * height
@@ -199,7 +198,7 @@ def make_window(
         primitive=utils.polygon_primitive(
             polygon=window_polygon,
             modifier="glass_60",
-            identifier="void",
+            identifier=name,
         )
     )
 
@@ -267,8 +266,9 @@ def create_surface(
     ]
     if wpd is not None:
         # Make a window based on window position and dimension.
-        for pd in wpd:
-            base, _window = make_window(base, vertices, vec1, vec2, *pd)
+        for i, pd in enumerate(wpd):
+            name = f"{identifier}_window{i}"
+            base, _window = make_window(name, base, vertices, vec1, vec2, *pd)
             windows.append(_window)
     elif wwr is not None:
         # Make a window based on window-to-wall ratio.
