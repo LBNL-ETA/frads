@@ -566,7 +566,7 @@ class PhaseMethod:
         """
         _wea = self.wea_header
         _ncols = 1
-        if isinstance(time, datetime) and isinstance(dni, float) and isinstance(dhi, float):
+        if isinstance(time, datetime) and isinstance(dni, (float, int)) and isinstance(dhi, (float, int)):
             _wea += str(WeaData(time, dni, dhi))
         elif isinstance(time, list) and isinstance(dni, list) and isinstance(dhi, list):
             rows = [str(WeaData(t, n, d)) for t, n, d in zip(time, dni, dhi)]
