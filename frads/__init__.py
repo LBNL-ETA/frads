@@ -100,7 +100,7 @@ from .window import (
     XENON,
 )
 
-__version__ = "1.1.3"
+__version__ = "1.2.0"
 
 logger: logging.Logger = logging.getLogger(__name__)
 
