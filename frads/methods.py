@@ -369,7 +369,7 @@ class Model:
     materials: "MaterialConfig"
     sensors: Dict[str, "SensorConfig"]
     views: Dict[str, "ViewConfig"]
-    surfaces: Dict[str, "SurfaceConfig"]
+    surfaces: Dict[str, "SurfaceConfig"] = field(default_factory=dict)
 
     # Make Path() out of all path strings
     def __post_init__(self):

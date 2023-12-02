@@ -218,12 +218,12 @@ class SkyReceiver(Receiver):
         if out is not None:
             self.content += f"#@rfluxmtx o={out}\n"
         self.content += (
-            f"#@rfluxmtx h={basis} u=+Y\n"
-            "void glow skyglow 0 0 4 1 1 1 0\n"
-            "skyglow source skydome 0 0 4 0 0 1 180\n"
             f"#@rfluxmtx h=u\n"
             "void glow groundglow 0 0 4 1 1 1 0\n"
             "groundglow source groundplane 0 0 4 0 0 -1 180\n"
+            f"#@rfluxmtx h={basis} u=+Y\n"
+            "void glow skyglow 0 0 4 1 1 1 0\n"
+            "skyglow source skydome 0 0 4 0 0 1 180\n"
         )
 
 
@@ -302,7 +302,7 @@ class Matrix:
         sender: Union[SensorSender, ViewSender, SurfaceSender],
         receivers: Union[List[SkyReceiver], List[SurfaceReceiver], List[SunReceiver]],
         octree: Optional[str] = None,
-        surfaces: Optional[List[str]] = None,
+        surfaces: Optional[List[pr.Primitive]] = None,
     ):
         """Initialize a matrix.
 
@@ -386,6 +386,11 @@ class Matrix:
             receiver_file = os.path.join(tmpdir, "receiver")
             with open(receiver_file, "w") as f:
                 [f.write(r.content) for r in self.receivers]
+            env_file = None
+            if self.surfaces is not None:
+                env_file = os.path.join(tmpdir, "scene")
+                with open(env_file, "wb") as f:
+                    f.write(b" ".join(s.bytes for s in self.surfaces))
             if isinstance(self.sender, SurfaceSender):
                 params.append("-ffd")
                 surface_file = os.path.join(tmpdir, "surface")
@@ -397,7 +402,7 @@ class Matrix:
                 rays=rays,
                 params=params,
                 octree=self.octree,
-                scene=self.surfaces,
+                scene=env_file,
             )
         if not to_file:
             _ncols = sum(self.ncols) if isinstance(self.ncols, list) else self.ncols
