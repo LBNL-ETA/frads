@@ -55,6 +55,8 @@ def cfg(resources_dir, objects_dir):
             "views": {
                 "view1": {"file": resources_dir / "v1a.vf", "xres": 16, "yres": 16}
             },
+            "surfaces": {
+            },
         },
     }
 
@@ -121,6 +123,7 @@ def test_eprad_threephase(resources_dir):
     zone_dict["model"]["materials"]["matrices"] = {
         "ec60": {"matrix_file": shade_bsdf_path}
     }
+    zone_dict["model"]["surfaces"] = {}
     rad_cfg = WorkflowConfig.from_dict(zone_dict)
     rad_cfg.settings.sensor_window_matrix = ["-ab", "0"]
     rad_cfg.settings.view_window_matrix = ["-ab", "0"]

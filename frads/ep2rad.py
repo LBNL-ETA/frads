@@ -619,5 +619,7 @@ def epmodel_to_radmodel(
     if not add_views:
         for model in rad_models.values():
             model["views"] = {}
+    for model in rad_models.values():
+        model["surfaces"] = {}
 
     return rad_models
