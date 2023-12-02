@@ -837,7 +837,7 @@ class ThreePhaseMethod(PhaseMethod):
                 ][0]
             else:
                 # raise ValueError("No matrix data or file available", _name)
-                logger.warning(f"No matrix data or file available: {_name}")
+                logger.info(f"No matrix data or file available: {_name}")
             if _name in self.window_bsdfs:
                 window_basis = [
                     k
