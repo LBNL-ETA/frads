@@ -281,6 +281,7 @@ class Settings:
     method: str = field(default="3phase")
     overwrite: bool = False
     save_matrices: bool = False
+    matrix_dir: str = field(default="Matrices")
     sky_basis: str = field(default="r1")
     window_basis: str = field(default="kf")
     non_coplanar_basis: str = field(default="kf")
@@ -520,7 +521,7 @@ class PhaseMethod:
         self.tmpdir.mkdir(exist_ok=True)
         self.octdir = Path("Octrees")
         self.octdir.mkdir(exist_ok=True)
-        self.mtxdir = Path("Matrices")
+        self.mtxdir = Path(self.config.settings.matrix_dir)
         self.mtxdir.mkdir(exist_ok=True)
         self.mfile = (self.mtxdir / self.config.hash_str).with_suffix(".npz")
 
