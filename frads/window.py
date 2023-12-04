@@ -8,12 +8,6 @@ import pyradiance as pr
 import pywincalc as pwc
 
 
-AIR = pwc.PredefinedGasType.AIR
-KRYPTON = pwc.PredefinedGasType.KRYPTON
-XENON = pwc.PredefinedGasType.XENON
-ARGON = pwc.PredefinedGasType.ARGON
-
-
 @dataclass
 class PaneRGB:
     """Pane color data object.
