@@ -1,8 +1,8 @@
 # Welcome to frads documentation
 
-Date: 2023-12-02
+Date: 2023-12-04
 
-Version: 1.2.0
+Version: 1.2.1
 
 `frads` project is an open source, BSD-licensed library providing easy-to-use wrapper for Radiance rendering engine.
 
