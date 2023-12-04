@@ -391,6 +391,7 @@ class Matrix:
                 env_file = os.path.join(tmpdir, "scene")
                 with open(env_file, "wb") as f:
                     f.write(b" ".join(s.bytes for s in self.surfaces))
+                env_file = [env_file]
             if isinstance(self.sender, SurfaceSender):
                 params.append("-ffd")
                 surface_file = os.path.join(tmpdir, "surface")
@@ -402,7 +403,7 @@ class Matrix:
                 rays=rays,
                 params=params,
                 octree=self.octree,
-                scene=[env_file],
+                scene=env_file,
             )
         if not to_file:
             _ncols = sum(self.ncols) if isinstance(self.ncols, list) else self.ncols
