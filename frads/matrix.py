@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Dict, List, Optional, Union
-from frads.utils import parse_polygon, parse_rad_header, random_string
+from frads.utils import parse_polygon, parse_rad_header, polygon_primitive, random_string
 from frads.geom import Polygon
 import numpy as np
 from scipy.sparse import csr_matrix, lil_matrix
@@ -138,10 +138,10 @@ class SurfaceSender:
             left_hand: Whether to use left-hand coordinate system
             offset: Offset of the sender surface
         """
-        self.surfaces = surfaces
+        self.surfaces = [s for s in surfaces if s.ptype in ("polygon", "ring")]
         self.basis = basis
         self.content = rfluxmtx_markup(
-            surfaces, basis, left_hand=left_hand, offset=offset
+            self.surfaces, basis, left_hand=left_hand, offset=offset
         )
 
     def __eq__(self, other):
@@ -193,9 +193,9 @@ class SurfaceReceiver(Receiver):
         super().__init__(basis)
         if not isinstance(surfaces[0], pr.Primitive):
             raise ValueError("Surface must be a primitive", surfaces)
-        self.surfaces = surfaces
+        self.surfaces = [s for s in surfaces if s.ptype in ("polygon", "ring")]
         self.content = rfluxmtx_markup(
-            surfaces,
+            self.surfaces,
             basis=basis,
             left_hand=left_hand,
             offset=offset,
@@ -402,7 +402,7 @@ class Matrix:
                 rays=rays,
                 params=params,
                 octree=self.octree,
-                scene=env_file,
+                scene=[env_file],
             )
         if not to_file:
             _ncols = sum(self.ncols) if isinstance(self.ncols, list) else self.ncols
@@ -790,12 +790,12 @@ def surfaces_view_factor(
     surfaces: List[pr.Primitive],
     env: List[pr.Primitive],
     ray_count: int = 10000,
-) -> Dict[str, List[float]]:
+) -> Dict[str, Dict[str, List[float]]]:
     """Calculate surface to surface view factor using rfluxmtx.
 
     Args:
         surfaces: list of surface primitives that we want to calculate view factor for.
-            Surface normal needs to be facing inward.
+            Surface normal needs to be facing outward.
         env: list of environment primitives that our surfaces will be exposed to.
             Surface normal needs to be facing inward.
         ray_count: number of rays spawned for each surface.
@@ -804,11 +804,17 @@ def surfaces_view_factor(
         A dictionary of view factors, where the key is the surface identifier.
     """
     view_factors = {}
-    surfaces_env = surfaces + env
-    receivers = [SurfaceReceiver([s], basis="u") for s in surfaces_env]
-    for surface in surfaces:
+    surfaces_env = env + surfaces
+    for idx, surface in enumerate(surfaces):
         sender = SurfaceSender([surface], basis="u")
+        rest_of_surfaces = surfaces[:idx] + surfaces[idx + 1:]
+        rest_of_surface_polygons = [parse_polygon(s) for s in rest_of_surfaces]
+        rest_of_surfaces_flipped = [
+            polygon_primitive(p.flip(), s.modifier, s.identifier)
+            for s,p in zip(rest_of_surfaces, rest_of_surface_polygons)
+        ]
+        receivers = [SurfaceReceiver([s], basis="u") for s in env + rest_of_surfaces_flipped if s.ptype in ("polygon", "ring")]
         mat = Matrix(sender, receivers, octree=None, surfaces=surfaces_env)
         mat.generate(params=["-c", f"{ray_count}"])
-        view_factors[surface.identifier] = [[i][0] for i in mat.array]
+        view_factors[surface.identifier] = {r.surfaces[0].identifier: [i][0] for r, i in zip(mat.receivers, mat.array)}
     return view_factors
