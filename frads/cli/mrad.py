@@ -1,9 +1,6 @@
 """
 mrad cli
 """
-import time
-
-stime = time.perf_counter()
 import argparse
 import configparser
 import logging
@@ -18,7 +15,6 @@ import numpy as np
 from pyradiance import model as rmodel
 from pyradiance import param as rparam
 
-print(f"Importing mrad took {time.perf_counter()-stime:.2f} seconds")
 logger = logging.getLogger(__name__)
 
 def parse_vu(vu_str: str) -> Optional[rmodel.View]:
@@ -240,8 +236,7 @@ def mrad_init(args: argparse.Namespace) -> None:
 def mrad_run(args: argparse.Namespace) -> None:
     """Call mtxmethod to carry out the actual simulation."""
     config_dict = parse_mrad_config(args.cfg)
-    if config_dict["settings"]["name"] == "":
-        config_dict["settings"]["name"] = args.cfg.stem
+    config_dict["settings"]["name"] = config_dict["settings"].get("name", args.cfg.stem)
     wconfig = WorkflowConfig.from_dict(config_dict)
     workflow = None
     if method := wconfig.settings.method:
@@ -280,7 +275,6 @@ def mrad_run(args: argparse.Namespace) -> None:
 
 def mrad() -> None:
     """mrad entry point: parse arugments for init and run subprograms."""
-    stime = time.perf_counter()
     parser = argparse.ArgumentParser(
         prog="mrad",
         description="Mrad is an executive program for Radiance matrix-based simulation methods.",
@@ -338,7 +332,6 @@ def mrad() -> None:
     parser_init.add_argument(
         "-u", "--view", metavar="view", help="Grid file path, grid spacing and height"
     )
-    print(time.perf_counter() - stime)
     # Parse arguments for run subprogram
     parser_run = subparser.add_parser("run")
     parser_run.set_defaults(func=mrad_run)
