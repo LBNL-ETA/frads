@@ -32,8 +32,8 @@ def glaze(args) -> None:
     photopic_wvl = range(380, 781, 10)
     for pane in panes:
         hemi = {
-            d.wavelength
-            * 1e3: (
+            int(float(d.wavelength
+            * 1e3)): (
                 d.direct_component.transmittance_front,
                 d.direct_component.transmittance_back,
                 d.direct_component.reflectance_front,
@@ -56,8 +56,8 @@ def glaze(args) -> None:
         else:
             coated_rgb = rb_rgb
             glass_rgb = rf_rgb
-        pane_rgb.append(PaneRGB(pane, coated_rgb, glass_rgb, tf_rgb))
-    print(get_glazing_primitive(pane_rgb))
+        pane_rgb.append(PaneRGB(coated_rgb, glass_rgb, tf_rgb, pane.coated_side))
+    print(get_glazing_primitive("default", pane_rgb))
 
 
 def gengrid(args) -> None:
@@ -441,6 +441,7 @@ def gen() -> None:
     parser_room.add_argument("-n", dest="name", help="Model name", default="model")
     parser_room.add_argument(
         "-t", dest="facade_thickness", metavar="Facade thickness", type=float
+        , default=0,
     )
     parser_room.add_argument("-r", "--rotate", type=float)
 
@@ -708,7 +709,7 @@ def genradroom(args) -> None:
     objdir = Path("Objects")
     objdir.mkdir(exist_ok=True)
     with open(objdir / f"materials_{name}.mat", "w", encoding="ascii") as wtr:
-        for prim in aroom.materials.values():
+        for prim in aroom.materials:
             wtr.write(str(prim) + "\n")
     with open(objdir / f"ceiling_{name}.rad", "w", encoding="ascii") as wtr:
         for prim in aroom.ceiling.primitives:
@@ -728,5 +729,4 @@ def genradroom(args) -> None:
         with open(
             objdir / f"window_{idx:02d}_{name}.rad", "w", encoding="ascii"
         ) as wtr:
-            for prim in srf.primitives:
-                wtr.write(str(prim) + "\n")
+            wtr.write(str(srf.primitive) + "\n")
