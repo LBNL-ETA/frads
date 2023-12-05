@@ -13,7 +13,7 @@ from frads.geom import (
     polygon_center,
 )
 from frads.utils import polygon_primitive, gen_grid
-from frads.eplus_model import EnergyPlusModel
+from .eplus_model import EnergyPlusModel
 from epmodel.epmodel import (
     BuildingSurfaceDetailed,
     FenestrationSurfaceDetailed,

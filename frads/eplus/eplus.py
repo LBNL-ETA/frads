@@ -11,12 +11,12 @@ import ast
 import tempfile
 
 from epmodel import epmodel as epm
-from frads.ep2rad import epmodel_to_radmodel
+from .ep2rad import epmodel_to_radmodel
 from frads.methods import (
     WorkflowConfig,
     ThreePhaseMethod,
 )
-from frads.eplus_model import EnergyPlusModel
+from .eplus_model import EnergyPlusModel
 import numpy as np
 from pyenergyplus.api import EnergyPlusAPI
 
