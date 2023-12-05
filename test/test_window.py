@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from frads.window import create_glazing_system, Gas, Gap, GlazingSystem, AIR, ARGON
+from frads.window import create_glazing_system, Gas, Gap, GlazingSystem
 import pytest
 
 

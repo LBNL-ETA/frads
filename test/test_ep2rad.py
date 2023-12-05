@@ -1,8 +1,7 @@
 """
 """
 # from frads import epjson_to_rad
-from frads import epmodel_to_radmodel
-from frads.eplus import load_energyplus_model
+from frads.eplus import epmodel_to_radmodel, load_energyplus_model
 
 
 def test_cfscase(resources_dir):

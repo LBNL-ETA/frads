@@ -2,8 +2,7 @@ from datetime import datetime
 
 from frads.methods import TwoPhaseMethod, ThreePhaseMethod, WorkflowConfig
 from frads.window import create_glazing_system, Gap, Gas
-from frads.ep2rad import epmodel_to_radmodel
-from frads.eplus import load_energyplus_model
+from frads.eplus import epmodel_to_radmodel, load_energyplus_model
 import pytest
 from pyenergyplus.dataset import ref_models, weather_files
 import pyradiance as pr

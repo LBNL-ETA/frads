@@ -8,21 +8,15 @@ import pyradiance as pr
 import pywincalc as pwc
 
 
-AIR = pwc.PredefinedGasType.AIR
-KRYPTON = pwc.PredefinedGasType.KRYPTON
-XENON = pwc.PredefinedGasType.XENON
-ARGON = pwc.PredefinedGasType.ARGON
-
-
 @dataclass
 class PaneRGB:
     """Pane color data object.
 
     Attributes:
-        measured_data: measured data as a PaneProperty object.
         coated_rgb: Coated side RGB.
         glass_rgb: Non-coated side RGB.
         trans_rgb: Transmittance RGB.
+        coated_side: Coated side of the pane.
     """
 
     coated_rgb: Tuple[float, float, float]
