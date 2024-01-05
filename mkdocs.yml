@@ -52,7 +52,6 @@ plugins:
 - search
 - autorefs
 - mkdocstrings:
-    custom_templates: templates
     default_handler: python
     handlers:
       python:
@@ -103,8 +102,7 @@ nav:
     - ThreePhaseMethod: ref/threephase.md
     - FivePhaseMethod: ref/fivephase.md
     - matrix: ref/matrix.md
-    - EPModel: ref/epmodel.md
-    - EnergyPlusSetup: ref/epsetup.md
+    - EnergyPlus: ref/eplus.md
     - GlazingSystem: ref/window.md
     - Sky: ref/sky.md
 

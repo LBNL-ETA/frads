@@ -1,13 +1,13 @@
 """Typical Radiance matrix-based simulation workflows
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 import hashlib
 import logging
 import os
 from pathlib import Path
-from typing import Any, ByteString, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from shutil import rmtree
 
 from frads.matrix import (
@@ -58,18 +58,49 @@ class SceneConfig:
 
     Attributes:
         files: A list of files to be concatenated to form the scene.
+        for name, material in self.model.material.items():
+            materials[name] = parse_material(name, material)
+        for name, material in  self.model.material_no_mass.items():
+            materials[name] = parse_material_no_mass(name, material)
+        for name, material in self.model.window_material_simple_glazing_system.items():
+            materials[name] = parse_window_material_simple_glazing_system(name, material)
+        for name, material in self.model.window_material_glazing.items():
+            materials[name] = parse_window_material_glazing(name, material)
+        for name, material in self.model.window_material_blind.items():
+            materials.update(parse_window_material_blind(material))
         bytes: A raw data string to be used as the scene.
         files_mtime: Files last modification time.
     """
 
     files: List[Path] = field(default_factory=list)
-    bytes: ByteString = b""
+    bytes: bytes = b""
     files_mtime: List[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
         if len(self.files) > 0:
             for fpath in self.files:
                 self.files_mtime.append(os.path.getmtime(fpath))
+
+
+@dataclass
+class MatrixConfig:
+    matrix_file: Union[str, Path] = ""
+    matrix_data: np.ndarray = field(default_factory=lambda: np.ones((145, 145, 3)))
+
+    def __post_init__(self):
+        if self.matrix_data is None:
+            self.matrix_data = load_matrix(self.matrix_file)
+        elif isinstance(self.matrix_data, list):
+            self.matrix_data = np.array(self.matrix_data)
+
+
+@dataclass
+class ShadingGeometryConfig:
+    shading_geometry_file: Union[str, Path] = ""
+    shading_geometry_bytes: Optional[np.ndarray] = None
+
+    def __post_init__(self):
+        ...
 
 
 @dataclass
@@ -87,13 +118,18 @@ class MaterialConfig:
     """
 
     files: List[Path] = field(default_factory=list)
-    bytes: ByteString = b""
+    bytes: bytes = b""
+    matrices: Dict[str, MatrixConfig] = field(default_factory=dict)
+    glazing_materials: Dict[str, pr.Primitive] = field(default_factory=dict)
     files_mtime: List[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
         if len(self.files) > 0:
             for fpath in self.files:
                 self.files_mtime.append(os.path.getmtime(fpath))
+        for k, v in self.matrices.items():
+            if isinstance(v, dict):
+                self.matrices[k] = MatrixConfig(**v)
 
 
 @dataclass
@@ -109,21 +145,15 @@ class WindowConfig:
     Attributes:
         file: A file to be used as the window group.
         bytes: A raw data string to be used as the window group.
-        matrix_file: A file to be used as the BSDF matrix.
-        matrix_data: A list of list of floats to be used as the BSDF matrix.
         shading_geometry_file: A file to be used as the shading geometry.
         shading_geometry_bytes: A raw data string to be used as the shading geometry.
-        tensor_tree_file: A file to be used as the tensor tree.
         files_mtime: Files last modification time.
     """
 
     file: Union[str, Path] = ""
-    bytes: ByteString = b""
-    matrix_file: Union[str, Path] = ""
-    matrix_data: Optional[List[List[float]]] = field(default_factory=list)
-    shading_geometry_file: Union[str, Path] = ""
-    shading_geometry_bytes: Optional[ByteString] = None
-    tensor_tree_file: Union[str, Path] = ""
+    bytes: bytes = b""
+    matrix_file: str = ""
+    proxy_geometry: Dict[str, List[pr.Primitive]] = field(default_factory=dict)
     files_mtime: List[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
@@ -131,18 +161,6 @@ class WindowConfig:
             self.files_mtime.append(os.path.getmtime(self.file))
             if not isinstance(self.file, Path):
                 self.file = Path(self.file)
-        if os.path.exists(self.matrix_file):
-            self.files_mtime.append(os.path.getmtime(self.matrix_file))
-            if not isinstance(self.matrix_file, Path):
-                self.matrix_file = Path(self.matrix_file)
-        if os.path.exists(self.shading_geometry_file):
-            self.files_mtime.append(os.path.getmtime(self.shading_geometry_file))
-            if not isinstance(self.shading_geometry_file, Path):
-                self.shading_geometry_file = Path(self.shading_geometry_file)
-        if os.path.exists(self.tensor_tree_file):
-            self.files_mtime.append(os.path.getmtime(self.tensor_tree_file))
-            if not isinstance(self.tensor_tree_file, Path):
-                self.tensor_tree_file = Path(self.tensor_tree_file)
         if self.bytes == b"":
             with open(self.file, "rb") as f:
                 self.bytes = f.read()
@@ -206,6 +224,24 @@ class ViewConfig:
 
 
 @dataclass
+class SurfaceConfig:
+    file: Union[str, Path] = ""
+    primitives: List[pr.Primitive] = field(default_factory=list)
+    basis: str = "u"
+    file_mtime: float = field(init=False, default=0.0)
+
+    def __post_init__(self):
+        if self.file != "":
+            self.file_mtime = os.path.getmtime(self.file)
+        if not isinstance(self.file, Path):
+            self.file = Path(self.file)
+        if self.file.exists() and len(self.primitives) == 0:
+            self.primitives = pr.parse_primitive(self.file.read_text())
+        elif len(self.primitives) == 0:
+            raise ValueError("No primitives available")
+
+
+@dataclass
 class Settings:
     """Settings is a dataclass that holds the settings for a Radiance simulation.
 
@@ -241,10 +277,11 @@ class Settings:
     """
 
     name: str = field(default="")
-    num_processors: int = 1
+    num_processors: int = 4
     method: str = field(default="3phase")
     overwrite: bool = False
     save_matrices: bool = False
+    matrix_dir: str = field(default="Matrices")
     sky_basis: str = field(default="r1")
     window_basis: str = field(default="kf")
     non_coplanar_basis: str = field(default="kf")
@@ -301,6 +338,9 @@ class Settings:
     sensor_window_matrix: List[str] = field(
         default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
     )
+    surface_window_matrix: List[str] = field(
+        default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5", "-c", "10000"]
+    )
     view_window_matrix: List[str] = field(
         default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
     )
@@ -330,6 +370,7 @@ class Model:
     materials: "MaterialConfig"
     sensors: Dict[str, "SensorConfig"]
     views: Dict[str, "ViewConfig"]
+    surfaces: Dict[str, "SurfaceConfig"] = field(default_factory=dict)
 
     # Make Path() out of all path strings
     def __post_init__(self):
@@ -346,6 +387,9 @@ class Model:
         for k, v in self.views.items():
             if isinstance(v, dict):
                 self.views[k] = ViewConfig(**v)
+        for k, v in self.surfaces.items():
+            if isinstance(v, dict):
+                self.surfaces[k] = SurfaceConfig(**v)
 
 
 @dataclass
@@ -420,11 +464,17 @@ class PhaseMethod:
         # Setup the view and sensor senders
         self.view_senders = {}
         self.sensor_senders = {}
+        self.surface_senders = {}
         for name, sensors in self.config.model.sensors.items():
             self.sensor_senders[name] = SensorSender(sensors.data)
         for name, view in self.config.model.views.items():
             self.view_senders[name] = ViewSender(
                 view.view, xres=view.xres, yres=view.yres
+            )
+        for name, surface in self.config.model.surfaces.items():
+            self.surface_senders[name] = SurfaceSender(
+                surfaces=surface.primitives,
+                basis=surface.basis,
             )
 
         # Setup the sky receiver object
@@ -471,7 +521,7 @@ class PhaseMethod:
         self.tmpdir.mkdir(exist_ok=True)
         self.octdir = Path("Octrees")
         self.octdir.mkdir(exist_ok=True)
-        self.mtxdir = Path("Matrices")
+        self.mtxdir = Path(self.config.settings.matrix_dir)
         self.mtxdir.mkdir(exist_ok=True)
         self.mfile = (self.mtxdir / self.config.hash_str).with_suffix(".npz")
 
@@ -505,7 +555,7 @@ class PhaseMethod:
     def calculate_sensor(self, sensor, time, dni, dhi):
         raise NotImplementedError
 
-    def get_sky_matrix(self, time: datetime, dni: float, dhi: float) -> np.ndarray:
+    def get_sky_matrix(self, time: Union[datetime, List[datetime]], dni: Union[float, List[float]], dhi: Union[float, List[float]], solar_spectrum: bool = False) -> np.ndarray:
         """Generates a sky matrix based on the time, Direct Normal Irradiance (DNI), and
         Diffuse Horizontal Irradiance (DHI).
 
@@ -519,17 +569,26 @@ class PhaseMethod:
                 BASIS_DIMENSION setting for the current sky_basis configuration.
         """
         _wea = self.wea_header
-        _wea += str(WeaData(time, dni, dhi))
+        _ncols = 1
+        if isinstance(time, datetime) and isinstance(dni, (float, int)) and isinstance(dhi, (float, int)):
+            _wea += str(WeaData(time, dni, dhi))
+        elif isinstance(time, list) and isinstance(dni, list) and isinstance(dhi, list):
+            rows = [str(WeaData(t, n, d)) for t, n, d in zip(time, dni, dhi)]
+            _wea += "\n".join(rows)
+            _ncols = len(time)
+        else:
+            raise ValueError("Time, DNI, and DHI must be either single values or lists of values")
         smx = pr.gendaymtx(
             _wea.encode(),
             outform="d",
             mfactor=int(self.config.settings.sky_basis[-1]),
             header=False,
+            solar_radiance=solar_spectrum,
         )
         return load_binary_matrix(
             smx,
             nrows=BASIS_DIMENSION[self.config.settings.sky_basis] + 1,
-            ncols=1,
+            ncols=_ncols,
             ncomp=3,
             dtype="d",
         )
@@ -768,17 +827,17 @@ class ThreePhaseMethod(PhaseMethod):
         for _name, window in self.config.model.windows.items():
             _prims = pr.parse_primitive(window.bytes.decode())
             if window.matrix_file != "":
-                self.window_bsdfs[_name] = load_matrix(window.matrix_file)
+                self.window_bsdfs[_name] = self.config.model.materials.matrices[
+                    window.matrix_file
+                ].matrix_data
                 window_basis = [
                     k
                     for k, v in BASIS_DIMENSION.items()
                     if v == self.window_bsdfs[_name].shape[0]
                 ][0]
-            elif window.matrix_data != []:
-                self.window_bsdfs[_name] = np.array(window.matrix_data)
             else:
                 # raise ValueError("No matrix data or file available", _name)
-                logger.warning("No matrix data or file available", _name)
+                logger.info(f"No matrix data or file available: {_name}")
             if _name in self.window_bsdfs:
                 window_basis = [
                     k
@@ -799,12 +858,17 @@ class ThreePhaseMethod(PhaseMethod):
             )
         self.view_window_matrices = {}
         self.sensor_window_matrices = {}
+        self.surface_window_matrices = {}
         for _v, sender in self.view_senders.items():
             self.view_window_matrices[_v] = Matrix(
                 sender, list(self.window_receivers.values()), self.octree
             )
         for _s, sender in self.sensor_senders.items():
             self.sensor_window_matrices[_s] = Matrix(
+                sender, list(self.window_receivers.values()), self.octree
+            )
+        for _s, sender in self.surface_senders.items():
+            self.surface_window_matrices[_s] = Matrix(
                 sender, list(self.window_receivers.values()), self.octree
             )
 
@@ -821,11 +885,25 @@ class ThreePhaseMethod(PhaseMethod):
             return
         if view_matrices:
             for _, mtx in self.view_window_matrices.items():
-                mtx.generate(self.config.settings.view_window_matrix)
+                mtx.generate(
+                    self.config.settings.view_window_matrix,
+                    nproc=self.config.settings.num_processors,
+                )
         for _, mtx in self.sensor_window_matrices.items():
-            mtx.generate(self.config.settings.sensor_window_matrix)
+            mtx.generate(
+                self.config.settings.sensor_window_matrix,
+                nproc=self.config.settings.num_processors,
+            )
+        for _, mtx in self.surface_window_matrices.items():
+            mtx.generate(
+                self.config.settings.surface_window_matrix,
+                nproc=self.config.settings.num_processors,
+            )
         for _, mtx in self.daylight_matrices.items():
-            mtx.generate(self.config.settings.daylight_matrix)
+            mtx.generate(
+                self.config.settings.daylight_matrix,
+                nproc=self.config.settings.num_processors,
+            )
         if self.config.settings.save_matrices:
             self.save_matrices()
 
@@ -838,6 +916,8 @@ class ThreePhaseMethod(PhaseMethod):
                 mtx.array = mdata[key]
         for sensor, mtx in self.sensor_window_matrices.items():
             mtx.array = mdata[f"{sensor}_window_matrix"]
+        for surface, mtx in self.surface_window_matrices.items():
+            mtx.array = mdata[f"{surface}_window_matrix"]
         for name, mtx in self.daylight_matrices.items():
             mtx.array = mdata[f"{name}_daylight_matrix"]
 
@@ -880,16 +960,16 @@ class ThreePhaseMethod(PhaseMethod):
     def calculate_sensor(
         self,
         sensor: str,
-        bsdf: Union[np.ndarray, List[np.ndarray]],
+        bsdf: Dict[str, str],
         time: datetime,
         dni: float,
         dhi: float,
-    ) -> float:
+    ) -> np.ndarray:
         """Calculate illuminance for a sensor.
 
         Args:
             sensor: The sensor name
-            bsdf: The BSDF matrix
+            bsdf: A dictionary of window name as key and bsdf matrix or matrix name as value
             time: The datetime object
             dni: The direct normal irradiance
             dhi: The diffuse horizontal irradiance
@@ -902,7 +982,7 @@ class ThreePhaseMethod(PhaseMethod):
             if len(bsdf) != len(self.config.model.windows):
                 raise ValueError("Number of BSDF should match number of windows.")
         for idx, _name in enumerate(self.config.model.windows):
-            _bsdf = bsdf[idx] if isinstance(bsdf, list) else bsdf
+            _bsdf = self.config.model.materials.matrices[bsdf[_name]].matrix_data
             res.append(
                 matrix_multiply_rgb(
                     self.sensor_window_matrices[sensor].array[idx],
@@ -994,24 +1074,48 @@ class ThreePhaseMethod(PhaseMethod):
             )
         return res
 
+    def calculate_surface(
+        self,
+        surface: str,
+        bsdf: Dict[str, str],
+        time: datetime,
+        dni: float,
+        dhi: float,
+        solar_spectrum: bool = False,
+        sky_matrix: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        weights = [47.4, 119.9, 11.6]
+        if solar_spectrum:
+            weights = [1., 1., 1.]
+        if sky_matrix is None:
+            sky_matrix = self.get_sky_matrix(time, dni, dhi, solar_spectrum=solar_spectrum)
+        res = np.zeros((self.surface_senders[surface].yres, sky_matrix.shape[1]))
+        for idx, _name in enumerate(self.config.model.windows):
+            _bsdf = self.config.model.materials.matrices[bsdf[_name]].matrix_data
+            res += matrix_multiply_rgb(
+                self.surface_window_matrices[surface].array[idx],
+                _bsdf,
+                self.daylight_matrices[_name].array,
+                sky_matrix,
+                weights=weights,
+            )
+        return res
+
     def calculate_edgps(
         self,
         view: str,
-        shades: Union[List[pr.Primitive], List[str]],
-        bsdf: Union[np.ndarray, List[np.ndarray]],
+        bsdf: Dict[str, str],
         date_time: datetime,
         dni: float,
         dhi: float,
         ambient_bounce: int = 1,
+        save_hdr: Optional[Union[str, Path]] = None,
     ) -> float:
         """Calculate enhanced simplified daylight glare probability (EDGPs) for a view.
 
         Args:
             view: view name, must be in config.model.views
-            shades: list of shades, either primitves or file paths. This is used
-                for high resolution direct sun calculation.
-            bsdf: bsdf matrix, either a single matrix or a list of matrices depending
-                on the number of windows This is used to calculate the vertical illuminance.
+            bsdf: a dictionary of window name as key and bsdf matrix or matrix name as value
             date_time: datetime object
             dni: direct normal irradiance
             dhi: diffuse horizontal irradiance
@@ -1021,31 +1125,36 @@ class ThreePhaseMethod(PhaseMethod):
             EDGPs
         """
         # generate octree with bsdf
-        stdin = b""
-        stdin += gen_perez_sky(
-            date_time,
-            self.wea_metadata.latitude,
-            self.wea_metadata.longitude,
-            self.wea_metadata.timezone,
-            dni,
-            dhi,
+        stdins = []
+        stdins.append(
+            gen_perez_sky(
+                date_time,
+                self.wea_metadata.latitude,
+                self.wea_metadata.longitude,
+                self.wea_metadata.timezone,
+                dirnorm=dni,
+                diffhor=dhi,
+            )
         )
-        if isinstance(shades[0], pr.Primitive):
-            for shade in shades:
-                stdin += shade.bytes
-        elif isinstance(shades[0], (str, Path)):
-            _shades = shades
-        else:
-            _shades = []
+        for wname, sname in bsdf.items():
+            if (_gms := self.config.model.materials.glazing_materials) != {}:
+                gmaterial = _gms[sname]
+                stdins.append(gmaterial.bytes)
+                for prim in self.window_senders[wname].surfaces:
+                    stdins.append(replace(prim, modifier=gmaterial.identifier).bytes)
+            if (_pgs := self.config.model.windows[wname].proxy_geometry) != {}:
+                for prim in _pgs[sname]:
+                    stdins.append(prim.bytes)
+
         octree = "test.oct"
         with open(octree, "wb") as f:
-            f.write(pr.oconv(*shades, stdin=stdin, octree=self.octree))
+            f.write(pr.oconv(stdin=b"".join(stdins), octree=self.octree))
+
         # render image with -ab 1
-        params = ["-ab", f"{ambient_bounce}"]
+        params = ["-ab", str(ambient_bounce)]
         hdr = pr.rpict(
             self.view_senders[view].view.args(),
             octree,
-            # fix resolution. Evalglare would complain if resolution too small
             xres=800,
             yres=800,
             params=params,
@@ -1057,8 +1166,12 @@ class ThreePhaseMethod(PhaseMethod):
             dni,
             dhi,
         )
-        res = pr.evalglare(hdr, ev=float(ev))
+        if save_hdr is not None:
+            with open(save_hdr, "wb") as f:
+                f.write(hdr)
+        res = pr.evalglare(hdr, ev=ev.item())
         edgps = float(res.split(b":")[1].split()[0])
+        os.remove(octree)
         return edgps
 
     def save_matrices(self):
@@ -1073,6 +1186,8 @@ class ThreePhaseMethod(PhaseMethod):
             matrices[f"{view}_window_matrix"] = mtx.array
         for sensor, mtx in self.sensor_window_matrices.items():
             matrices[f"{sensor}_window_matrix"] = mtx.array
+        for surface, mtx in self.surface_window_matrices.items():
+            matrices[f"{surface}_window_matrix"] = mtx.array
         for window, mtx in self.daylight_matrices.items():
             matrices[f"{window}_daylight_matrix"] = mtx.array
         np.savez(self.mfile, **matrices)
@@ -1315,12 +1430,22 @@ class FivePhaseMethod(PhaseMethod):
         logger.info("Generating matrices...")
         logger.info("Step 1/5: Generating view matrices...")
         for mtx in self.view_window_matrices.values():
-            mtx.generate(self.config.settings.view_window_matrix, memmap=True)
+            mtx.generate(
+                self.config.settings.view_window_matrix,
+                memmap=True,
+                nproc=self.config.settings.num_processors,
+            )
         for mtx in self.sensor_window_matrices.values():
-            mtx.generate(self.config.settings.sensor_window_matrix)
+            mtx.generate(
+                self.config.settings.sensor_window_matrix,
+                nproc=self.config.settings.num_processors,
+            )
         logger.info("Step 2/5: Generating daylight matrices...")
         for mtx in self.daylight_matrices.values():
-            mtx.generate(self.config.settings.daylight_matrix)
+            mtx.generate(
+                self.config.settings.daylight_matrix,
+                nproc=self.config.settings.num_processors,
+            )
         logger.info("Step 3/5: Generating direct view matrices...")
         for _, mtx in self.view_window_direct_matrices.items():
             mtx.generate(["-ab", "1"], sparse=True)

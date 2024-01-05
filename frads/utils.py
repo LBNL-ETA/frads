@@ -439,23 +439,15 @@ def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> List[List[
         for i in x0
         for j in y0
     ]
-    scale_factor = 1 - 0.3 / (imax - imin)  # scale boundary down .3 meter
-    _polygon = polygon.scale(
-        np.array((scale_factor, scale_factor, 0)), polygon.centroid
-    )
-    _vertices = _polygon.vertices
     if np.array_equal(polygon.normal, np.array((0, 0, 1))):
-        # pt_incls = pt_inclusion(_vertices)
-        _grid = [p for p in raw_pts if pt_inclusion(p, _vertices) > 0]
+        _grid = [p for p in raw_pts if pt_inclusion(p, vertices) > 0]
     else:
-        # pt_incls = pt_inclusion(_vertices[::-1])
-        _grid = [p for p in raw_pts if pt_inclusion(p, _vertices[::-1]) > 0]
-    # _grid = [p for p in raw_pts if pt_incls.test_inside(p) > 0]
+        _grid = [p for p in raw_pts if pt_inclusion(p, vertices[::-1]) > 0]
     grid = [p.tolist() + grid_dir.tolist() for p in _grid]
     return grid
 
 
-def material_lib() -> Dict[str, Any]:
+def material_lib() -> Dict[str, Primitive]:
     """Generate a list of generic material primitives."""
     tmis = 0.6 * 1.08981
     return {

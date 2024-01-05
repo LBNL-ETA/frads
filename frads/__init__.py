@@ -50,9 +50,11 @@ or on a time-step basis.
 
 import logging
 
-from .epjson2rad import epjson_to_rad
+from .ep2rad import epmodel_to_radmodel
 
-from .eprad import EnergyPlusModel, EnergyPlusSetup, ep_datetime_parser
+from .eplus import load_energyplus_model, EnergyPlusSetup, ep_datetime_parser
+
+from .eplus_model import EnergyPlusModel
 
 from .matrix import (
     load_matrix,
@@ -69,7 +71,12 @@ from .matrix import (
     surfaces_view_factor,
 )
 
-from .methods import WorkflowConfig, TwoPhaseMethod, ThreePhaseMethod, FivePhaseMethod
+from .methods import (
+    WorkflowConfig,
+    TwoPhaseMethod,
+    ThreePhaseMethod,
+    FivePhaseMethod,
+)
 
 from .sky import (
     gen_perez_sky,
@@ -82,9 +89,18 @@ from .sky import (
 
 from .utils import gen_grid, unpack_primitives
 
-from .window import GlazingSystem, AIR, ARGON, KRYPTON, XENON
+from .window import (
+    create_glazing_system,
+    Gap,
+    Gas,
+    GlazingSystem,
+    AIR,
+    ARGON,
+    KRYPTON,
+    XENON,
+)
 
-__version__ = "1.0.1"
+__version__ = "1.2.1"
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -95,6 +111,8 @@ __all__ = [
     "EnergyPlusModel",
     "EnergyPlusSetup",
     "FivePhaseMethod",
+    "Gap",
+    "Gas",
     "GlazingSystem",
     "KRYPTON",
     "Matrix",
@@ -111,13 +129,14 @@ __all__ = [
     "WeaMetaData",
     "WorkflowConfig",
     "XENON",
+    "create_glazing_system",
     "ep_datetime_parser",
-    "epjson2rad",
-    "epjson_to_rad",
+    "epmodel_to_radmodel",
     "gen_grid",
     "gen_perez_sky",
     "genskymtx",
     "load_binary_matrix",
+    "load_energyplus_model",
     "load_matrix",
     "matrix_multiply_rgb",
     "parse_epw",
