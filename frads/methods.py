@@ -221,12 +221,15 @@ class ViewConfig:
     def __post_init__(self):
         if self.file != "":
             self.file_mtime = os.path.getmtime(self.file)
-        if not isinstance(self.file, Path):
-            self.file = Path(self.file)
-        if self.file.exists() and self.view == "":
+            if not isinstance(self.file, Path):
+                self.file = Path(self.file)
+        if os.path.exists(self.file) and self.view == "":
             self.view = pr.load_views(self.file)[0]
-        elif not isinstance(self.view, pr.View):
-            self.view = parse_view(self.view)
+        elif self.view != "":
+            if not isinstance(self.view, pr.View):
+                self.view = parse_view(self.view)
+        else:
+            raise ValueError("ViewConfig must have a file or view")
 
 
 @dataclass
