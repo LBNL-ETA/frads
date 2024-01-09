@@ -85,7 +85,9 @@ class SceneConfig:
 @dataclass
 class MatrixConfig:
     matrix_file: Union[str, Path] = ""
-    matrix_data: np.ndarray = field(default_factory=lambda: np.ones((145, 145, 3)))
+    matrix_data: np.ndarray = field(
+        default_factory=lambda: np.ones((145, 145, 3))
+    )
 
     def __post_init__(self):
         if self.matrix_data is None:
@@ -162,8 +164,11 @@ class WindowConfig:
             if not isinstance(self.file, Path):
                 self.file = Path(self.file)
         if self.bytes == b"":
-            with open(self.file, "rb") as f:
-                self.bytes = f.read()
+            if self.file != "":
+                with open(self.file) as f:
+                    self.bytes = f.read()
+            else:
+                raise ValueError("WindowConfig must have either file or bytes")
 
 
 @dataclass
@@ -198,7 +203,8 @@ class SensorConfig:
             if self.file != "":
                 with open(self.file) as f:
                     self.data = [
-                        [float(i) for i in line.split()] for line in f.readlines()
+                        [float(i) for i in line.split()]
+                        for line in f.readlines()
                     ]
             else:
                 raise ValueError("SensorConfig must have either file or data")
@@ -339,7 +345,16 @@ class Settings:
         default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
     )
     surface_window_matrix: List[str] = field(
-        default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5", "-c", "10000"]
+        default_factory=lambda: [
+            "-ab",
+            "5",
+            "-ad",
+            "8192",
+            "-lw",
+            "5e-5",
+            "-c",
+            "10000",
+        ]
     )
     view_window_matrix: List[str] = field(
         default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
@@ -415,7 +430,9 @@ class WorkflowConfig:
             self.settings = Settings(**self.settings)
         if isinstance(self.model, dict):
             self.model = Model(**self.model)
-        self.hash_str = hashlib.md5(str(self.__dict__).encode()).hexdigest()[:16]
+        self.hash_str = hashlib.md5(str(self.__dict__).encode()).hexdigest()[
+            :16
+        ]
 
     @staticmethod
     def from_dict(obj: Dict[str, Any]) -> "WorkflowConfig":
@@ -485,12 +502,16 @@ class PhaseMethod:
             with open(self.config.settings.epw_file) as f:
                 self.wea_metadata, self.wea_data = parse_epw(f.read())
             self.wea_header = self.wea_metadata.wea_header()
-            self.wea_str = self.wea_header + "\n".join(str(d) for d in self.wea_data)
+            self.wea_str = self.wea_header + "\n".join(
+                str(d) for d in self.wea_data
+            )
         elif self.config.settings.wea_file != "":
             with open(self.config.settings.wea_file) as f:
                 self.wea_metadata, self.wea_data = parse_wea(f.read())
             self.wea_header = self.wea_metadata.wea_header()
-            self.wea_str = self.wea_header + "\n".join(str(d) for d in self.wea_data)
+            self.wea_str = self.wea_header + "\n".join(
+                str(d) for d in self.wea_data
+            )
         else:
             if (
                 self.config.settings.latitude is None
@@ -555,7 +576,13 @@ class PhaseMethod:
     def calculate_sensor(self, sensor, time, dni, dhi):
         raise NotImplementedError
 
-    def get_sky_matrix(self, time: Union[datetime, List[datetime]], dni: Union[float, List[float]], dhi: Union[float, List[float]], solar_spectrum: bool = False) -> np.ndarray:
+    def get_sky_matrix(
+        self,
+        time: Union[datetime, List[datetime]],
+        dni: Union[float, List[float]],
+        dhi: Union[float, List[float]],
+        solar_spectrum: bool = False,
+    ) -> np.ndarray:
         """Generates a sky matrix based on the time, Direct Normal Irradiance (DNI), and
         Diffuse Horizontal Irradiance (DHI).
 
@@ -570,14 +597,24 @@ class PhaseMethod:
         """
         _wea = self.wea_header
         _ncols = 1
-        if isinstance(time, datetime) and isinstance(dni, (float, int)) and isinstance(dhi, (float, int)):
+        if (
+            isinstance(time, datetime)
+            and isinstance(dni, (float, int))
+            and isinstance(dhi, (float, int))
+        ):
             _wea += str(WeaData(time, dni, dhi))
-        elif isinstance(time, list) and isinstance(dni, list) and isinstance(dhi, list):
+        elif (
+            isinstance(time, list)
+            and isinstance(dni, list)
+            and isinstance(dhi, list)
+        ):
             rows = [str(WeaData(t, n, d)) for t, n, d in zip(time, dni, dhi)]
             _wea += "\n".join(rows)
             _ncols = len(time)
         else:
-            raise ValueError("Time, DNI, and DHI must be either single values or lists of values")
+            raise ValueError(
+                "Time, DNI, and DHI must be either single values or lists of values"
+            )
         smx = pr.gendaymtx(
             _wea.encode(),
             outform="d",
@@ -593,7 +630,9 @@ class PhaseMethod:
             dtype="d",
         )
 
-    def get_sky_matrix_from_wea(self, mfactor: int, sun_only=False, onesun=False):
+    def get_sky_matrix_from_wea(
+        self, mfactor: int, sun_only=False, onesun=False
+    ):
         if self.wea_str is None:
             raise ValueError("No weather string available")
         _sun_str = pr.gendaymtx(
@@ -616,7 +655,9 @@ class PhaseMethod:
             daylight_hours_only=True,
             mfactor=mfactor,
         )
-        _nrows, _ncols, _ncomp, _dtype = parse_rad_header(pr.getinfo(_matrix).decode())
+        _nrows, _ncols, _ncomp, _dtype = parse_rad_header(
+            pr.getinfo(_matrix).decode()
+        )
         return load_binary_matrix(
             _matrix,
             nrows=_nrows,
@@ -708,7 +749,9 @@ class TwoPhaseMethod(PhaseMethod):
             A image as a numpy array
         """
         sky_matrix = self.get_sky_matrix(time, dni, dhi)
-        return matrix_multiply_rgb(self.view_sky_matrices[view].array, sky_matrix)
+        return matrix_multiply_rgb(
+            self.view_sky_matrices[view].array, sky_matrix
+        )
 
     def calculate_sensor(
         self, sensor: str, time: datetime, dni: float, dhi: float
@@ -752,7 +795,11 @@ class TwoPhaseMethod(PhaseMethod):
             3,
         )
         final = np.memmap(
-            f"{view}_2ph.dat", shape=shape, dtype=np.float64, mode="w+", order="F"
+            f"{view}_2ph.dat",
+            shape=shape,
+            dtype=np.float64,
+            mode="w+",
+            order="F",
         )
         for idx in range(0, sky_matrix.shape[1], chunksize):
             end = min(idx + chunksize, sky_matrix.shape[1])
@@ -780,7 +827,9 @@ class TwoPhaseMethod(PhaseMethod):
             raise ValueError("No wea data available")
         return matrix_multiply_rgb(
             self.sensor_sky_matrices[sensor].array,
-            self.get_sky_matrix_from_wea(int(self.config.settings.sky_basis[-1])),
+            self.get_sky_matrix_from_wea(
+                int(self.config.settings.sky_basis[-1])
+            ),
             weights=[47.4, 119.9, 11.6],
         )
 
@@ -817,7 +866,8 @@ class ThreePhaseMethod(PhaseMethod):
                 pr.oconv(
                     *config.model.materials.files,
                     *config.model.scene.files,
-                    stdin=config.model.materials.bytes + config.model.scene.bytes,
+                    stdin=config.model.materials.bytes
+                    + config.model.scene.bytes,
                 )
             )
         self.window_senders: Dict[str, SurfaceSender] = {}
@@ -944,7 +994,9 @@ class ThreePhaseMethod(PhaseMethod):
         res = []
         if isinstance(bsdf, list):
             if len(bsdf) != len(self.config.model.windows):
-                raise ValueError("Number of BSDF should match number of windows.")
+                raise ValueError(
+                    "Number of BSDF should match number of windows."
+                )
         for idx, _name in enumerate(self.config.model.windows):
             _bsdf = bsdf[idx] if isinstance(bsdf, list) else bsdf
             res.append(
@@ -980,9 +1032,13 @@ class ThreePhaseMethod(PhaseMethod):
         res = []
         if isinstance(bsdf, list):
             if len(bsdf) != len(self.config.model.windows):
-                raise ValueError("Number of BSDF should match number of windows.")
+                raise ValueError(
+                    "Number of BSDF should match number of windows."
+                )
         for idx, _name in enumerate(self.config.model.windows):
-            _bsdf = self.config.model.materials.matrices[bsdf[_name]].matrix_data
+            _bsdf = self.config.model.materials.matrices[
+                bsdf[_name]
+            ].matrix_data
             res.append(
                 matrix_multiply_rgb(
                     self.sensor_window_matrices[sensor].array[idx],
@@ -1015,7 +1071,11 @@ class ThreePhaseMethod(PhaseMethod):
             3,
         )
         final = np.memmap(
-            f"{view}_3ph.dat", shape=shape, dtype=np.float64, mode="w+", order="F"
+            f"{view}_3ph.dat",
+            shape=shape,
+            dtype=np.float64,
+            mode="w+",
+            order="F",
         )
         for idx in range(0, sky_matrix.shape[1], chunksize):
             end = min(idx + chunksize, sky_matrix.shape[1])
@@ -1086,12 +1146,18 @@ class ThreePhaseMethod(PhaseMethod):
     ) -> np.ndarray:
         weights = [47.4, 119.9, 11.6]
         if solar_spectrum:
-            weights = [1., 1., 1.]
+            weights = [1.0, 1.0, 1.0]
         if sky_matrix is None:
-            sky_matrix = self.get_sky_matrix(time, dni, dhi, solar_spectrum=solar_spectrum)
-        res = np.zeros((self.surface_senders[surface].yres, sky_matrix.shape[1]))
+            sky_matrix = self.get_sky_matrix(
+                time, dni, dhi, solar_spectrum=solar_spectrum
+            )
+        res = np.zeros(
+            (self.surface_senders[surface].yres, sky_matrix.shape[1])
+        )
         for idx, _name in enumerate(self.config.model.windows):
-            _bsdf = self.config.model.materials.matrices[bsdf[_name]].matrix_data
+            _bsdf = self.config.model.materials.matrices[
+                bsdf[_name]
+            ].matrix_data
             res += matrix_multiply_rgb(
                 self.surface_window_matrices[surface].array[idx],
                 _bsdf,
@@ -1141,7 +1207,9 @@ class ThreePhaseMethod(PhaseMethod):
                 gmaterial = _gms[sname]
                 stdins.append(gmaterial.bytes)
                 for prim in self.window_senders[wname].surfaces:
-                    stdins.append(replace(prim, modifier=gmaterial.identifier).bytes)
+                    stdins.append(
+                        replace(prim, modifier=gmaterial.identifier).bytes
+                    )
             if (_pgs := self.config.model.windows[wname].proxy_geometry) != {}:
                 for prim in _pgs[sname]:
                     stdins.append(prim.bytes)
@@ -1231,7 +1299,9 @@ class FivePhaseMethod(PhaseMethod):
                 pr.oconv(
                     *config.model.materials.files,
                     *config.model.scene.files,
-                    stdin=(config.model.materials.bytes + config.model.scene.bytes),
+                    stdin=(
+                        config.model.materials.bytes + config.model.scene.bytes
+                    ),
                 )
             )
         self.blacked_out_octree: Path = self.octdir / f"{random_string(5)}.oct"
@@ -1252,7 +1322,9 @@ class FivePhaseMethod(PhaseMethod):
         self.vmap: Dict[str, np.ndarray] = {}
         self.cdmap: Dict[str, np.ndarray] = {}
         self.direct_sun_matrix: np.ndarray = self.get_sky_matrix_from_wea(
-            mfactor=int(self.config.settings.sun_basis[-1]), onesun=True, sun_only=True
+            mfactor=int(self.config.settings.sun_basis[-1]),
+            onesun=True,
+            sun_only=True,
         )
         self._prepare_window_objects()
         self._prepare_sun_receivers()
@@ -1267,7 +1339,9 @@ class FivePhaseMethod(PhaseMethod):
             pr.xform(s, modifier="black") for s in self.config.model.scene.files
         )
         if self.config.model.scene.bytes != b"":
-            black_scene += pr.xform(self.config.model.scene.bytes, modifier="black")
+            black_scene += pr.xform(
+                self.config.model.scene.bytes, modifier="black"
+            )
         black = pr.Primitive("void", "plastic", "black", [], [0, 0, 0, 0, 0])
         glow = pr.Primitive("void", "glow", "glowing", [], [1, 1, 1, 0])
         with open(self.blacked_out_octree, "wb") as f:
@@ -1338,7 +1412,9 @@ class FivePhaseMethod(PhaseMethod):
                 sender, list(self.window_receivers.values()), self.octree
             )
             self.view_window_direct_matrices[_v] = Matrix(
-                sender, list(self.window_receivers.values()), self.blacked_out_octree
+                sender,
+                list(self.window_receivers.values()),
+                self.blacked_out_octree,
             )
             self.view_sun_direct_matrices[_v] = SunMatrix(
                 sender, self.view_sun_receiver, self.blacked_out_octree
@@ -1353,7 +1429,9 @@ class FivePhaseMethod(PhaseMethod):
                 sender, list(self.window_receivers.values()), self.octree
             )
             self.sensor_window_direct_matrices[_s] = Matrix(
-                sender, list(self.window_receivers.values()), self.blacked_out_octree
+                sender,
+                list(self.window_receivers.values()),
+                self.blacked_out_octree,
             )
             self.sensor_sun_direct_matrices[_s] = SunMatrix(
                 sender, self.sensor_sun_receiver, self.blacked_out_octree
@@ -1365,7 +1443,9 @@ class FivePhaseMethod(PhaseMethod):
                 parse_polygon(r.surfaces[0]).normal.tobytes()
                 for r in self.window_receivers.values()
             ]
-            unique_window_normals = [np.frombuffer(arr) for arr in set(window_normals)]
+            unique_window_normals = [
+                np.frombuffer(arr) for arr in set(window_normals)
+            ]
             self.sensor_sun_receiver = SunReceiver(
                 self.config.settings.sun_basis,
                 sun_matrix=self.direct_sun_matrix,
@@ -1417,10 +1497,14 @@ class FivePhaseMethod(PhaseMethod):
         blacked_out_windows = str(black) + " ".join(blacked_out_windows)
         glowing_windows = str(glow) + " ".join(glowing_windows)
         with open(self.vmap_oct, "wb") as wtr:
-            wtr.write(pr.oconv(stdin=glowing_windows.encode(), octree=self.octree))
+            wtr.write(
+                pr.oconv(stdin=glowing_windows.encode(), octree=self.octree)
+            )
         logger.info("Generating view matrix material map octree")
         with open(self.cdmap_oct, "wb") as wtr:
-            wtr.write(pr.oconv(stdin=blacked_out_windows.encode(), octree=self.octree))
+            wtr.write(
+                pr.oconv(stdin=blacked_out_windows.encode(), octree=self.octree)
+            )
 
     def generate_matrices(self):
         if self.mfile.exists():
@@ -1505,7 +1589,11 @@ class FivePhaseMethod(PhaseMethod):
             3,
         )
         res = np.memmap(
-            f"{view}_5ph.dat", shape=shape, dtype=np.float64, mode="w+", order="F"
+            f"{view}_5ph.dat",
+            shape=shape,
+            dtype=np.float64,
+            mode="w+",
+            order="F",
         )
         for idx in range(0, sky_matrix.shape[1], chunksize):
             end = min(idx + chunksize, sky_matrix.shape[1])
@@ -1518,7 +1606,8 @@ class FivePhaseMethod(PhaseMethod):
                     )
                     tdsmx = np.dot(tdmx, sky_matrix[:, idx:end, c])
                     vtdsmx = np.dot(
-                        self.view_window_matrices[view].array[widx][:, :, c], tdsmx
+                        self.view_window_matrices[view].array[widx][:, :, c],
+                        tdsmx,
                     )
                     tdmx = np.dot(
                         csr_matrix(self.window_bsdfs[_name][:, :, c]),
@@ -1526,7 +1615,8 @@ class FivePhaseMethod(PhaseMethod):
                     )
                     tdsmx = np.dot(tdmx, direct_sky_matrix[c][:, idx:end])
                     vtdsmx_d = np.dot(
-                        self.view_window_direct_matrices[view].array[widx][c], tdsmx
+                        self.view_window_direct_matrices[view].array[widx][c],
+                        tdsmx,
                     )
                     _res[c].append(vtdsmx - vtdsmx_d.toarray())
             for c in range(3):
@@ -1553,7 +1643,9 @@ class FivePhaseMethod(PhaseMethod):
         )
         direct_sky_matrix = to_sparse_matrix3(direct_sky_matrix)
         res3 = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
-        res3d = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
+        res3d = np.zeros(
+            (self.sensor_senders[sensor].yres, sky_matrix.shape[1])
+        )
         for idx, _name in enumerate(self.config.model.windows):
             res3 += matrix_multiply_rgb(
                 self.sensor_window_matrices[sensor].array[idx],
@@ -1569,7 +1661,9 @@ class FivePhaseMethod(PhaseMethod):
                 direct_sky_matrix,
                 weights=[47.4, 119.9, 11.6],
             )
-        rescd = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
+        rescd = np.zeros(
+            (self.sensor_senders[sensor].yres, sky_matrix.shape[1])
+        )
         for c, w in enumerate([47.4, 119.9, 11.6]):
             rescd += w * np.dot(
                 self.sensor_sun_direct_matrices[sensor].array[c],
