@@ -165,7 +165,7 @@ class WindowConfig:
                 self.file = Path(self.file)
         if self.bytes == b"":
             if self.file != "":
-                with open(self.file) as f:
+                with open(self.file, "rb") as f:
                     self.bytes = f.read()
             else:
                 raise ValueError("WindowConfig must have either file or bytes")
@@ -539,6 +539,7 @@ class PhaseMethod:
                 self.config.settings.time_zone,
                 self.config.settings.site_elevation,
             )
+            self.wea_data = None
 
         # Setup Temp and Octrees directory
         self.tmpdir = Path("Temp")
