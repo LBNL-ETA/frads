@@ -32,7 +32,8 @@ theme:
     - content.code.annotate
     - announce.dismiss
     - navigation.tabs
-
+    - content.code.copy
+extra_css: [css/extra.css]
 markdown_extensions:
   - admonition
   - attr_list
@@ -47,6 +48,8 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
   - def_list
   - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
 
 plugins:
 - search
