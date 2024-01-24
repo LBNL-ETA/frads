@@ -1,5 +1,6 @@
 from dataclasses import asdict, dataclass, field
 import json
+import os
 from pathlib import Path
 import tempfile
 from typing import List, Optional, Tuple, Union
@@ -275,6 +276,8 @@ def create_glazing_system(
     for layer in layers:
         product_data = None
         if isinstance(layer, str) or isinstance(layer, Path):
+            if not os.path.isfile(layer):
+                raise FileNotFoundError(f"{layer} does not exist.")
             if isinstance(layer, Path):
                 layer = str(layer)
             if layer.endswith(".json"):
