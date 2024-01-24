@@ -70,6 +70,9 @@ class SceneConfig:
             materials.update(parse_window_material_blind(material))
         bytes: A raw data string to be used as the scene.
         files_mtime: Files last modification time.
+
+    Raises:
+        ValueError: If both files and bytes are empty.
     """
 
     files: List[Path] = field(default_factory=list)
@@ -80,6 +83,8 @@ class SceneConfig:
         if len(self.files) > 0:
             for fpath in self.files:
                 self.files_mtime.append(os.path.getmtime(fpath))
+        if self.bytes == b"" and len(self.files) == 0:
+            raise ValueError("SceneConfig must have either file or bytes")
 
 
 @dataclass
@@ -116,7 +121,12 @@ class MaterialConfig:
     Attributes:
         file: A file to be used as the material.
         bytes: A raw data string to be used as the material.
+        matrices: A dictionary of matrix files/data.
+        glazing_materials: A dictionary of glazing materials used for edgps calculations.
         file_mtime: File last modification time.
+
+    Raises:
+        ValueError: If file, bytes, and matrices are empty.
     """
 
     files: List[Path] = field(default_factory=list)
@@ -132,6 +142,15 @@ class MaterialConfig:
         for k, v in self.matrices.items():
             if isinstance(v, dict):
                 self.matrices[k] = MatrixConfig(**v)
+        if (
+            self.bytes == b""
+            and len(self.files) == 0
+            and len(self.matrices) == 0
+            and len(self.glazing_materials) == 0
+        ):
+            raise ValueError(
+                "MaterialConfig must have either file, bytes, matrices, or glazing_materials"
+            )
 
 
 @dataclass
@@ -147,14 +166,14 @@ class WindowConfig:
     Attributes:
         file: A file to be used as the window group.
         bytes: A raw data string to be used as the window group.
-        shading_geometry_file: A file to be used as the shading geometry.
-        shading_geometry_bytes: A raw data string to be used as the shading geometry.
+        matrix_name: A matrix name to be used for the window group.
+        proxy_geometry: A raw data string to be used as the shading geometry.
         files_mtime: Files last modification time.
     """
 
     file: Union[str, Path] = ""
     bytes: bytes = b""
-    matrix_file: str = ""
+    matrix_name: str = ""
     proxy_geometry: Dict[str, List[pr.Primitive]] = field(default_factory=dict)
     files_mtime: List[float] = field(init=False, default_factory=list)
 
@@ -383,31 +402,35 @@ class Model:
         views: A dictionary of ViewConfig
     """
 
-    scene: "SceneConfig"
-    windows: Dict[str, "WindowConfig"]
     materials: "MaterialConfig"
-    sensors: Dict[str, "SensorConfig"]
-    views: Dict[str, "ViewConfig"]
+    scene: "SceneConfig" = field(default_factory=dict)
+    windows: Dict[str, "WindowConfig"] = field(default_factory=dict)
+    sensors: Dict[str, "SensorConfig"] = field(default_factory=dict)
+    views: Dict[str, "ViewConfig"] = field(default_factory=dict)
     surfaces: Dict[str, "SurfaceConfig"] = field(default_factory=dict)
 
     # Make Path() out of all path strings
     def __post_init__(self):
-        if isinstance(self.scene, dict):
+        if isinstance(self.scene, dict) and len(self.scene) > 0:
             self.scene = SceneConfig(**self.scene)
         if isinstance(self.materials, dict):
             self.materials = MaterialConfig(**self.materials)
-        for k, v in self.windows.items():
-            if isinstance(v, dict):
-                self.windows[k] = WindowConfig(**v)
-        for k, v in self.sensors.items():
-            if isinstance(v, dict):
-                self.sensors[k] = SensorConfig(**v)
-        for k, v in self.views.items():
-            if isinstance(v, dict):
-                self.views[k] = ViewConfig(**v)
-        for k, v in self.surfaces.items():
-            if isinstance(v, dict):
-                self.surfaces[k] = SurfaceConfig(**v)
+        if isinstance(self.windows, dict) and len(self.windows) > 0:
+            for k, v in self.windows.items():
+                if isinstance(v, dict):
+                    self.windows[k] = WindowConfig(**v)
+        if isinstance(self.sensors, dict) and len(self.sensors) > 0:
+            for k, v in self.sensors.items():
+                if isinstance(v, dict):
+                    self.sensors[k] = SensorConfig(**v)
+        if isinstance(self.views, dict) and len(self.views) > 0:
+            for k, v in self.views.items():
+                if isinstance(v, dict):
+                    self.views[k] = ViewConfig(**v)
+        if isinstance(self.surfaces, dict) and len(self.surfaces) > 0:
+            for k, v in self.surfaces.items():
+                if isinstance(v, dict):
+                    self.surfaces[k] = SurfaceConfig(**v)
 
 
 @dataclass
@@ -429,6 +452,18 @@ class WorkflowConfig:
     hash_str: str = field(init=False)
 
     def __post_init__(self):
+        if (
+            self.model.sensors == {}
+            and self.model.views == {}
+            and self.model.surfaces == {}
+        ):
+            raise ValueError(
+                f"Sensors, views, or surfaces must be specified for {self.settings.method} method"
+            )
+        if self.model.scene == {} and self.model.windows == {}:
+            raise ValueError(
+                f"Scene or windows must be specified for {self.settings.method} method"
+            )
         if isinstance(self.settings, dict):
             self.settings = Settings(**self.settings)
         if isinstance(self.model, dict):
@@ -880,9 +915,9 @@ class ThreePhaseMethod(PhaseMethod):
         self.daylight_matrices = {}
         for _name, window in self.config.model.windows.items():
             _prims = pr.parse_primitive(window.bytes.decode())
-            if window.matrix_file != "":
+            if window.matrix_name != "":
                 self.window_bsdfs[_name] = self.config.model.materials.matrices[
-                    window.matrix_file
+                    window.matrix_name
                 ].matrix_data
                 window_basis = [
                     k
@@ -1175,7 +1210,7 @@ class ThreePhaseMethod(PhaseMethod):
         self,
         view: str,
         bsdf: Dict[str, str],
-        date_time: datetime,
+        time: datetime,
         dni: float,
         dhi: float,
         ambient_bounce: int = 1,
@@ -1186,7 +1221,7 @@ class ThreePhaseMethod(PhaseMethod):
         Args:
             view: view name, must be in config.model.views
             bsdf: a dictionary of window name as key and bsdf matrix or matrix name as value
-            date_time: datetime object
+            time: datetime object
             dni: direct normal irradiance
             dhi: diffuse horizontal irradiance
             ambient_bounce: ambient bounce, default to 1. Could be set to zero for
@@ -1198,7 +1233,7 @@ class ThreePhaseMethod(PhaseMethod):
         stdins = []
         stdins.append(
             gen_perez_sky(
-                date_time,
+                time,
                 self.wea_metadata.latitude,
                 self.wea_metadata.longitude,
                 self.wea_metadata.timezone,
@@ -1234,7 +1269,7 @@ class ThreePhaseMethod(PhaseMethod):
         ev = self.calculate_sensor(
             view,
             bsdf,
-            date_time,
+            time,
             dni,
             dhi,
         )
@@ -1369,8 +1404,10 @@ class FivePhaseMethod(PhaseMethod):
             self.window_senders[_name] = SurfaceSender(
                 _prims, self.config.settings.window_basis
             )
-            if window.matrix_file != "":
-                self.window_bsdfs[_name] = load_matrix(window.matrix_file)
+            if window.matrix_name != "":
+                self.window_bsdfs[_name] = self.config.model.materials.matrices[
+                    window.matrix_name
+                ].matrix_data
             elif window.matrix_data != []:
                 self.window_bsdfs[_name] = np.array(window.matrix_data)
             else:
