@@ -37,6 +37,7 @@ from frads.utils import (
     minutes_to_datetime,
     parse_polygon,
     parse_rad_header,
+    polygon_primitive,
     random_string,
 )
 import numpy as np
@@ -527,8 +528,10 @@ class PhaseMethod:
                 view.view, xres=view.xres, yres=view.yres
             )
         for name, surface in self.config.model.surfaces.items():
+            polygons = [parse_polygon(p) for p in surface.primitives]
+            flipped_primitives = [polygon_primitive(p.flip(), s.modifier, s.identifier) for p, s in zip(polygons, surface.primitives)]
             self.surface_senders[name] = SurfaceSender(
-                surfaces=surface.primitives,
+                surfaces=flipped_primitives,
                 basis=surface.basis,
             )
 
