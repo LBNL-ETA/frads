@@ -1,5 +1,6 @@
 from dataclasses import asdict, dataclass, field
 import json
+import os
 from pathlib import Path
 import tempfile
 from typing import List, Optional, Tuple, Union
@@ -243,7 +244,7 @@ def create_pwc_gaps(gaps: List[Gap]):
 
 def create_glazing_system(
     name: str,
-    layers: List[Union[Path, bytes]],
+    layers: List[Union[Path, str, bytes]],
     gaps: Optional[List[Gap]] = None,
 ) -> GlazingSystem:
     """Create a glazing system from a list of layers and gaps.
@@ -274,13 +275,17 @@ def create_glazing_system(
     thickness = 0
     for layer in layers:
         product_data = None
-        if isinstance(layer, Path):
-            if layer.suffix == ".json":
-                product_data = pwc.parse_json_file(str(layer))
-            elif layer.suffix == ".xml":
-                product_data = pwc.parse_bsdf_xml_file(str(layer))
+        if isinstance(layer, str) or isinstance(layer, Path):
+            if not os.path.isfile(layer):
+                raise FileNotFoundError(f"{layer} does not exist.")
+            if isinstance(layer, Path):
+                layer = str(layer)
+            if layer.endswith(".json"):
+                product_data = pwc.parse_json_file(layer)
+            elif layer.endswith(".xml"):
+                product_data = pwc.parse_bsdf_xml_file(layer)
             else:
-                product_data = pwc.parse_optics_file(str(layer))
+                product_data = pwc.parse_optics_file(layer)
         elif isinstance(layer, bytes):
             try:
                 product_data = pwc.parse_json(layer)

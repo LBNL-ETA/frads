@@ -145,7 +145,13 @@ def surface_to_polygon(srf: BuildingSurfaceDetailed) -> Polygon:
     if srf.vertices is None:
         raise ValueError("Surface has no vertices.")
     vertices = [
-        np.array((v.vertex_x_coordinate, v.vertex_y_coordinate, v.vertex_z_coordinate))
+        np.array(
+            (
+                v.vertex_x_coordinate,
+                v.vertex_y_coordinate,
+                v.vertex_z_coordinate,
+            )
+        )
         for v in srf.vertices
     ]
     return Polygon(vertices)
@@ -214,7 +220,9 @@ def parse_material(name: str, material: Material) -> EPlusOpaqueMaterial:
     )
 
 
-def parse_material_no_mass(name: str, material: MaterialNoMass) -> EPlusOpaqueMaterial:
+def parse_material_no_mass(
+    name: str, material: MaterialNoMass
+) -> EPlusOpaqueMaterial:
     """Parse EP Material:NoMass"""
     name = name.replace(" ", "_")
     roughness = material.roughness.value
@@ -246,7 +254,9 @@ def parse_window_material_simple_glazing_system(
     shgc = material.solar_heat_gain_coefficient
     tmit = material.visible_transmittance or shgc
     tmis = tmit2tmis(tmit)
-    primitive = pr.Primitive("void", "glass", identifier, [], [tmis, tmis, tmis])
+    primitive = pr.Primitive(
+        "void", "glass", identifier, [], [tmis, tmis, tmis]
+    )
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
 
@@ -259,9 +269,13 @@ def parse_window_material_glazing(
     if material.optical_data_type.value.lower() == "bsdf":
         tmit = 1
     else:
-        tmit = material.visible_transmittance_at_normal_incidence or default_tmit
+        tmit = (
+            material.visible_transmittance_at_normal_incidence or default_tmit
+        )
     tmis = tmit2tmis(tmit)
-    primitive = pr.Primitive("void", "glass", identifier, [], [tmis, tmis, tmis])
+    primitive = pr.Primitive(
+        "void", "glass", identifier, [], [tmis, tmis, tmis]
+    )
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
 
@@ -331,16 +345,22 @@ class EnergyPlusToRadianceModelConverter:
                 cname,
                 "default",
                 layers,
-                sum(self.materials[layer.lower()].thickness for layer in layers),
+                sum(
+                    self.materials[layer.lower()].thickness for layer in layers
+                ),
             )
-        cfs, matrices = parse_construction_complex_fenestration_state(self.model)
+        cfs, matrices = parse_construction_complex_fenestration_state(
+            self.model
+        )
         for key, val in matrices.items():
             nested = []
             mtx = val["tvf"]
             for i in range(0, len(mtx["values"]), mtx["nrows"]):
                 nested.append(mtx["values"][i : i + mtx["ncolumns"]])
             self.matrices[key] = {
-                "matrix_data": [[[ele, ele, ele] for ele in row] for row in nested]
+                "matrix_data": [
+                    [[ele, ele, ele] for ele in row] for row in nested
+                ]
             }
         constructions.update(cfs)
         return constructions
@@ -380,12 +400,18 @@ class EnergyPlusToRadianceModelConverter:
         surfaces_fenestrations = self._pair_surfaces_fenestrations(
             surfaces, fenestrations
         )
-        surface_polygons = [surface_to_polygon(srf) for srf in surfaces.values()]
+        surface_polygons = [
+            surface_to_polygon(srf) for srf in surfaces.values()
+        ]
         center = polygon_center(*surface_polygons)
         view_direction = np.array([0.0, 0.0, 0.0])
         for sname, swnf in surfaces_fenestrations.items():
             opaque_surface_polygon = surface_to_polygon(swnf.surface)
-            _surface, _surface_fenestrations, window_polygons = self._process_surface(
+            (
+                _surface,
+                _surface_fenestrations,
+                window_polygons,
+            ) = self._process_surface(
                 sname,
                 opaque_surface_polygon,
                 swnf.surface.construction_name,
@@ -397,7 +423,9 @@ class EnergyPlusToRadianceModelConverter:
             if swnf.surface.surface_type == SurfaceType.floor:
                 sensors[sname] = {
                     "data": gen_grid(
-                        polygon=opaque_surface_polygon, height=0.76, spacing=0.61
+                        polygon=opaque_surface_polygon,
+                        height=0.76,
+                        spacing=0.61,
                     )
                 }
             for window_polygon in window_polygons:
@@ -409,7 +437,9 @@ class EnergyPlusToRadianceModelConverter:
             horiz=180,
             vert=180,
         )
-        sensors[zone_name] = {"data": [center.tolist() + view_direction.tolist()]}
+        sensors[zone_name] = {
+            "data": [center.tolist() + view_direction.tolist()]
+        }
 
         return {
             "scene": {"bytes": b" ".join(scene)},
@@ -458,7 +488,7 @@ class EnergyPlusToRadianceModelConverter:
             surface_polygon -= fenestration_polygon
             windows[fname] = {"bytes": window.bytes}
             if fene.construction_name in self.matrices:
-                windows[fname]["matrix_file"] = fene.construction_name
+                windows[fname]["matrix_name"] = fene.construction_name
         # polygon to primitive
         construction = self.constructions[surface_construction_name]
         inner_material_name = construction.layers[-1].replace(" ", "_")
@@ -470,7 +500,9 @@ class EnergyPlusToRadianceModelConverter:
 
         # extrude the surface by thickness
         if fenestrations != {}:
-            facade = thicken(surface_polygon, window_polygons, construction.thickness)
+            facade = thicken(
+                surface_polygon, window_polygons, construction.thickness
+            )
             outer_material_name = construction.layers[0].replace(" ", "_")
             scene.append(
                 polygon_primitive(
@@ -521,7 +553,9 @@ class EnergyPlusToRadianceModelConverter:
             for fname, fen in zone_fenestrations.items():
                 if fen.building_surface_name == sname:
                     named_fen[fname] = fen
-            surface_fenestrations[sname] = SurfaceWithNamedFenestrations(srf, named_fen)
+            surface_fenestrations[sname] = SurfaceWithNamedFenestrations(
+                srf, named_fen
+            )
         return surface_fenestrations
 
     def _process_fenestration(
@@ -591,7 +625,9 @@ def create_settings(ep_model: EnergyPlusModel, epw_file: Optional[str]) -> dict:
 
 
 def epmodel_to_radmodel(
-    ep_model: EnergyPlusModel, epw_file: Optional[str] = None, add_views: bool = True
+    ep_model: EnergyPlusModel,
+    epw_file: Optional[str] = None,
+    add_views: bool = True,
 ) -> dict:
     """Convert EnergyPlus model to Radiance models where each zone is a separate model.
 

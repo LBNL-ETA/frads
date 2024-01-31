@@ -59,7 +59,9 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                     gas=gap.gas[0].gas.capitalize(), thickness=gap.thickness
                 )
             )
-        layer_inputs: List[epmodel.ConstructionComplexFenestrationStateLayerInput] = []
+        layer_inputs: List[
+            epmodel.ConstructionComplexFenestrationStateLayerInput
+        ] = []
         for i, layer in enumerate(glzsys.layers):
             layer_inputs.append(
                 epmodel.ConstructionComplexFenestrationStateLayerInput(
@@ -70,8 +72,12 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                     emissivity_front=layer.emissivity_front,
                     emissivity_back=layer.emissivity_back,
                     infrared_transmittance=layer.ir_transmittance,
-                    directional_absorptance_front=glzsys.solar_front_absorptance[i],
-                    directional_absorptance_back=glzsys.solar_back_absorptance[i],
+                    directional_absorptance_front=glzsys.solar_front_absorptance[
+                        i
+                    ],
+                    directional_absorptance_back=glzsys.solar_back_absorptance[
+                        i
+                    ],
                 )
             )
         input = epmodel.ConstructionComplexFenestrationStateInput(
@@ -84,11 +90,14 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
         )
         self.add_construction_complex_fenestration_state(name, input)
 
-    def add_lighting(self, zone: str, replace: bool = False):
+    def add_lighting(
+        self, zone: str, lighting_level: float, replace: bool = False
+    ):
         """Add lighting object to EnergyPlusModel's epjs dictionary.
 
         Args:
             zone: Zone name to add lighting to.
+            lighting_level: Lighting level in Watts.
             replace: If True, replace existing lighting object in zone.
 
         Raises:
@@ -96,7 +105,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
             ValueError: If lighting already exists in zone and replace is False.
 
         Examples:
-            >>> model.add_lighting("Zone1")
+            >>> model.add_lighting("Zone1", 10)
         """
         if self.zone is None:
             raise ValueError("Zone not found in model.")
@@ -132,10 +141,10 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
         # Add lighting schedule to epjs dictionary
         self.add(
             "schedule_constant",
-            "constant_off",
+            "constant_on",
             epm.ScheduleConstant(
                 schedule_type_limits_name="on_off",
-                hourly_value=0,
+                hourly_value=1,
             ),
         )
 
@@ -148,15 +157,18 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                 fraction_radiant=0,
                 fraction_replaceable=1,
                 fraction_visible=1,
-                lighting_level=0,
+                lighting_level=lighting_level,
                 return_air_fraction=0,
-                schedule_name="constant_off",
+                schedule_name="constant_on",
                 zone_or_zonelist_or_space_or_spacelist_name=zone,
             ),
         )
 
     def add_output(
-        self, output_type: str, output_name: str, reporting_frequency: str = "Timestep"
+        self,
+        output_type: str,
+        output_name: str,
+        reporting_frequency: str = "Timestep",
     ):
         """Add an output variable or meter to the epjs dictionary.
 

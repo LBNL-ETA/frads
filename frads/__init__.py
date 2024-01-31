@@ -76,6 +76,13 @@ from .methods import (
     TwoPhaseMethod,
     ThreePhaseMethod,
     FivePhaseMethod,
+    Model,
+    Settings,
+    SceneConfig,
+    ViewConfig,
+    WindowConfig,
+    SensorConfig,
+    MaterialConfig,
 )
 
 from .sky import (
@@ -143,4 +150,11 @@ __all__ = [
     "parse_wea",
     "surfaces_view_factor",
     "unpack_primitives",
+    "Settings",
+    "Model",
+    "SceneConfig",
+    "ViewConfig",
+    "WindowConfig",
+    "SensorConfig",
+    "MaterialConfig",
 ]
