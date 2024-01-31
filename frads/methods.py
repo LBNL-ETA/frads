@@ -71,9 +71,6 @@ class SceneConfig:
             materials.update(parse_window_material_blind(material))
         bytes: A raw data string to be used as the scene.
         files_mtime: Files last modification time.
-
-    Raises:
-        ValueError: If both files and bytes are empty.
     """
 
     files: List[Path] = field(default_factory=list)
@@ -84,8 +81,6 @@ class SceneConfig:
         if len(self.files) > 0:
             for fpath in self.files:
                 self.files_mtime.append(os.path.getmtime(fpath))
-        if self.bytes == b"" and len(self.files) == 0:
-            raise ValueError("SceneConfig must have either file or bytes")
 
 
 @dataclass
@@ -127,7 +122,7 @@ class MaterialConfig:
         file_mtime: File last modification time.
 
     Raises:
-        ValueError: If file, bytes, and matrices are empty.
+        ValueError: If no file, bytes, or matrices are provided.
     """
 
     files: List[Path] = field(default_factory=list)
@@ -147,10 +142,9 @@ class MaterialConfig:
             self.bytes == b""
             and len(self.files) == 0
             and len(self.matrices) == 0
-            and len(self.glazing_materials) == 0
         ):
             raise ValueError(
-                "MaterialConfig must have either file, bytes, matrices, or glazing_materials"
+                "MaterialConfig must have either file, bytes or matrices"
             )
 
 
@@ -170,6 +164,9 @@ class WindowConfig:
         matrix_name: A matrix name to be used for the window group.
         proxy_geometry: A raw data string to be used as the shading geometry.
         files_mtime: Files last modification time.
+
+    Raises:
+        ValueError: If neither file nor bytes are provided.
     """
 
     file: Union[str, Path] = ""
@@ -203,6 +200,9 @@ class SensorConfig:
             Default is an empty list.
         file_mtime: Modification time of the file. This attribute is
             automatically initialized based on the 'file' attribute.
+
+    Raises:
+        ValueError: If neither file nor data are provided.
     """
 
     file: str = ""
@@ -213,9 +213,6 @@ class SensorConfig:
         """
         Post-initialization method to set the file modification time and load data
         from the file if necessary.
-
-        Raises:
-            ValueError: If both 'file' and 'data' attributes are empty.
         """
         if self.file != "":
             self.file_mtime = os.path.getmtime(self.file)
@@ -232,6 +229,22 @@ class SensorConfig:
 
 @dataclass
 class ViewConfig:
+    """
+    A configuration class for views that includes information on the file,
+    data, x/y resoluation, and file modification time.
+
+    Attributes:
+        file: Path to the file containing view data. Default is an empty string.
+        view: A View object. Default is an empty string.
+        xres: X resolution of the view. Default is 512.
+        yres: Y resolution of the view. Default is 512.
+        file_mtime: Modification time of the file. This attribute is
+            automatically initialized based on the 'file' attribute.
+
+    Raises:
+        ValueError: If neither file nor view are provided.
+    """
+
     file: Union[str, Path] = ""
     view: Union[pr.View, str] = field(default_factory=str)
     xres: int = 512
@@ -249,11 +262,26 @@ class ViewConfig:
             if not isinstance(self.view, pr.View):
                 self.view = parse_view(self.view)
         else:
-            raise ValueError("ViewConfig must have a file or view")
+            raise ValueError("ViewConfig must have either file or view")
 
 
 @dataclass
 class SurfaceConfig:
+    """
+    A configuration class for surfaces that includes information on the file,
+    data, basis, and file modification time.
+
+    Attributes:
+        file: Path to the file containing surface data. Default is an empty string.
+        primitives: A list of primitives. Default is an empty list.
+        basis: A string representing the basis. Default is 'u'.
+        file_mtime: Modification time of the file. This attribute is
+            automatically initialized based on the 'file' attribute.
+
+    Raises:
+        ValueError: If neither file nor primitives are provided.
+    """
+
     file: Union[str, Path] = ""
     primitives: List[pr.Primitive] = field(default_factory=list)
     basis: str = "u"
@@ -267,7 +295,9 @@ class SurfaceConfig:
         if self.file.exists() and len(self.primitives) == 0:
             self.primitives = pr.parse_primitive(self.file.read_text())
         elif len(self.primitives) == 0:
-            raise ValueError("No primitives available")
+            raise ValueError(
+                "SurfaceConfig must have either file or primitives"
+            )
 
 
 @dataclass
@@ -404,7 +434,7 @@ class Model:
     """
 
     materials: "MaterialConfig"
-    scene: "SceneConfig" = field(default_factory=dict)
+    scene: "SceneConfig" = field(default_factory=SceneConfig)
     windows: Dict[str, "WindowConfig"] = field(default_factory=dict)
     sensors: Dict[str, "SensorConfig"] = field(default_factory=dict)
     views: Dict[str, "ViewConfig"] = field(default_factory=dict)
@@ -412,27 +442,65 @@ class Model:
 
     # Make Path() out of all path strings
     def __post_init__(self):
-        if isinstance(self.scene, dict) and len(self.scene) > 0:
+        if isinstance(self.scene, dict):
             self.scene = SceneConfig(**self.scene)
         if isinstance(self.materials, dict):
             self.materials = MaterialConfig(**self.materials)
-        if isinstance(self.windows, dict) and len(self.windows) > 0:
-            for k, v in self.windows.items():
-                if isinstance(v, dict):
-                    self.windows[k] = WindowConfig(**v)
-        if isinstance(self.sensors, dict) and len(self.sensors) > 0:
-            for k, v in self.sensors.items():
-                if isinstance(v, dict):
-                    self.sensors[k] = SensorConfig(**v)
-        if isinstance(self.views, dict) and len(self.views) > 0:
-            for k, v in self.views.items():
-                if isinstance(v, dict):
-                    self.views[k] = ViewConfig(**v)
-        if isinstance(self.surfaces, dict) and len(self.surfaces) > 0:
-            for k, v in self.surfaces.items():
-                if isinstance(v, dict):
-                    self.surfaces[k] = SurfaceConfig(**v)
+        for k, v in self.windows.items():
+            if isinstance(v, dict):
+                self.windows[k] = WindowConfig(**v)
+        for k, v in self.sensors.items():
+            if isinstance(v, dict):
+                self.sensors[k] = SensorConfig(**v)
+        for k, v in self.views.items():
+            if isinstance(v, dict):
+                self.views[k] = ViewConfig(**v)
+        for k, v in self.surfaces.items():
+            if isinstance(v, dict):
+                self.surfaces[k] = SurfaceConfig(**v)
 
+        self.scene_cfg = True
+        self.windows_cfg = True
+        self.sensors_cfg = True
+        self.views_cfg = True
+        self.surfaces_cfg = True
+
+        if self.scene == SceneConfig() or self.scene == {}:
+            self.scene_cfg = False
+        if self.windows == {}:
+            self.windows_cfg = False
+        if self.sensors == {}:
+            self.sensors_cfg = False
+        if self.views == {}:
+            self.views_cfg = False
+        if self.surfaces == {}:
+            self.surfaces_cfg = False
+
+        # add view to sensors if not already there
+        for k, v in self.views.items():
+            if k in self.sensors:
+                if self.sensors[k].data == [
+                    self.views[k].view.position + self.views[k].view.direction
+                ]:
+                    continue
+                else:
+                    raise ValueError(
+                        f"Sensor {k} data does not match view {k} data"
+                    )
+            else:
+                self.sensors[k] = SensorConfig(
+                    data=[
+                        self.views[k].view.position
+                        + self.views[k].view.direction
+                    ]
+                )
+
+        for k, v in self.windows.items():
+            if v.matrix_name != "":
+                if v.matrix_name not in self.materials.matrices:
+                    raise ValueError(
+                        f"{k} matrix name {v.matrix_name} not found in materials"
+                    )
 
 @dataclass
 class WorkflowConfig:
@@ -454,16 +522,18 @@ class WorkflowConfig:
 
     def __post_init__(self):
         if (
-            self.model.sensors == {}
-            and self.model.views == {}
-            and self.model.surfaces == {}
+            not self.model.sensors_cfg
+            and not self.model.views_cfg
+            and not self.model.surfaces_cfg
         ):
             raise ValueError(
                 f"Sensors, views, or surfaces must be specified for {self.settings.method} method"
             )
-        if self.model.scene == {} and self.model.windows == {}:
+        if (
+            self.settings.method == "3phase" or self.settings.method == "5phase"
+        ) and not self.model.windows_cfg:
             raise ValueError(
-                f"Scene or windows must be specified for {self.settings.method} method"
+                f"Windows must be specified in Model for the {self.settings.method} method"
             )
         if isinstance(self.settings, dict):
             self.settings = Settings(**self.settings)
@@ -529,7 +599,10 @@ class PhaseMethod:
             )
         for name, surface in self.config.model.surfaces.items():
             polygons = [parse_polygon(p) for p in surface.primitives]
-            flipped_primitives = [polygon_primitive(p.flip(), s.modifier, s.identifier) for p, s in zip(polygons, surface.primitives)]
+            flipped_primitives = [
+                polygon_primitive(p.flip(), s.modifier, s.identifier)
+                for p, s in zip(polygons, surface.primitives)
+            ]
             self.surface_senders[name] = SurfaceSender(
                 surfaces=flipped_primitives,
                 basis=surface.basis,
