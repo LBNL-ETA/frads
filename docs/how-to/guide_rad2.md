@@ -218,6 +218,13 @@ view1 = fr.ViewConfig(file = "view1.vf")
 
 ### 1.2.6 Create an instance of the `Model` class
 
+!!! tip
+    * All phases require `materials`
+    * All phases require `sensors` or `views`
+    * Three- and Five-Phase methods require `windows`
+    * If a window matrix name is specified in `windows`, the corresponding window matrix file must be specified in `materials`
+    * There is a corresponding `sensors` point for each `views` point. This `sensors` point could be **automatically** generally when `views` is specified in `Model` or **manually** defined by the user as shown below. `view1` in sensors must have the same view direction and view position as `view1` in views; otherwise, an error will be raised.
+
 ```python 
 model = fr.Model(
     scene=scene,
