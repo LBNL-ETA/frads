@@ -20,7 +20,7 @@ import pywincalc as pwc
 from frads import ncp
 from frads.eplus import load_energyplus_model
 from frads.ep2rad import epmodel_to_radmodel
-from frads.room import make_room
+from frads.room import create_south_facing_room
 from frads.window import PaneRGB, get_glazing_primitive
 from frads.matrix import (
     load_matrix,
@@ -1124,19 +1124,19 @@ def genradroom(args) -> None:
     Resulting Radiance .rad files will be written to a local
     Objects directory, which will be created if not existed before.
     """
-    aroom = make_room(
+    aroom = create_south_facing_room(
         args.width,
         args.depth,
         args.flrflr,
         args.flrclg,
-        args.window,
+        wpd=args.window,
         swall_thickness=args.facade_thickness,
     )
     name = args.name
     objdir = Path("Objects")
     objdir.mkdir(exist_ok=True)
     with open(objdir / f"materials_{name}.mat", "w", encoding="ascii") as wtr:
-        for prim in aroom.materials.values():
+        for prim in aroom.materials:
             wtr.write(str(prim) + "\n")
     with open(objdir / f"ceiling_{name}.rad", "w", encoding="ascii") as wtr:
         for prim in aroom.ceiling.primitives:
@@ -1156,5 +1156,4 @@ def genradroom(args) -> None:
         with open(
             objdir / f"window_{idx:02d}_{name}.rad", "w", encoding="ascii"
         ) as wtr:
-            for prim in srf.primitives:
-                wtr.write(str(prim) + "\n")
+            wtr.write(str(srf.primitive) + "\n")
