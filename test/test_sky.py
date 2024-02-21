@@ -63,13 +63,6 @@ def test_filter_wea():
 #     sky.check_sun_above_horizon()
 #     pass
 
-def test_gendaylit_cmd():
-    """Get a gendaylit command as a list."""
-    result = sky.gendaylit_cmd(
-        "1", "2", "13.5", "37", "122.2", "120", year="2022", dir_norm_ir="500", dif_hor_ir="300"
-    )
-    answer = "gendaylit 1 2 13.5 -a 37 -o 122.2 -m 120 -y 2022 -W 500 300"
-    assert " ".join(result) == answer
 
 def test_solar_angle():
     # sky.filter_data_by_direct_sun()

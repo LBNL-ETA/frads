@@ -323,40 +323,6 @@ def gen_perez_sky(
     return sun + b" ".join(out)
 
 
-def gendaylit_cmd(
-    month: str,
-    day: str,
-    hours: str,
-    lat: str,
-    lon: str,
-    tzone: str,
-    year: Optional[str] = None,
-    grefl: Optional[float] = None,
-    dir_norm_ir: Optional[str] = None,
-    dif_hor_ir: Optional[str] = None,
-    dir_hor_ir: Optional[str] = None,
-    dir_norm_il: Optional[str] = None,
-    dif_hor_il: Optional[str] = None,
-    solar: bool = False,
-) -> list:
-    """Get a gendaylit command as a list."""
-    cmd = ["gendaylit", month, day, hours]
-    cmd += ["-a", lat, "-o", lon, "-m", tzone]
-    if grefl is not None:
-        cmd += ["-g", str(grefl)]
-    if year is not None:
-        cmd += ["-y", year]
-    if None not in (dir_norm_ir, dif_hor_ir):
-        cmd += ["-W", str(dir_norm_ir), str(dif_hor_ir)]
-    if None not in (dir_hor_ir, dif_hor_ir):
-        cmd += ["-G", str(dir_hor_ir), str(dif_hor_ir)]
-    if None not in (dir_norm_il, dif_hor_il):
-        cmd += ["-L", str(dir_norm_il), str(dif_hor_il)]
-    if solar:
-        cmd += ["-O", "1"]
-    return cmd
-
-
 def gen_wea(
     datetimes: Sequence[datetime.datetime],
     dirnorm: Sequence[float],
