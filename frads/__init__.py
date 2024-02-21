@@ -94,7 +94,7 @@ from .sky import (
     WeaMetaData,
 )
 
-from .utils import gen_grid, unpack_primitives
+from .utils import gen_grid, unpack_primitives, parse_polygon
 
 from .window import (
     create_glazing_system,
@@ -147,6 +147,7 @@ __all__ = [
     "load_matrix",
     "matrix_multiply_rgb",
     "parse_epw",
+    "parse_polygon",
     "parse_wea",
     "surfaces_view_factor",
     "unpack_primitives",
