@@ -1,0 +1,508 @@
+<!doctype html>
+<html class="no-js">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" />
+
+    <meta name="generator" content="sphinx-4.5.0, furo 2021.04.11.beta34"/>
+        <title>frads.matrix - frads</title>
+      <link rel="stylesheet" href="../../_static/styles/furo.css?digest=59ab60ac09ea94ccfe6deddff6d715cce948a6fc">
+    <link rel="stylesheet" href="../../_static/pygments.css">
+    <link media="(prefers-color-scheme: dark)" rel="stylesheet" href="../../_static/pygments_dark.css">
+    
+
+
+<style>
+  :root {
+    --color-code-background: #f8f8f8;
+  --color-code-foreground: black;
+  
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+  }
+
+  /* For allowing end-user-specific overrides */
+  .override-light {
+    --color-code-background: #f8f8f8;
+  --color-code-foreground: black;
+  
+  }
+  .override-dark {
+    --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+  }
+</style><link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css" />
+    <link rel="stylesheet" href="../../_static/styles/furo-extensions.css?digest=d391b54134226e4196576da3bdb6dddb7e05ba2b"></head>
+  <body dir="">
+    
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+      stroke-width="1.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+      <path stroke="none" d="M0 0h24v24H0z"/>
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="10" y1="12" x2="20" y2="12" />
+      <line x1="6" y1="18" x2="20" y2="18" />
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+      class="feather feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+      class="feather feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">frads</div></a>
+    </div>
+    <div class="header-right">
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  
+  <span class="sidebar-brand-text">frads</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html">
+  <input class="sidebar-search" placeholder=Search name="q">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../commandline.html">Command line interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../library.html">frads library</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API</a></li>
+</ul>
+
+</div>
+</div>
+      </div>
+      
+    </div>
+  </aside>
+  <main class="main">
+    <div class="content">
+      <article role="main">
+        <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+          <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+        </label>
+        <h1>Source code for frads.matrix</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""</span>
+<span class="sd">This module contains routines to generate sender and receiver objects, generate</span>
+<span class="sd">matrices by calling either rfluxmtx or rcontrib.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span> <span class="nn">subprocess</span> <span class="k">as</span> <span class="nn">sp</span>
+<span class="kn">import</span> <span class="nn">tempfile</span> <span class="k">as</span> <span class="nn">tf</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Union</span>
+
+<span class="kn">from</span> <span class="nn">frads</span> <span class="kn">import</span> <span class="n">sky</span>
+<span class="kn">from</span> <span class="nn">frads</span> <span class="kn">import</span> <span class="n">geom</span>
+<span class="kn">from</span> <span class="nn">frads</span> <span class="kn">import</span> <span class="n">utils</span>
+<span class="kn">from</span> <span class="nn">frads</span> <span class="kn">import</span> <span class="n">parsers</span>
+<span class="kn">from</span> <span class="nn">frads.types</span> <span class="kn">import</span> <span class="n">Primitive</span>
+<span class="kn">from</span> <span class="nn">frads.types</span> <span class="kn">import</span> <span class="n">Receiver</span>
+<span class="kn">from</span> <span class="nn">frads.types</span> <span class="kn">import</span> <span class="n">Sender</span>
+
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"frads.matrix"</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="surface_as_sender"><a class="viewcode-back" href="../../api.html#frads.matrix.surface_as_sender">[docs]</a><span class="k">def</span> <span class="nf">surface_as_sender</span><span class="p">(</span><span class="n">prim_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">basis</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">left</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">"""</span>
+<span class="sd">    Construct a sender from a surface.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        prim_list(list): a list of primitives</span>
+<span class="sd">        basis(str): sender sampling basis</span>
+<span class="sd">        offset(float): move the sender surface in its normal direction</span>
+<span class="sd">        left(bool): Use left-hand rule instead for matrix generation</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A sender object (Sender)</span>
+
+<span class="sd">    """</span>
+    <span class="n">prim_str</span> <span class="o">=</span> <span class="n">prepare_surface</span><span class="p">(</span>
+        <span class="n">prims</span><span class="o">=</span><span class="n">prim_list</span><span class="p">,</span> <span class="n">basis</span><span class="o">=</span><span class="n">basis</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">left</span><span class="o">=</span><span class="n">left</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">Sender</span><span class="p">(</span><span class="s2">"s"</span><span class="p">,</span> <span class="n">prim_str</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="view_as_sender"><a class="viewcode-back" href="../../api.html#frads.matrix.view_as_sender">[docs]</a><span class="k">def</span> <span class="nf">view_as_sender</span><span class="p">(</span><span class="n">vu_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">ray_cnt</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">xres</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">yres</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sender</span><span class="p">:</span>
+    <span class="sd">"""</span>
+<span class="sd">    Construct a sender from a view.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        vu_dict: a dictionary containing view parameters;</span>
+<span class="sd">        ray_cnt: ray count;</span>
+<span class="sd">        xres, yres: image resolution</span>
+<span class="sd">        c2c: Set to True to trim the fisheye corner rays.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A sender object</span>
+
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">xres</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">yres</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Need to specify resolution"</span><span class="p">)</span>
+    <span class="n">res_cmd</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">"vwrays"</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">opt2list</span><span class="p">(</span><span class="n">vu_dict</span><span class="p">)),</span>
+        <span class="s2">"-x"</span><span class="p">,</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">xres</span><span class="p">),</span>
+        <span class="s2">"-y"</span><span class="p">,</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">yres</span><span class="p">),</span>
+        <span class="s2">"-d"</span><span class="p">,</span>
+    <span class="p">]</span>
+    <span class="n">res_proc</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">res_cmd</span><span class="p">,</span> <span class="n">check</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">stdout</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"ascii"</span><span class="p">)</span>
+    <span class="n">res_eval</span> <span class="o">=</span> <span class="n">res_proc</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+    <span class="n">new_xres</span><span class="p">,</span> <span class="n">new_yres</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">res_eval</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">res_eval</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">new_xres</span> <span class="o">!=</span> <span class="n">xres</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">new_yres</span> <span class="o">!=</span> <span class="n">yres</span><span class="p">):</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Changed resolution to </span><span class="si">%s</span><span class="s2"> </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">new_xres</span><span class="p">,</span> <span class="n">new_yres</span><span class="p">)</span>
+    <span class="n">vwrays_cmd</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"vwrays"</span><span class="p">,</span> <span class="s2">"-ff"</span><span class="p">,</span> <span class="s2">"-x"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">new_xres</span><span class="p">),</span> <span class="s2">"-y"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">new_yres</span><span class="p">)]</span>
+    <span class="k">if</span> <span class="n">ray_cnt</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">vu_dict</span><span class="p">[</span><span class="s2">"c"</span><span class="p">]</span> <span class="o">=</span> <span class="n">ray_cnt</span>
+        <span class="n">vu_dict</span><span class="p">[</span><span class="s2">"pj"</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.7</span>  <span class="c1"># placeholder</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">"Ray count is </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">ray_cnt</span><span class="p">)</span>
+    <span class="n">vwrays_cmd</span> <span class="o">+=</span> <span class="n">utils</span><span class="o">.</span><span class="n">opt2list</span><span class="p">(</span><span class="n">vu_dict</span><span class="p">)</span>
+    <span class="n">vwrays_proc</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">vwrays_cmd</span><span class="p">,</span> <span class="n">check</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">stdout</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">PIPE</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">vu_dict</span><span class="p">[</span><span class="s2">"vt"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"a"</span><span class="p">:</span>
+        <span class="n">flush_cmd</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">flush_corner_rays_cmd</span><span class="p">(</span><span class="n">ray_cnt</span><span class="p">,</span> <span class="n">xres</span><span class="p">)</span>
+        <span class="n">flush_proc</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">flush_cmd</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">vwrays_proc</span><span class="o">.</span><span class="n">stdout</span><span class="p">,</span> <span class="n">stdout</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">PIPE</span><span class="p">)</span>
+        <span class="n">vrays</span> <span class="o">=</span> <span class="n">flush_proc</span><span class="o">.</span><span class="n">stdout</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">vrays</span> <span class="o">=</span> <span class="n">vwrays_proc</span><span class="o">.</span><span class="n">stdout</span>
+    <span class="k">return</span> <span class="n">Sender</span><span class="p">(</span><span class="s2">"v"</span><span class="p">,</span> <span class="n">vrays</span><span class="p">,</span> <span class="n">xres</span><span class="p">,</span> <span class="n">yres</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="points_as_sender"><a class="viewcode-back" href="../../api.html#frads.matrix.points_as_sender">[docs]</a><span class="k">def</span> <span class="nf">points_as_sender</span><span class="p">(</span><span class="n">pts_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">ray_cnt</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sender</span><span class="p">:</span>
+    <span class="sd">"""</span>
+<span class="sd">    Construct a sender from a list of points.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        pts_list(list): a list of list of float</span>
+<span class="sd">        ray_cnt(int): sender ray count</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A sender object</span>
+<span class="sd">    """</span>
+    <span class="n">ray_cnt</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">ray_cnt</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">ray_cnt</span>
+    <span class="k">if</span> <span class="n">pts_list</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"pts_list is None"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">pts_list</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"All grid points has to be lists."</span><span class="p">)</span>
+    <span class="n">pts_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">pts_list</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ray_cnt</span><span class="p">)]</span>
+    <span class="n">grid_str</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">linesep</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">li</span><span class="p">))</span> <span class="k">for</span> <span class="n">li</span> <span class="ow">in</span> <span class="n">pts_list</span><span class="p">])</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">linesep</span>
+    <span class="k">return</span> <span class="n">Sender</span><span class="p">(</span><span class="s2">"p"</span><span class="p">,</span> <span class="n">grid_str</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">pts_list</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="sun_as_receiver"><a class="viewcode-back" href="../../api.html#frads.matrix.sun_as_receiver">[docs]</a><span class="k">def</span> <span class="nf">sun_as_receiver</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span> <span class="n">smx_path</span><span class="p">,</span> <span class="n">window_normals</span><span class="p">,</span> <span class="n">full_mod</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Receiver</span><span class="p">:</span>
+    <span class="sd">"""</span>
+<span class="sd">    Instantiate a sun receiver object.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        basis: receiver sampling basis {kf | r1 | sc25...}</span>
+<span class="sd">        smx_path: sky/sun matrix file path</span>
+<span class="sd">        window_paths: window file paths</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        A sun receiver object</span>
+<span class="sd">    """</span>
+
+    <span class="c1"># gensun = sky.Gensun(int(basis[-1]))</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">smx_path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">window_normals</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="n">str_repr</span><span class="p">,</span> <span class="n">mod_str</span> <span class="o">=</span> <span class="n">sky</span><span class="o">.</span><span class="n">gen_sun_source_full</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">basis</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="k">return</span> <span class="n">Receiver</span><span class="p">(</span><span class="n">str_repr</span><span class="p">,</span> <span class="n">basis</span><span class="p">,</span> <span class="n">modifier</span><span class="o">=</span><span class="n">mod_str</span><span class="p">)</span>
+    <span class="n">str_repr</span><span class="p">,</span> <span class="n">mod_str</span><span class="p">,</span> <span class="n">mod_str_full</span> <span class="o">=</span> <span class="n">sky</span><span class="o">.</span><span class="n">gen_sun_source_culled</span><span class="p">(</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">basis</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span> <span class="n">smx_path</span><span class="o">=</span><span class="n">smx_path</span><span class="p">,</span> <span class="n">window_normals</span><span class="o">=</span><span class="n">window_normals</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">full_mod</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Receiver</span><span class="p">(</span><span class="n">receiver</span><span class="o">=</span><span class="n">str_repr</span><span class="p">,</span> <span class="n">basis</span><span class="o">=</span><span class="n">basis</span><span class="p">,</span> <span class="n">modifier</span><span class="o">=</span><span class="n">mod_str_full</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Receiver</span><span class="p">(</span><span class="n">receiver</span><span class="o">=</span><span class="n">str_repr</span><span class="p">,</span> <span class="n">basis</span><span class="o">=</span><span class="n">basis</span><span class="p">,</span> <span class="n">modifier</span><span class="o">=</span><span class="n">mod_str</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="sky_as_receiver"><a class="viewcode-back" href="../../api.html#frads.matrix.sky_as_receiver">[docs]</a><span class="k">def</span> <span class="nf">sky_as_receiver</span><span class="p">(</span><span class="n">basis</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Receiver</span><span class="p">:</span>
+    <span class="sd">"""</span>
+<span class="sd">    Instantiate a sky receiver object.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        basis: receiver sampling basis {kf | r1 | sc25...}</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        A sky receiver object</span>
+<span class="sd">    """</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">basis</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"r"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Sky basis need to be Treganza/Reinhart, found </span><span class="si">{</span><span class="n">basis</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">sky_str</span> <span class="o">=</span> <span class="n">sky</span><span class="o">.</span><span class="n">basis_glow</span><span class="p">(</span><span class="n">basis</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">sky_str</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Receiver</span><span class="p">(</span><span class="n">sky_str</span><span class="p">,</span> <span class="n">basis</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="surface_as_receiver"><a class="viewcode-back" href="../../api.html#frads.matrix.surface_as_receiver">[docs]</a><span class="k">def</span> <span class="nf">surface_as_receiver</span><span class="p">(</span>
+    <span class="n">prim_list</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Primitive</span><span class="p">],</span>
+    <span class="n">basis</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">out</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span>
+    <span class="n">offset</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">left</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">source</span><span class="o">=</span><span class="s2">"glow"</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Receiver</span><span class="p">:</span>
+    <span class="sd">"""</span>
+<span class="sd">    Instantiate a surface receiver object.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        prim_list: list of primitives(dict)</span>
+<span class="sd">        basis: receiver sampling basis {kf | r1 | sc25...}</span>
+<span class="sd">        out: output path</span>
+<span class="sd">        offset: offset the surface in its normal direction</span>
+<span class="sd">        left: use instead left-hand rule for matrix generation</span>
+<span class="sd">        source: light source for receiver object {glow|light}</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        A surface receiver object</span>
+<span class="sd">    """</span>
+    <span class="n">rcvr_str</span> <span class="o">=</span> <span class="n">prepare_surface</span><span class="p">(</span>
+        <span class="n">prims</span><span class="o">=</span><span class="n">prim_list</span><span class="p">,</span> <span class="n">basis</span><span class="o">=</span><span class="n">basis</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">left</span><span class="o">=</span><span class="n">left</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">source</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">out</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">Receiver</span><span class="p">(</span><span class="n">rcvr_str</span><span class="p">,</span> <span class="n">basis</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="prepare_surface"><a class="viewcode-back" href="../../api.html#frads.matrix.prepare_surface">[docs]</a><span class="k">def</span> <span class="nf">prepare_surface</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">prims</span><span class="p">,</span> <span class="n">basis</span><span class="p">,</span> <span class="n">left</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">"""</span>
+<span class="sd">    Prepare the sender or receiver surface, adding appropriate tags.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        prims(list): list of primitives</span>
+<span class="sd">        basis(str): sampling basis</span>
+<span class="sd">        left(bool): use instead the left-hand rule</span>
+<span class="sd">        offset(float): offset surface in its normal direction</span>
+<span class="sd">        source(str): surface light source for receiver</span>
+<span class="sd">        out: output path</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        The surface sender/receiver primitive as string</span>
+<span class="sd">    """</span>
+
+    <span class="k">if</span> <span class="n">basis</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Sampling basis cannot be None"</span><span class="p">)</span>
+    <span class="n">upvector</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">up_vector</span><span class="p">(</span><span class="n">prims</span><span class="p">))</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">" "</span><span class="p">,</span> <span class="s2">","</span><span class="p">)</span>
+    <span class="n">upvector</span> <span class="o">=</span> <span class="s2">"-"</span> <span class="o">+</span> <span class="n">upvector</span> <span class="k">if</span> <span class="n">left</span> <span class="k">else</span> <span class="n">upvector</span>
+    <span class="n">modifier_set</span> <span class="o">=</span> <span class="p">{</span><span class="n">p</span><span class="o">.</span><span class="n">modifier</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">prims</span><span class="p">}</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">modifier_set</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"Primitives don't share modifier"</span><span class="p">)</span>
+    <span class="n">src_mod</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"rflx</span><span class="si">{</span><span class="n">prims</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">modifier</span><span class="si">}</span><span class="s2">"</span>
+    <span class="n">src_mod</span> <span class="o">+=</span> <span class="n">utils</span><span class="o">.</span><span class="n">id_generator</span><span class="p">()</span>
+    <span class="n">header</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"#@rfluxmtx h=</span><span class="si">{</span><span class="n">basis</span><span class="si">}</span><span class="s2"> u=</span><span class="si">{</span><span class="n">upvector</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">header</span> <span class="o">+=</span> <span class="sa">f</span><span class="s1">'#@rfluxmtx o="</span><span class="si">{</span><span class="n">out</span><span class="si">}</span><span class="s1">"</span><span class="se">\n\n</span><span class="s1">'</span>
+    <span class="k">if</span> <span class="n">source</span> <span class="o">==</span> <span class="s1">'glow'</span><span class="p">:</span>
+        <span class="n">source_line</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"void </span><span class="si">{</span><span class="n">source</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">src_mod</span><span class="si">}</span><span class="se">\n</span><span class="s2">0</span><span class="se">\n</span><span class="s2">0</span><span class="se">\n</span><span class="s2">4 1 1 1 0</span><span class="se">\n\n</span><span class="s2">"</span>
+        <span class="n">header</span> <span class="o">+=</span> <span class="n">source_line</span>
+    <span class="k">elif</span> <span class="n">source</span> <span class="o">==</span> <span class="s1">'light'</span><span class="p">:</span>
+        <span class="n">source_line</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"void </span><span class="si">{</span><span class="n">source</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">src_mod</span><span class="si">}</span><span class="se">\n</span><span class="s2">0</span><span class="se">\n</span><span class="s2">0</span><span class="se">\n</span><span class="s2">3 1 1 1</span><span class="se">\n\n</span><span class="s2">"</span>
+        <span class="n">header</span> <span class="o">+=</span> <span class="n">source_line</span>
+    <span class="n">modifiers</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">modifier</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">prims</span><span class="p">]</span>
+    <span class="n">content</span> <span class="o">=</span> <span class="s2">""</span>
+    <span class="k">for</span> <span class="n">prim</span> <span class="ow">in</span> <span class="n">prims</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">prim</span><span class="o">.</span><span class="n">identifier</span> <span class="ow">in</span> <span class="n">modifiers</span><span class="p">:</span>
+            <span class="n">_identifier</span> <span class="o">=</span> <span class="s2">"discarded"</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">_identifier</span> <span class="o">=</span> <span class="n">prim</span><span class="o">.</span><span class="n">identifier</span>
+        <span class="n">_modifier</span> <span class="o">=</span> <span class="n">src_mod</span>
+        <span class="k">if</span> <span class="n">offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">poly</span> <span class="o">=</span> <span class="n">parsers</span><span class="o">.</span><span class="n">parse_polygon</span><span class="p">(</span><span class="n">prim</span><span class="o">.</span><span class="n">real_arg</span><span class="p">)</span>
+            <span class="n">offset_vec</span> <span class="o">=</span> <span class="n">poly</span><span class="o">.</span><span class="n">normal</span><span class="p">()</span><span class="o">.</span><span class="n">scale</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
+            <span class="n">moved_pts</span> <span class="o">=</span> <span class="p">[</span><span class="n">pt</span> <span class="o">+</span> <span class="n">offset_vec</span> <span class="k">for</span> <span class="n">pt</span> <span class="ow">in</span> <span class="n">poly</span><span class="o">.</span><span class="n">vertices</span><span class="p">]</span>
+            <span class="n">_real_args</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">Polygon</span><span class="p">(</span><span class="n">moved_pts</span><span class="p">)</span><span class="o">.</span><span class="n">to_real</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">_real_args</span> <span class="o">=</span> <span class="n">prim</span><span class="o">.</span><span class="n">real_arg</span>
+        <span class="n">new_prim</span> <span class="o">=</span> <span class="n">Primitive</span><span class="p">(</span>
+            <span class="n">_modifier</span><span class="p">,</span> <span class="n">prim</span><span class="o">.</span><span class="n">ptype</span><span class="p">,</span> <span class="n">_identifier</span><span class="p">,</span> <span class="n">prim</span><span class="o">.</span><span class="n">str_arg</span><span class="p">,</span> <span class="n">_real_args</span>
+        <span class="p">)</span>
+        <span class="n">content</span> <span class="o">+=</span> <span class="nb">str</span><span class="p">(</span><span class="n">new_prim</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="k">return</span> <span class="n">header</span> <span class="o">+</span> <span class="n">content</span></div>
+
+
+<div class="viewcode-block" id="rfluxmtx"><a class="viewcode-back" href="../../api.html#frads.matrix.rfluxmtx">[docs]</a><span class="k">def</span> <span class="nf">rfluxmtx</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">sender</span><span class="p">,</span> <span class="n">receiver</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">opt</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">"""</span>
+<span class="sd">    Calling rfluxmtx to generate the matrices.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        sender: Sender object</span>
+<span class="sd">        receiver: Receiver object</span>
+<span class="sd">        env: model environment, basically anything that's not the</span>
+<span class="sd">            sender or receiver</span>
+<span class="sd">        opt: option string</span>
+<span class="sd">        out: output path</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        return the stdout of the rfluxmtx run.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="kc">None</span> <span class="ow">in</span> <span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">receiver</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Sender/Receiver object is None"</span><span class="p">)</span>
+    <span class="n">opt</span> <span class="o">=</span> <span class="s2">""</span> <span class="k">if</span> <span class="n">opt</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">opt</span>
+    <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tempd</span><span class="p">:</span>
+        <span class="n">receiver_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tempd</span><span class="p">,</span> <span class="s2">"receiver"</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">receiver_path</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">wtr</span><span class="p">:</span>
+            <span class="n">wtr</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">receiver</span><span class="o">.</span><span class="n">receiver</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">env_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tempd</span><span class="p">,</span> <span class="s2">"env"</span><span class="p">)</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">env_path</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">wtr</span><span class="p">:</span>
+                <span class="p">[</span><span class="n">wtr</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">prim</span><span class="p">))</span> <span class="k">for</span> <span class="n">prim</span> <span class="ow">in</span> <span class="n">env</span><span class="p">]</span>
+            <span class="n">env_paths</span> <span class="o">=</span> <span class="p">[</span><span class="n">env_path</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">env_paths</span> <span class="o">=</span> <span class="n">env</span>
+        <span class="n">cmd</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"rfluxmtx"</span><span class="p">]</span> <span class="o">+</span> <span class="n">opt</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="n">stdin</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">sender</span><span class="o">.</span><span class="n">form</span> <span class="o">==</span> <span class="s2">"s"</span><span class="p">:</span>
+            <span class="n">sender_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tempd</span><span class="p">,</span> <span class="s2">"sender"</span><span class="p">)</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">sender_path</span><span class="p">,</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">wtr</span><span class="p">:</span>
+                <span class="n">wtr</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">sender</span><span class="o">.</span><span class="n">sender</span><span class="p">)</span>
+            <span class="n">cmd</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">sender_path</span><span class="p">,</span> <span class="n">receiver_path</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">sender</span><span class="o">.</span><span class="n">form</span> <span class="o">==</span> <span class="s2">"p"</span><span class="p">:</span>
+            <span class="n">cmd</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s2">"-I+"</span><span class="p">,</span> <span class="s2">"-faa"</span><span class="p">,</span> <span class="s2">"-y"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">sender</span><span class="o">.</span><span class="n">yres</span><span class="p">),</span> <span class="s2">"-"</span><span class="p">,</span> <span class="n">receiver_path</span><span class="p">])</span>
+            <span class="n">stdin</span> <span class="o">=</span> <span class="n">sender</span><span class="o">.</span><span class="n">sender</span>
+        <span class="k">elif</span> <span class="n">sender</span><span class="o">.</span><span class="n">form</span> <span class="o">==</span> <span class="s2">"v"</span><span class="p">:</span>
+            <span class="n">cmd</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s2">"-ffc"</span><span class="p">,</span> <span class="s2">"-x"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">sender</span><span class="o">.</span><span class="n">xres</span><span class="p">),</span> <span class="s2">"-y"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">sender</span><span class="o">.</span><span class="n">yres</span><span class="p">),</span> <span class="s2">"-ld-"</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+                <span class="n">out</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">out</span> <span class="o">/</span> <span class="s2">"</span><span class="si">%04d</span><span class="s2">.hdr"</span>
+                <span class="n">cmd</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s2">"-o"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">out</span><span class="p">)])</span>
+            <span class="n">cmd</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s2">"-"</span><span class="p">,</span> <span class="n">receiver_path</span><span class="p">])</span>
+            <span class="n">stdin</span> <span class="o">=</span> <span class="n">sender</span><span class="o">.</span><span class="n">sender</span>
+        <span class="n">cmd</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">env_paths</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">utils</span><span class="o">.</span><span class="n">spcheckout</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">inp</span><span class="o">=</span><span class="n">stdin</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="rcvr_oct"><a class="viewcode-back" href="../../api.html#frads.matrix.rcvr_oct">[docs]</a><span class="k">def</span> <span class="nf">rcvr_oct</span><span class="p">(</span><span class="n">receiver</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">oct_path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]):</span>
+    <span class="sd">"""</span>
+<span class="sd">    Generate an octree of the environment and the receiver.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        receiver: receiver object</span>
+<span class="sd">        env: environment file paths</span>
+<span class="sd">        oct_path: Path to write the octree to</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        None</span>
+<span class="sd">    """</span>
+
+    <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tempd</span><span class="p">:</span>
+        <span class="n">receiver_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tempd</span><span class="p">,</span> <span class="s2">"rcvr_path"</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">receiver_path</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">wtr</span><span class="p">:</span>
+            <span class="n">wtr</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">receiver</span><span class="o">.</span><span class="n">receiver</span><span class="p">)</span>
+        <span class="n">ocmd</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"oconv"</span><span class="p">,</span> <span class="s2">"-f"</span><span class="p">]</span> <span class="o">+</span> <span class="n">env</span> <span class="o">+</span> <span class="p">[</span><span class="n">receiver_path</span><span class="p">]</span>
+        <span class="n">octree</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">spcheckout</span><span class="p">(</span><span class="n">ocmd</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">oct_path</span><span class="p">,</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">wtr</span><span class="p">:</span>
+            <span class="n">wtr</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">octree</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="rcontrib"><a class="viewcode-back" href="../../api.html#frads.matrix.rcontrib">[docs]</a><span class="k">def</span> <span class="nf">rcontrib</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">sender</span><span class="p">,</span> <span class="n">modifier</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">octree</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span> <span class="n">out</span><span class="p">,</span> <span class="n">opt</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">"""</span>
+<span class="sd">    Calling rcontrib to generate the matrices.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        sender: Sender object</span>
+<span class="sd">        modifier: modifier str listing the receivers in octree</span>
+<span class="sd">        octree: the octree that includes the environment and the receiver</span>
+<span class="sd">        opt: option string</span>
+<span class="sd">        out: output path</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        None</span>
+
+<span class="sd">    """</span>
+    <span class="n">lopt</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+    <span class="n">lopt</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"-fo+"</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tempd</span><span class="p">:</span>
+        <span class="n">modifier_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tempd</span><span class="p">,</span> <span class="s2">"modifier"</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">modifier_path</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">wtr</span><span class="p">:</span>
+            <span class="n">wtr</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">modifier</span><span class="p">)</span>
+        <span class="n">cmd</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"rcontrib"</span><span class="p">]</span> <span class="o">+</span> <span class="n">lopt</span>
+        <span class="n">stdin</span> <span class="o">=</span> <span class="n">sender</span><span class="o">.</span><span class="n">sender</span>
+        <span class="k">if</span> <span class="n">sender</span><span class="o">.</span><span class="n">form</span> <span class="o">==</span> <span class="s2">"p"</span><span class="p">:</span>
+            <span class="n">cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="s2">"-I+"</span><span class="p">,</span> <span class="s2">"-faf"</span><span class="p">,</span> <span class="s2">"-y"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">sender</span><span class="o">.</span><span class="n">yres</span><span class="p">)]</span>
+        <span class="k">elif</span> <span class="n">sender</span><span class="o">.</span><span class="n">form</span> <span class="o">==</span> <span class="s2">"v"</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">out</span> <span class="o">/</span> <span class="s2">"</span><span class="si">%04d</span><span class="s2">.hdr"</span>
+            <span class="n">cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="s2">"-ffc"</span><span class="p">,</span> <span class="s2">"-x"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">sender</span><span class="o">.</span><span class="n">xres</span><span class="p">),</span> <span class="s2">"-y"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">sender</span><span class="o">.</span><span class="n">yres</span><span class="p">)]</span>
+        <span class="n">cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="s2">"-o"</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="s2">"-M"</span><span class="p">,</span> <span class="n">modifier_path</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">octree</span><span class="p">)]</span>
+        <span class="n">sp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">check</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">stdin</span><span class="p">)</span></div>
+</pre></div>
+      </article>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+
+        <div class="related-information">
+              Copyright &#169; 2020, LBNL
+            |
+            Built with <a href="https://www.sphinx-doc.org/">Sphinx</a>
+              and
+              <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+              <a href="https://github.com/pradyunsg/furo">Furo theme</a>.
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </main>
+</div>
+    <script id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+    <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/jquery.js"></script>
+    <script src="../../_static/underscore.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    <script src="../../_static/scripts/main.js?digest=e931d09b2a40c1bb82b542effe772014573baf67"></script></body>
+</html>
