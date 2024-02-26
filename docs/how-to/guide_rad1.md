@@ -14,13 +14,13 @@ a simple Radiance model.
 
 Let's generate a open-office sized side-lit room
 with four same-sized windows. The room will be 12 meters wide, 14 meters
-deep with a ceiling height of 3 meters. Each window is 2.5 meters in width
+deep, a floor to floor height of 4 meters, and a ceiling height of 3 meters. Each window is 2.5 meters in width
 and 1.8 meters in height and has a sill height of 1 meter. Windows are 0.4 meters
 apart from each other. Finally, we want our facade to have a thickness
 of 0.1 meters. We'll call this model 'aroom'. The `genradroom` command is:
 
 ```
-$ gen room 12 14 3 \
+$ gen room 12 14 4 3 \
 	-w 0.4 1 2.5 1.8 \
 	-w 3.3 1 2.5 1.8 \
 	-w 6.2 1 2.5 1.8 \
@@ -60,12 +60,9 @@ a Jupyter Lab for an interactive workflow.
 
 First lets import all the necessary modules.
 ```py
-from frads import matrix
-from frads import parsers
-from frads import sky
-from frads import utils
-from frads.types import WeaData
-from frads.types import WeaMetaData
+import datetime
+import pyradiance as pr
+import frads as fr
 ```
 
 Next lets gather our model files. Notice that we have our
@@ -90,7 +87,8 @@ our octree as a `aroom.oct` file.
 
 ```python
 room_octree = "aroom.oct"
-matrix.oconv(*fpaths, room_octree)
+with open(room_octree, 'wb') as f:
+    f.write(pr.oconv(*fpaths))
 ```
 
 Notices that we have a `aroom.oct`, which only contains the geometry.
@@ -103,28 +101,19 @@ description and generate a new octree with it.
 First to get our sky description, we make up a clear sky on 12-21 12:00
 with direct normal irradiance of 800 W/m2 and diffuse horizontal irradiance of 100 W/m2.
 We also need to define our location in terms of latitude, longitude, time-zone, and
-elevation. We can then put all these information into the `WeaData` and `WeaMetaData` object.
+elevation.
 
 ```py
-month = 12
-day = 21
-hours = 12
-dni = 800
-dhi = 100
-latitude = 37
-longitude = 122
-time_zone = 120
-elevation = 0
-wea_data = WeaData(month, day, hour, minutes, hours, dni, dhi)
-wea_meta = WeaMetaData(latitude, longitude, time_zone, elevation)
-sky_descr = sky.gen_perez_sky(wea_data, wea_meta)
+date_time = datetime.datetime(2024, 12, 21, 12, 0)
+sky_descr = fr.gen_perez_sky(date_time, latitude=37, longitude=122, time_zone=120, dirnorm=800, difhor=100)
 ```
 Once we have our sky description, we can combine it with our `aroom.oct` octree
 to make a new octree file. Let's call the octree with our sky specific information,
 'aroom_37_122_1221_1200.oct'.
 ```
-room_sky_octree = f'aroom_{latitude}_{longitude}_{month:02d}{day:02d}_{hour:02d}{minute:02d}.oct'
-matrix.oconv(room_sky_octree, input=sky_descr, octree=room_octree)
+room_sky_octree = f'aroom_37_122_1221_1200.oct'
+with open(room_sky_octree, "wb") as f:
+    f.write(pr.oconv(stdin=sky_descr, octree=room_octree))
 ```
 
 
@@ -157,8 +146,8 @@ The code block demonstrates how we generate a grid of sensors with
 floor_primitives = utils.unpack_primitive("Objects/floor_aroom.rad")
 # Since we only have one primitive in this file,
 # we'll take the first one to parse.
-floor_polygon = parsers.parse_polygon(floor_primitives[0].real_arg)
-grid = utils.gen_grid(floor_polygon, 1, 0.75)
+floor_polygon = fr.parse_polygon(floor_primitives[0])
+grid = fr.gen_grid(floor_polygon, 1, 0.75)
 ```
 
 ## Let's trace
@@ -169,8 +158,8 @@ we had just created.
 
 ```py
 aray = " ".join(map(str, grid[0]))
-option = "-I+ -ab 1 -ad 64 -aa 0 -lw 0.01"
-result = matrix.rtrace(aray, option, room_sky_octree)
+option = ["-I+", "-ab", "1", "-ad", "64", "-aa", "0", "-lw", "0.01"]
+result = pr.rtrace(aray.encode(), room_sky_octree, params=option)
 ```
 if we print the `result`, we will see the following:
 ```
@@ -180,28 +169,13 @@ if we print the `result`, we will see the following:
 
 3.23E+01 1.23E+02 7.80E+01
 ```
-Below the header, we can see three values, corresponding to red, green, and blue
-channel from our simulation. We can weight these RGB to derive our illuminance
-values.
-
-First we need get rid of the header. We can do that by passing `header=False`
-when we call rtrace. Or like so:
-```py
-result = result.split("\n\n", 1)[1:]
-illuminance = matrix.weighting(result, (47.3, 119.9, 11.6))
-```
-If we print out `illuminance`, we have:
-```
->>> print(illuminance)
-2343.1
-```
 
 Next, let's trace all of our grid sensors. Since our grid of sensors are a list
 of lists of floats, we need to process them a little bit before rtrace can take them.
 
 ```
 rays = "\n".join([" ".join(map(str, row)) for row in grid])
-results = matrix.rtrace(rays, option, room_sky_octree, header=False)
+results = pr.rtrace(rays.encode(), room_sky_octree, params=option, header=False)
 ```
 And our results, now with the header, is the following:
 ```
