@@ -105,7 +105,7 @@ elevation.
 
 ```py
 date_time = datetime.datetime(2024, 12, 21, 12, 0)
-sky_descr = fr.gen_perez_sky(date_time, latitude=37, longitude=122, time_zone=120, dirnorm=800, diffhor=100)
+sky_descr = fr.gen_perez_sky(date_time, latitude=37, longitude=122, timezone=120, dirnorm=800, diffhor=100)
 ```
 Once we have our sky description, we can combine it with our `aroom.oct` octree
 to make a new octree file. Let's call the octree with our sky specific information,
