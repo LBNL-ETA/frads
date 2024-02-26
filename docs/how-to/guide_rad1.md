@@ -33,13 +33,13 @@ directory with all of our Radiance model inside.
 
 ```
 |____Objects
-| |____window_3_aroom.rad
+| |____window_03_aroom.rad
 | |____wall_aroom.rad
-| |____window_2_aroom.rad
+| |____window_02_aroom.rad
 | |____ceiling_aroom.rad
-| |____window_1_aroom.rad
+| |____window_01_aroom.rad
 | |____materials_aroom.mat
-| |____window_0_aroom.rad
+| |____window_00_aroom.rad
 | |____floor_aroom.rad
 ```
 We can quickly visualize our model using `objview` and
@@ -73,10 +73,10 @@ fpaths = ["Objects/materials_aroom.mat",
           "Objects/ceiling_aroom.rad",
           "Objects/wall_aroom.rad",
           "Objects/floor_aroom.rad",
-          "Objects/window_0_aroom.rad",
-          "Objects/window_1_aroom.rad",
-          "Objects/window_2_aroom.rad",
-          "Objects/window_3_aroom.rad",
+          "Objects/window_00_aroom.rad",
+          "Objects/window_01_aroom.rad",
+          "Objects/window_02_aroom.rad",
+          "Objects/window_03_aroom.rad",
 ]
 ```
 
@@ -105,7 +105,7 @@ elevation.
 
 ```py
 date_time = datetime.datetime(2024, 12, 21, 12, 0)
-sky_descr = fr.gen_perez_sky(date_time, latitude=37, longitude=122, time_zone=120, dirnorm=800, difhor=100)
+sky_descr = fr.gen_perez_sky(date_time, latitude=37, longitude=122, time_zone=120, dirnorm=800, diffhor=100)
 ```
 Once we have our sky description, we can combine it with our `aroom.oct` octree
 to make a new octree file. Let's call the octree with our sky specific information,
@@ -143,7 +143,7 @@ The code block demonstrates how we generate a grid of sensors with
 1 meter spacing and 0.75 meters away from the floor:
 
 ```py
-floor_primitives = utils.unpack_primitive("Objects/floor_aroom.rad")
+floor_primitives = fr.unpack_primitive("Objects/floor_aroom.rad")
 # Since we only have one primitive in this file,
 # we'll take the first one to parse.
 floor_polygon = fr.parse_polygon(floor_primitives[0])
