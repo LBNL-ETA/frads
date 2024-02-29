@@ -7,6 +7,7 @@ from frads.geom import Polygon
 from frads import utils
 import numpy as np
 
+
 @dataclass
 class WindowSurface:
     polygon: Polygon
@@ -22,7 +23,6 @@ class Surface:
     modifier: str
     identifier: str
     primitives: List[pr.Primitive]
-
 
     def move_window(self, distance: float) -> None:
         """Move windows in its normal direction."""
@@ -48,7 +48,9 @@ class Surface:
             modifier=self.base_primitive.modifier,
             identifier=self.base_primitive.identifier,
         )
-        new_polygons = [plg.rotate(center, zaxis, radians) for plg in self.polygons]
+        new_polygons = [
+            plg.rotate(center, zaxis, radians) for plg in self.polygons
+        ]
         new_primitives = []
         for idx, polygon in enumerate(new_polygons):
             new_primitives.append(
@@ -73,8 +75,6 @@ class Surface:
         self.windows = new_windows
         self.base = new_base
         self.base_primitive = new_base_primitive
-
-
 
 
 @dataclass
@@ -106,11 +106,14 @@ class Room:
             *[srf.primitive for srf in self.wwall.windows],
         ]
 
-
     def model_dump(self) -> dict:
         model = {}
-        model["materials"] = {"bytes": b" ".join(p.bytes for p in self.materials)}
-        model["scene"] = {"bytes": b" ".join(p.bytes for p in self.primitives())}
+        model["materials"] = {
+            "bytes": b" ".join(p.bytes for p in self.materials)
+        }
+        model["scene"] = {
+            "bytes": b" ".join(p.bytes for p in self.primitives())
+        }
         model["windows"] = {}
         for primitive in self.window_primitives():
             model["windows"][primitive.identifier] = {"bytes": primitive.bytes}
@@ -132,7 +135,6 @@ class Room:
         self.ewall.rotate_z(radians)
         self.wwall.rotate_z(radians)
         self.nwall.rotate_z(radians)
-
 
     def validate(self) -> None:
         """Validate the room model."""
@@ -163,7 +165,7 @@ def make_window(
     dist_left: float,
     dist_bot: float,
     width: float,
-    height: float
+    height: float,
 ) -> Tuple[Polygon, WindowSurface]:
     """Make one or more window and punch a hole.
 
@@ -199,13 +201,11 @@ def make_window(
             polygon=window_polygon,
             modifier="glass_60",
             identifier=name,
-        )
+        ),
     )
 
-def make_window_wwr(
-    base: Polygon,
-    wwr: float
-) -> Tuple[Polygon, WindowSurface]:
+
+def make_window_wwr(base: Polygon, wwr: float) -> Tuple[Polygon, WindowSurface]:
     """
     Make a single window and punch a hole based on window-to-wall ratio.
 
@@ -218,7 +218,7 @@ def make_window_wwr(
             polygon=window_polygon,
             modifier="glass_60",
             identifier="void",
-        )
+        ),
     )
 
 
@@ -306,13 +306,16 @@ def create_south_facing_room(
 ) -> Room:
     materials = list(utils.material_lib().values())
     pt1 = np.array((0, 0, 0))
-    pt2 = pt1 + np.array((width, 0, 0))
-    pt3 = pt2 + np.array((0, depth, 0))
+    pt2 = pt1 + np.array((0, depth, 0))
+    pt3 = pt2 + np.array((width, 0, 0))
     base_floor = Polygon.rectangle3pts(pt1, pt2, pt3)
-    _, base_ceiling, base_swall, base_ewall, base_nwall, base_wwall = base_floor.extrude(
-        np.array((0, 0, floor_floor))
+    _, base_ceiling, base_wwall, base_nwall, base_ewall, base_swall = (
+        base_floor.extrude(np.array((0, 0, floor_floor)))
     )
-    base_ceiling = base_ceiling.move(np.array((0, 0, floor_ceiling - floor_floor)))
+    base_ceiling = base_ceiling.flip()
+    base_ceiling = base_ceiling.move(
+        np.array((0, 0, floor_ceiling - floor_floor))
+    )
     floor = create_surface(
         base_floor,
         modifier="neutral_lambertian_0.2",

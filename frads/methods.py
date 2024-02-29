@@ -102,8 +102,7 @@ class ShadingGeometryConfig:
     shading_geometry_file: Union[str, Path] = ""
     shading_geometry_bytes: Optional[np.ndarray] = None
 
-    def __post_init__(self):
-        ...
+    def __post_init__(self): ...
 
 
 @dataclass
@@ -502,6 +501,7 @@ class Model:
                         f"{k} matrix name {v.matrix_name} not found in materials"
                     )
 
+
 @dataclass
 class WorkflowConfig:
     """Workflow configuration dataclass.
@@ -598,13 +598,8 @@ class PhaseMethod:
                 view.view, xres=view.xres, yres=view.yres
             )
         for name, surface in self.config.model.surfaces.items():
-            polygons = [parse_polygon(p) for p in surface.primitives]
-            flipped_primitives = [
-                polygon_primitive(p.flip(), s.modifier, s.identifier)
-                for p, s in zip(polygons, surface.primitives)
-            ]
             self.surface_senders[name] = SurfaceSender(
-                surfaces=flipped_primitives,
+                surfaces=surface.primitives,
                 basis=surface.basis,
             )
 
