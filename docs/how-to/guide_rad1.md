@@ -143,7 +143,7 @@ The code block demonstrates how we generate a grid of sensors with
 1 meter spacing and 0.75 meters away from the floor:
 
 ```py
-floor_primitives = fr.unpack_primitive("Objects/floor_aroom.rad")
+floor_primitives = fr.unpack_primitives("Objects/floor_aroom.rad")
 # Since we only have one primitive in this file,
 # we'll take the first one to parse.
 floor_polygon = fr.parse_polygon(floor_primitives[0])
