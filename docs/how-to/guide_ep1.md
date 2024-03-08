@@ -19,16 +19,19 @@ from pyenergyplus.dataset import ref_models, weather_files
 !!! tip "Tips: Reference EnergyPlus models and weather files"
     The `pyenergyplus.dataset` module contains a dictionary of EnergyPlus models and weather files. The keys are the names of the models and weather files. The values are the file paths to the models and weather files.
 
+    ```python
+    ref_models.keys()
     ```
-    >>> ref_models.keys()
-        dict_keys([
-            'full_service_restaurant', 'hospital', 'large_hotel', 
-            'large_office', 'medium_office', 'midrise_apartment', 
-            'outpatient', 'primary_school', 'quick_service_restaurant',
-            'secondary_school', 'small_hotel', 'small_office', 
-            'standalone_retail', 'strip_mall', 'supermarket', 'warehouse'
-        ])
-    ```
+
+    > ```
+    dict_keys([
+        'full_service_restaurant', 'hospital', 'large_hotel', 
+        'large_office', 'medium_office', 'midrise_apartment', 
+        'outpatient', 'primary_school', 'quick_service_restaurant',
+        'secondary_school', 'small_hotel', 'small_office', 
+        'standalone_retail', 'strip_mall', 'supermarket', 'warehouse'
+    ])
+    > ```
     
 ## 1 Initialize an EnergyPlus model
 
@@ -62,11 +65,11 @@ epmodel = fr.load_energyplus_model(idf)
 You can access any EnergyPlus model objects (simulation parameters) as you would do to a class attribute. The EnergyPlus model objects share the same name as that in the Input Data File (IDF) but in lower case separated by underscores. For example, the `FenestrationSurface:Detailed` object in IDF is `fenestration_surface_detailed` in `EnergyPlusModel`.
 
 ```python
->>> epmodel.fenestration_surface_detailed
+epmodel.fenestration_surface_detailed
 ```
-```
+> ```
 {'Perimeter_bot_ZN_1_Wall_South_Window': FenestrationSurfaceDetailed(surface_type=<SurfaceType1.window: 'Window'>, construction_name='Window Non-res Fixed', building_surface_name='Perimeter_bot_ZN_1_Wall_South', outside_boundary_condition_object=None, view_factor_to_ground=<CeilingHeightEnum.autocalculate: 'Autocalculate'>, frame_and_divider_name=None, multiplier=1.0, number_of_vertices=NumberOfVertice2(root=4.0), vertex_1_x_coordinate=1.5, vertex_1_y_coordinate=0.0, vertex_1_z_coordinate=2.3293, vertex_2_x_coordinate=1.5, vertex_2_y_coordinate=0.0, vertex_2_z_coordinate=1.0213, vertex_3_x_coordinate=10.5, vertex_3_y_coordinate=0.0, vertex_3_z_coordinate=1.0213, vertex_4_x_coordinate=10.5, vertex_4_y_coordinate=0.0, vertex_4_z_coordinate=2.3293)}'
-```
+>```
 
 !!! example "Example: Edit the `fenestration_surface_detailed` object"
 
