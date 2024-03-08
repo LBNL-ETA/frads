@@ -1,4 +1,4 @@
-# How to set up a workflow configuration for Radiance simulation?
+# How to calculate daylight factor?
 
 **What is daylight factor?**
 
