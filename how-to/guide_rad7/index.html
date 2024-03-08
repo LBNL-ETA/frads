@@ -18,7 +18,7 @@
     
     
       
-        <title>How to run a simple EnergyPlus simulation? - Frads</title>
+        <title>How to set up a workflow configuration for Radiance simulation? - Frads</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#how-to-run-a-simple-energyplus-simulation" class="md-skip">
+        <a href="#how-to-set-up-a-workflow-configuration-for-radiance-simulation" class="md-skip">
           Skip to content
         </a>
       
@@ -108,7 +108,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              How to run a simple EnergyPlus simulation?
+              How to set up a workflow configuration for Radiance simulation?
             
           </span>
         </div>
@@ -1307,130 +1307,64 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0-import-required-python-libraries" class="md-nav__link">
+  <a href="#workflow" class="md-nav__link">
     <span class="md-ellipsis">
-      0. Import required Python libraries
+      Workflow
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#1-initialize-an-energyplus-model" class="md-nav__link">
+  <a href="#0-import-the-required-classes-and-functions" class="md-nav__link">
     <span class="md-ellipsis">
-      1 Initialize an EnergyPlus model
+      0. Import the required classes and functions
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="1 Initialize an EnergyPlus model">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#11-define-energyplus-model-file-path" class="md-nav__link">
-    <span class="md-ellipsis">
-      1.1 Define EnergyPlus model file path
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#12-load-the-energyplus-model" class="md-nav__link">
-    <span class="md-ellipsis">
-      1.2 Load the EnergyPlus model
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-edit-the-energyplus-model-optional" class="md-nav__link">
+  <a href="#1-build-a-radiance-model" class="md-nav__link">
     <span class="md-ellipsis">
-      2 Edit the EnergyPlus model (optional)
+      1. Build a Radiance model
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="2 Edit the EnergyPlus model (optional)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#all-energyplus-objects" class="md-nav__link">
-    <span class="md-ellipsis">
-      All EnergyPlus objects
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#glazing-system-complex-fenestration-system" class="md-nav__link">
-    <span class="md-ellipsis">
-      Glazing system (complex fenestration system)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#lighting" class="md-nav__link">
-    <span class="md-ellipsis">
-      Lighting
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#add-output" class="md-nav__link">
-    <span class="md-ellipsis">
-      Add Output
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-run-the-energyplus-simulation" class="md-nav__link">
+  <a href="#2-generate-a-cie-overcast-sky" class="md-nav__link">
     <span class="md-ellipsis">
-      3. Run the EnergyPlus simulation
+      2. Generate a CIE overcast sky
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="3. Run the EnergyPlus simulation">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-use-raytracing-to-get-the-interior-horizontal-illuminance" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Use raytracing to get the interior horizontal illuminance
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-compute-the-daylight-factor" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Compute the daylight factor
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Compute the daylight factor">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#31-define-weather-file-path-optional" class="md-nav__link">
+  <a href="#data-visualization" class="md-nav__link">
     <span class="md-ellipsis">
-      3.1 Define weather file path (optional)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#32-initialize-energyplus-simulation-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      3.2 Initialize EnergyPlus simulation setup
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#33-run-the-energyplus-simulation" class="md-nav__link">
-    <span class="md-ellipsis">
-      3.3 Run the EnergyPlus simulation
+      data visualization
     </span>
   </a>
   
@@ -1459,148 +1393,141 @@
   
 
 
-<h1 id="how-to-run-a-simple-energyplus-simulation">How to run a simple EnergyPlus simulation?</h1>
-<p>This guide will show you how to run a simple EnergyPlus simulation. After loading an EnergyPlus model, you can edit the objects and parameters in the model before running the simulation.</p>
-<h2 id="0-import-required-python-libraries">0. Import required Python libraries</h2>
-<p><div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span> <span class="nn">frads</span> <span class="k">as</span> <span class="nn">fr</span>
-</code></pre></div>
-<strong>Optional: Load reference EnergyPlus model and weather files</strong></p>
-<p>You will need a working EnergyPlus model in idf or epjson format to initialize an EnergyPlus model. Or you can load an EnergyPlus reference model from <code>pyenergyplus.dataset</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span> <span class="nn">pyenergyplus.dataset</span> <span class="kn">import</span> <span class="n">ref_models</span><span class="p">,</span> <span class="n">weather_files</span>
-</code></pre></div>
-<div class="admonition tip">
-<p class="admonition-title">Tips: Reference EnergyPlus models and weather files</p>
-<p>The <code>pyenergyplus.dataset</code> module contains a dictionary of EnergyPlus models and weather files. The keys are the names of the models and weather files. The values are the file paths to the models and weather files.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">ref_models</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
-</code></pre></div>
-<blockquote>
-<p><code>dict_keys([
-    'full_service_restaurant', 'hospital', 'large_hotel', 
-    'large_office', 'medium_office', 'midrise_apartment', 
-    'outpatient', 'primary_school', 'quick_service_restaurant',
-    'secondary_school', 'small_hotel', 'small_office', 
-    'standalone_retail', 'strip_mall', 'supermarket', 'warehouse'
-])</code></p>
-</blockquote>
-</div>
-<h2 id="1-initialize-an-energyplus-model">1 Initialize an EnergyPlus model</h2>
-<p>Initialize an EnergyPlus model by calling <code>load_energyplus_model</code> and passing in a working idf or epjson file path.</p>
-<h3 id="11-define-energyplus-model-file-path">1.1 Define EnergyPlus model file path</h3>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">local file</label><label for="__tabbed_1_2">reference model</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">idf</span> <span class="o">=</span> <span class="s2">&quot;medium_office.idf&quot;</span>
-</code></pre></div>
-</div>
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">idf</span> <span class="o">=</span> <span class="n">ref_models</span><span class="p">[</span><span class="s2">&quot;medium_office&quot;</span><span class="p">]</span> <span class="c1"># (1) </span>
-</code></pre></div>
+<h1 id="how-to-set-up-a-workflow-configuration-for-radiance-simulation">How to set up a workflow configuration for Radiance simulation?</h1>
+<p><strong>What is daylight factor?</strong></p>
+<p>Daylight factor (DF) is the ratio of the interior horizontal illuminance to the exterior unobsturcted horizontal illuminance under overcast sky conditions. The higher the daylight factor, the more daylight is available in the room. A minimum daylight factor of 2% is usually recommended for critical visual task zones. </p>
+<h2 id="workflow">Workflow</h2>
 <ol>
-<li>from pyenergyplus.dataset</li>
+<li>Build a Radiance model</li>
+<li>Generate a CIE overcast sky</li>
+<li>Use raytracing to get the interior horizontal illuminance</li>
+<li>Compute the daylight factor</li>
 </ol>
-</div>
-</div>
-</div>
-<h3 id="12-load-the-energyplus-model">1.2 Load the EnergyPlus model</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">epmodel</span> <span class="o">=</span> <span class="n">fr</span><span class="o">.</span><span class="n">load_energyplus_model</span><span class="p">(</span><span class="n">idf</span><span class="p">)</span>
+<h2 id="0-import-the-required-classes-and-functions">0. Import the required classes and functions</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span> <span class="nn">datatime</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span> <span class="nn">frads</span> <span class="k">as</span> <span class="nn">fr</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">import</span> <span class="nn">pyradiance</span> <span class="k">as</span> <span class="nn">pr</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 </code></pre></div>
-<h2 id="2-edit-the-energyplus-model-optional">2 Edit the EnergyPlus model (optional)</h2>
-<h3 id="all-energyplus-objects">All EnergyPlus objects</h3>
-<p>You can access any EnergyPlus model objects (simulation parameters) as you would do to a class attribute. The EnergyPlus model objects share the same name as that in the Input Data File (IDF) but in lower case separated by underscores. For example, the <code>FenestrationSurface:Detailed</code> object in IDF is <code>fenestration_surface_detailed</code> in <code>EnergyPlusModel</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">epmodel</span><span class="o">.</span><span class="n">fenestration_surface_detailed</span>
+<h2 id="1-build-a-radiance-model">1. Build a Radiance model</h2>
+<p>If you already have a Radiance model setup, please have a octree file storing the scene files and continue on to the next step. If not, follow below to set up a sample Radiance model. See <a href="../guide_rad1/">How to setup a simple rtrace workflow?</a> for more details.</p>
+<p>Use <code>gen room</code> in a command line interface to generate
+a simple Radiance model. The example 'aroom' is a open-office sized side-lit room with four same-sized windows. The room will be 12 meters wide, 14 meters deep, a floor to floor height of 4 meters, and a ceiling height of 3 meters. Each window is 2.5 meters in width and 1.8 meters in height and has a sill height of 1 meter. Windows are 0.4 meters apart from each other. Finally, the facade has a thickness of 0.1 meters. </p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>$ gen room 12 14 4 3 \
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    -w 0.4 1 2.5 1.8 \
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    -w 3.3 1 2.5 1.8 \
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    -w 6.2 1 2.5 1.8 \
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    -w 9.1 1 2.5 1.8 \
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    -t 0.1 -n aroom
 </code></pre></div>
-<blockquote>
-<p><code>{'Perimeter_bot_ZN_1_Wall_South_Window': FenestrationSurfaceDetailed(surface_type=&lt;SurfaceType1.window: 'Window'&gt;, construction_name='Window Non-res Fixed', building_surface_name='Perimeter_bot_ZN_1_Wall_South', outside_boundary_condition_object=None, view_factor_to_ground=&lt;CeilingHeightEnum.autocalculate: 'Autocalculate'&gt;, frame_and_divider_name=None, multiplier=1.0, number_of_vertices=NumberOfVertice2(root=4.0), vertex_1_x_coordinate=1.5, vertex_1_y_coordinate=0.0, vertex_1_z_coordinate=2.3293, vertex_2_x_coordinate=1.5, vertex_2_y_coordinate=0.0, vertex_2_z_coordinate=1.0213, vertex_3_x_coordinate=10.5, vertex_3_y_coordinate=0.0, vertex_3_z_coordinate=1.0213, vertex_4_x_coordinate=10.5, vertex_4_y_coordinate=0.0, vertex_4_z_coordinate=2.3293)}'</code></p>
-</blockquote>
-<div class="admonition example">
-<p class="admonition-title">Example: Edit the <code>fenestration_surface_detailed</code> object</p>
-<div class="highlight"><span class="filename">Change the construction name of the window</span><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">epmodel</span><span class="o">.</span><span class="n">fenestration_surface_detailed</span><span class="p">[</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="s2">&quot;Perimeter_bot_ZN_1_Wall_South_Window&quot;</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="p">]</span><span class="o">.</span><span class="n">construction_name</span> <span class="o">=</span> <span class="s2">&quot;gs1&quot;</span>
+<p>In a Python environment, call <code>pyradiance.oconv</code> to generate a <code>octree</code> file storing the material and geometry files generated from the <code>gen room</code> command in the 'Objects' directory </p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">fpaths</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Objects/materials_aroom.mat&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>          <span class="s2">&quot;Objects/ceiling_aroom.rad&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>          <span class="s2">&quot;Objects/wall_aroom.rad&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>          <span class="s2">&quot;Objects/floor_aroom.rad&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>          <span class="s2">&quot;Objects/window_00_aroom.rad&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>          <span class="s2">&quot;Objects/window_01_aroom.rad&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>          <span class="s2">&quot;Objects/window_02_aroom.rad&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>          <span class="s2">&quot;Objects/window_03_aroom.rad&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="p">]</span>
 </code></pre></div>
-</div>
-<div class="admonition example">
-<p class="admonition-title">Example: Edit the <code>lights</code> object</p>
-<div class="highlight"><span class="filename">Change the watts per zone floor area</span><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">epmodel</span><span class="o">.</span><span class="n">lights</span><span class="p">[</span><span class="s2">&quot;Perimeter_bot_ZN_1_Lights&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">watts_per_zone_floor_area</span> <span class="o">=</span> <span class="mi">10</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">room_octree</span> <span class="o">=</span> <span class="s2">&quot;aroom.oct&quot;</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">room_octree</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">pr</span><span class="o">.</span><span class="n">oconv</span><span class="p">(</span><span class="o">*</span><span class="n">fpaths</span><span class="p">))</span>
 </code></pre></div>
-</div>
-<h3 id="glazing-system-complex-fenestration-system">Glazing system (complex fenestration system)</h3>
-<p>Use <code>EnergyPlusModel.add_glazing_system()</code> to easily add glazing system (complex fenestration systems) to the <code>construction_complex_fenestration_state</code> object in the EnergyPlus model.</p>
-<p>First, use the <code>GlazingSystem</code> class to create a glazing system. Then use <code>EnergyPlusModel.add_glazing_system()</code> to add the glazing system to the EnergyPlus. See <a href="../guide_ep2/">How to create a glazing system?</a> for more details.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">epmodel</span><span class="o">.</span><span class="n">add_glazing_system</span><span class="p">(</span><span class="n">gs1</span><span class="p">)</span> <span class="c1"># (1) </span>
+<h2 id="2-generate-a-cie-overcast-sky">2. Generate a CIE overcast sky</h2>
+<p>Use <code>pyradiance.gensky</code> to generate a CIE overcast sky. The function returns a brightness function (skyfunc) to vary the brightness of the glow material. We will assume the overcast sky has a diffuse horizontal illuminance of 10,000 lux (horizontal diffuse irradiance of 55.866 w/m2).</p>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">dif_hor_illum</span> <span class="o">=</span> <span class="mi">10000</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">dif_hor_ird</span> <span class="o">=</span> <span class="n">dif_hor_illum</span> <span class="o">/</span> <span class="mi">179</span>
 </code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">sky_func</span> <span class="o">=</span> <span class="n">pr</span><span class="o">.</span><span class="n">gensky</span><span class="p">(</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">dt</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2024</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">21</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">cloudy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">horizontal_brightness</span><span class="o">=</span><span class="n">dif_hor_ird</span><span class="p">,</span> <span class="c1"># (1)</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="p">)</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="nb">print</span><span class="p">(</span><span class="n">sky_func</span><span class="p">)</span>
+</code></pre></div></p>
 <ol>
-<li><code>gs1 = fr.create_glazing_system(name="gs1", layers=["product1.json", "product2.json"])</code></li>
+<li>zenith brightness is computed from the horizontal diffuse irradiance (in watts/meter2)</li>
 </ol>
-<h3 id="lighting">Lighting</h3>
-<p>Use <code>EnergyPlusModel.add_lighting()</code> to easily add lighting systems to the <code>lights</code> object in the EnergyPlus model. The function takes in the name of the zone to add lighting, the lighting level in the zone in Watts, and an optional <code>replace</code> argument. If <code>replace</code> is <code>True</code>, the zone's existing lighting system will be replaced by the new lighting system. If <code>replace</code> is <code>False</code> and the zone already has a lighting system, an error will be raised. The default value of <code>replace</code> is <code>False</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">epmodel</span><span class="o">.</span><span class="n">add_lighting</span><span class="p">(</span><span class="n">zone</span><span class="o">=</span><span class="s2">&quot;Perimeter_bot_ZN_1&quot;</span><span class="p">,</span> <span class="n">lighting_level</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<blockquote>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>void brightfunc skyfunc
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>2 skybr skybright.cal
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>0
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>3 2 2.286e+01 3.557e+00
 </code></pre></div>
-<h3 id="add-output">Add Output</h3>
-<p>Use <code>EnergyPlusModel.add_output()</code> to easily add output variables or meters to the <code>Output:Variable</code> or <code>Output:Meter</code> object in the EnergyPlus model. The  method takes in the type of the output (variable or meter), name of the output, and the reporting frequency. The default reporting frequency is <code>Timestamp</code>. </p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">epmodel</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="n">output_type</span><span class="o">=</span><span class="s2">&quot;variable&quot;</span><span class="p">,</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="n">output_name</span><span class="o">=</span><span class="s2">&quot;Lights Electricity Rate&quot;</span><span class="p">,</span>
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">reporting_frequency</span><span class="o">=</span><span class="s2">&quot;Hourly&quot;</span><span class="p">,</span>
+</blockquote>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">sky_glow</span> <span class="o">=</span> <span class="s2">&quot;skyfunc glow sky_glow 0 0 4 1 1 1 0&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">sky</span> <span class="o">=</span> <span class="s2">&quot;sky_glow source sky 0 0 4 0 0 1 180&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">sky_scene</span> <span class="o">=</span> <span class="n">sky_func</span> <span class="o">+</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="o">+</span> <span class="n">sky_glow</span> <span class="o">+</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="o">+</span> <span class="n">sky</span>
+</code></pre></div>
+<div class="highlight"><span class="filename">add sky scene to octree</span><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">room_sky_octree</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;aroom_37_122_1221_1200.oct&quot;</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">room_sky_octree</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">pr</span><span class="o">.</span><span class="n">oconv</span><span class="p">(</span><span class="n">stdin</span><span class="o">=</span><span class="n">sky_descr</span><span class="p">,</span> <span class="n">octree</span><span class="o">=</span><span class="n">room_octree</span><span class="p">))</span>
+</code></pre></div>
+<h2 id="3-use-raytracing-to-get-the-interior-horizontal-illuminance">3. Use raytracing to get the interior horizontal illuminance</h2>
+<p>Generate a grid of horizontal workplane sensors for interior horizontal illuminance computation. See <a href="../guide_rad1/">How to setup a simple rtrace workflow?</a> for more details.</p>
+<div class="highlight"><span class="filename">generate grid sensors based on the floor polygon</span><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">floor_primitives</span> <span class="o">=</span> <span class="n">fr</span><span class="o">.</span><span class="n">unpack_primitives</span><span class="p">(</span><span class="s2">&quot;Objects/floor_aroom.rad&quot;</span><span class="p">)</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">floor_polygon</span> <span class="o">=</span> <span class="n">fr</span><span class="o">.</span><span class="n">parse_polygon</span><span class="p">(</span><span class="n">floor_primitives</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">grid</span> <span class="o">=</span> <span class="n">fr</span><span class="o">.</span><span class="n">gen_grid</span><span class="p">(</span><span class="n">floor_polygon</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">)</span>
+</code></pre></div>
+<p>Use <code>pyrandiance.rtrace</code> to compute ray tracing from the sensors. The function returns the irradiance results of all sensors in bytes.</p>
+<p><div class="highlight"><span class="filename">rtrace to get irradiance</span><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">option</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;-I+&quot;</span><span class="p">,</span> <span class="s2">&quot;-ab&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">,</span> <span class="s2">&quot;-ad&quot;</span><span class="p">,</span> <span class="s2">&quot;64&quot;</span><span class="p">,</span> <span class="s2">&quot;-aa&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">,</span> <span class="s2">&quot;-lw&quot;</span><span class="p">,</span> <span class="s2">&quot;0.01&quot;</span><span class="p">]</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">rays</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">row</span><span class="p">))</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">grid</span><span class="p">])</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="n">ird_results</span> <span class="o">=</span> <span class="n">pr</span><span class="o">.</span><span class="n">rtrace</span><span class="p">(</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">rays</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span> <span class="n">room_sky_octree</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">option</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">False</span>
 <a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="p">)</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="nb">print</span><span class="p">(</span><span class="n">ird_results</span><span class="p">)</span>
 </code></pre></div>
-<div class="admonition tip">
-<p class="admonition-title">Tip</p>
-<p>See .rdd file for all available output variables and .mdd file for all available output meters.</p>
-</div>
-<h2 id="3-run-the-energyplus-simulation">3. Run the EnergyPlus simulation</h2>
-<p>Call <code>EnergyPlusSetup</code> class to set up the EnergyPlus simulation. <code>EnergyPlusSetup</code> takes in the EnergyPlus model and an optional weather file. If no weather file is provided, when calling <code>EnergyPlusSetup.run()</code>, you need to set <code>design_day</code> to <code>True</code> and run design-day-only simulation; otherwise, an error will be raised. Annual simulation requires a weather file.</p>
-<h3 id="31-define-weather-file-path-optional">3.1 Define weather file path (optional)</h3>
-<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">local file</label><label for="__tabbed_2_2">reference weather file</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">weather_file</span> <span class="o">=</span> <span class="s2">&quot;USA_CA_San.Francisco.Intl.AP.724940_TMY3.epw&quot;</span>
+The sensor data are separeted by '\n'. </p>
+<p>Each sensor data has rgb channels irradiance separated by '\t'</p>
+<blockquote>
+<p><code>'4.386912e+00\t4.386912e+00\t4.386912e+00\t\n2.373928e+00\t2.373928e+00\t2.373928e+00\t ... 0.000000e+00\t0.000000e+00\t0.000000e+00\t\n'</code></p>
+</blockquote>
+<div class="highlight"><span class="filename">reformat the irradiance result</span><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">rows</span> <span class="o">=</span> <span class="n">ird_results</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">element</span><span class="p">)</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">row</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">element</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span><span class="p">]</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="p">]</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="n">ird_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 </code></pre></div>
-</div>
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">weather_file</span> <span class="o">=</span> <span class="n">weather_files</span><span class="p">[</span><span class="s2">&quot;usa_ca_san_francisco&quot;</span><span class="p">]</span> <span class="c1"># (1) </span>
+<p>Apply coefficients to convert irradiance into illuminance</p>
+<div class="highlight"><span class="filename">convert irradiance to illuminance</span><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">ird_array</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*=</span> <span class="mf">47.4</span> <span class="c1">#red</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">ird_array</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*=</span> <span class="mf">119.9</span> <span class="c1">#blue</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">ird_array</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*=</span> <span class="mf">11.6</span> <span class="c1">#green</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="n">illum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">ird_array</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </code></pre></div>
-<ol>
-<li>from pyenergyplus.dataset</li>
-</ol>
-</div>
-</div>
-</div>
-<h3 id="32-initialize-energyplus-simulation-setup">3.2 Initialize EnergyPlus simulation setup</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">epsetup</span> <span class="o">=</span> <span class="n">fr</span><span class="o">.</span><span class="n">EnergyPlusSetup</span><span class="p">(</span><span class="n">epmodel</span><span class="p">,</span> <span class="n">weather_file</span><span class="p">)</span>
+<h2 id="4-compute-the-daylight-factor">4. Compute the daylight factor</h2>
+<div class="highlight"><span class="filename">daylight factor = interior illuminance / exterior illuminance * 100</span><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">df</span> <span class="o">=</span> <span class="n">illum</span> <span class="o">/</span> <span class="n">dif_hor_illum</span> <span class="o">*</span> <span class="mi">100</span>
 </code></pre></div>
-<h3 id="33-run-the-energyplus-simulation">3.3 Run the EnergyPlus simulation</h3>
-<p>Call <code>EnergyPlusSetup.run()</code> to run the EnergyPlus simulation. This will generate EnergyPlus output files in the working directory. </p>
-<p>The function has the following arguments:</p>
-<ul>
-<li>output_directory: Output directory path. (default: current directory)</li>
-<li>output_prefix: Prefix for output files. (default: eplus)</li>
-<li>output_suffix: Suffix style for output files. (default: L)</li>
-<li>L: Legacy (e.g., eplustbl.csv)</li>
-<li>C: Capital (e.g., eplusTable.csv)</li>
-<li>D: Dash (e.g., eplus-table.csv)</li>
-<li>silent: If True, do not print EnergyPlus output to console. (default: False)</li>
-<li>annual: If True, force run annual simulation. (default: False)</li>
-<li>design_day: If True, force run design-day-only simulation. (default: False)</li>
-</ul>
-<div class="tabbed-set tabbed-alternate" data-tabs="3:3"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><input id="__tabbed_3_3" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">simple</label><label for="__tabbed_3_2">annual</label><label for="__tabbed_3_3">design day</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">epsetup</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+<h3 id="data-visualization">data visualization</h3>
+<div class="highlight"><span class="filename">import visualization packages</span><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
 </code></pre></div>
-</div>
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># need a weather file</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">epsetup</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">annual</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">()</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">x</span> <span class="o">=</span> <span class="p">[</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">grid</span><span class="p">]</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="n">y</span> <span class="o">=</span> <span class="p">[</span><span class="n">data</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">grid</span><span class="p">]</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="n">_plot</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>    <span class="n">x</span><span class="p">,</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>    <span class="n">y</span><span class="p">,</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>    <span class="n">c</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>    <span class="n">cmap</span><span class="o">=</span><span class="s2">&quot;plasma&quot;</span><span class="p">,</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>    <span class="n">s</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a>    <span class="n">vmin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>    <span class="n">vmax</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">df</span><span class="p">),</span>
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>    <span class="n">rasterized</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="p">)</span>
+<a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a><span class="n">ax</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+<a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a>    <span class="n">xlabel</span><span class="o">=</span><span class="s2">&quot;x position [m]&quot;</span><span class="p">,</span>
+<a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a>    <span class="n">ylabel</span><span class="o">=</span><span class="s2">&quot;y position [m]&quot;</span><span class="p">,</span>
+<a id="__codelineno-16-17" name="__codelineno-16-17" href="#__codelineno-16-17"></a><span class="p">)</span>
+<a id="__codelineno-16-18" name="__codelineno-16-18" href="#__codelineno-16-18"></a>
+<a id="__codelineno-16-19" name="__codelineno-16-19" href="#__codelineno-16-19"></a><span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">_plot</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Daylight Factor [%]&quot;</span><span class="p">)</span>
+<a id="__codelineno-16-20" name="__codelineno-16-20" href="#__codelineno-16-20"></a><span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
 </code></pre></div>
-</div>
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># need to set up design day parameters in EnergyPlus model.</span>
-<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="n">epsetup</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">design_day</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</code></pre></div>
-</div>
-</div>
-</div>
+<p><img alt="daylight_factor" src="../../assets/daylight_factor.png" /></p>
 
 
 
