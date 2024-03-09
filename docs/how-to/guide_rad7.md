@@ -89,10 +89,12 @@ print(sky_func)
 sky_glow = "skyfunc glow sky_glow 0 0 4 1 1 1 0".encode()
 
 sky = "sky_glow source sky 0 0 4 0 0 1 180".encode()
+
+ground = "sky_glow source ground 0 0 4 0 0 -1 180".encode()
 ```
 
 ```python
-sky_scene = sky_func + b'\n' + sky_glow + b'\n' + sky
+sky_scene = sky_func + b'\n' + sky_glow + b'\n' + sky + b'\n' + ground
 ```
 
 ```python title="add sky scene to octree"
@@ -115,7 +117,7 @@ grid = fr.gen_grid(floor_polygon, 1, 0.75)
 Use `pyrandiance.rtrace` to compute ray tracing from the sensors. The function returns the irradiance results of all sensors in bytes.
 
 ```python title="rtrace to get irradiance"
-option = ["-I+", "-ab", "1", "-ad", "64", "-aa", "0", "-lw", "0.01"]
+option = ["-I+", "-ab", "5", "-ad", "512", "-aa", "0", "-lw", "0.001"]
 rays = "\n".join([" ".join(map(str, row)) for row in grid])
 ird_results = pr.rtrace(
     rays.encode(), room_sky_octree, params=option, header=False
@@ -140,11 +142,12 @@ ird_array = np.array(data)
 Apply coefficients to convert irradiance into illuminance
 
 ```python title="convert irradiance to illuminance"
-ird_array[:, 0] *= 47.4 #red
-ird_array[:, 1] *= 119.9 #blue
-ird_array[:, 2] *= 11.6 #green
-illum = np.sum(ird_array, axis=1)
+
+illum = ird_array[:, 0] * 47.4 + ird_array[:, 1] * 119.9 + ird_array[:, 2] * 11.6 # (1)
 ```
+
+1. red: 47.4, blue: 119.9, green: 11.6
+
 
 ## 4. Compute the daylight factor
 
