@@ -24,19 +24,20 @@ import numpy as np
 
 If you already have a Radiance model setup, please have a octree file storing the scene files and continue on to the next step. If not, follow below to set up a sample Radiance model. See [How to setup a simple rtrace workflow?](guide_rad1.md) for more details.
 
-Use `gen room` in a command line interface to generate
-a simple Radiance model. The example 'aroom' is a open-office sized side-lit room with four same-sized windows. The room will be 12 meters wide, 14 meters deep, a floor to floor height of 4 meters, and a ceiling height of 3 meters. Each window is 2.5 meters in width and 1.8 meters in height and has a sill height of 1 meter. Windows are 0.4 meters apart from each other. Finally, the facade has a thickness of 0.1 meters. 
+Use `gen room` (a command line function) to generate a simple Radiance model. The example 'aroom' is a open-office sized side-lit room with four same-sized windows. The room will be 12 meters wide, 14 meters deep, a floor to floor height of 4 meters, and a ceiling height of 3 meters. Each window is 2.5 meters in width and 1.8 meters in height and has a sill height of 1 meter. Windows are 0.4 meters apart from each other. Finally, the facade has a thickness of 0.1 meters. 
 
-```
-$ gen room 12 14 4 3 \
+```python 
+! gen room 12 14 4 3 \
 	-w 0.4 1 2.5 1.8 \
 	-w 3.3 1 2.5 1.8 \
 	-w 6.2 1 2.5 1.8 \
 	-w 9.1 1 2.5 1.8 \
-	-t 0.1 -n aroom
+	-t 0.1 -n aroom # (1)
 ```
 
-In a Python environment, call `pyradiance.oconv` to generate a `octree` file storing the material and geometry files generated from the `gen room` command in the 'Objects' directory 
+1. `gen room` is a command line function. To run shell commands from inside a IPython syntax (e.g. Jupyter Notebook), start the code with an exclamation mark (!).
+
+Call `pyradiance.oconv` to generate a `octree` file storing the material and geometry files generated from the `gen room` command in the 'Objects' directory 
 
 ```python
 fpaths = ["Objects/materials_aroom.mat",

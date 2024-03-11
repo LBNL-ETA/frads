@@ -9,7 +9,7 @@ model and the workflow of computing irradiance values.
 If you already have a Radiance model setup, you can skip this step
 and follow along using your own.
 
-If you don't have a model already we can use `genradroom` to get ourself
+If you don't have a model already we can use `gen room` to get ourself
 a simple Radiance model.
 
 Let's generate a open-office sized side-lit room
@@ -17,16 +17,18 @@ with four same-sized windows. The room will be 12 meters wide, 14 meters
 deep, a floor to floor height of 4 meters, and a ceiling height of 3 meters. Each window is 2.5 meters in width
 and 1.8 meters in height and has a sill height of 1 meter. Windows are 0.4 meters
 apart from each other. Finally, we want our facade to have a thickness
-of 0.1 meters. We'll call this model 'aroom'. The `genradroom` command is:
+of 0.1 meters. We'll call this model 'aroom'. The `gen room` command is:
 
-```
-$ gen room 12 14 4 3 \
+```python 
+! gen room 12 14 4 3 \
 	-w 0.4 1 2.5 1.8 \
 	-w 3.3 1 2.5 1.8 \
 	-w 6.2 1 2.5 1.8 \
 	-w 9.1 1 2.5 1.8 \
-	-t 0.1 -n aroom
+	-t 0.1 -n aroom # (1)
 ```
+
+1. `gen room` is a command line function. To run shell commands from inside a IPython syntax (e.g. Jupyter Notebook), start the code with an exclamation mark (!).
 
 Afterwards, we will have a `Objects` folder in our current working
 directory with all of our Radiance model inside.
