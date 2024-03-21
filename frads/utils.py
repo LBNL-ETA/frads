@@ -6,7 +6,7 @@ from io import TextIOWrapper
 import logging
 import re
 from pathlib import Path
-from random import choice
+from random import choices
 import string
 import subprocess as sp
 from typing import Any, Dict, Optional, List, Union
@@ -529,7 +529,7 @@ def batch_process(
 def random_string(size: int) -> str:
     """Generate random characters."""
     chars = string.ascii_uppercase + string.digits
-    return "".join(choice(chars) for _ in range(size))
+    return "".join(choices(chars, k=size))
 
 
 def minutes_to_datetime(year: int, minutes: int):

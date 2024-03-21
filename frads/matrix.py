@@ -730,7 +730,7 @@ def rfluxmtx_markup(
         Marked up primitives as strings (to be written to a file for rfluxmtx)
     """
     modifier_set = {p.modifier for p in surfaces}
-    source_modifier = f"rflx{surfaces[0].modifier}{random_string(5)}"
+    source_modifier = f"rflx{surfaces[0].modifier}{random_string(10)}"
     if left_hand:
         basis = "-" + basis
     if source not in ("glow", "light"):
