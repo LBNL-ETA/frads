@@ -31,16 +31,15 @@ def ep_datetime_parser(inp: str):
     month, day = [int(i) for i in date.split("/")]
     hr, mi, sc = [int(i) for i in time.split(":")]
     if hr == 24 and mi == 0 and sc == 0:
-        return datetime.datetime(1900, month, day, 0, mi, sc) + datetime.timedelta(
-            days=1
-        )
+        return datetime.datetime(
+            1900, month, day, 0, mi, sc
+        ) + datetime.timedelta(days=1)
     else:
         return datetime.datetime(1900, month, day, hr, mi, sc)
 
 
 class EnergyPlusResult:
-    def __init__(self):
-        ...
+    def __init__(self): ...
 
 
 class EnergyPlusSetup:
@@ -87,7 +86,9 @@ class EnergyPlusSetup:
                 k: WorkflowConfig.from_dict(v) for k, v in self.rmodels.items()
             }
             # Default to Three-Phase Method
-            self.rworkflows = {k: ThreePhaseMethod(v) for k, v in self.rconfigs.items()}
+            self.rworkflows = {
+                k: ThreePhaseMethod(v) for k, v in self.rconfigs.items()
+            }
             for v in self.rworkflows.values():
                 v.config.settings.save_matrices = True
                 v.generate_matrices(view_matrices=False)
@@ -98,8 +99,11 @@ class EnergyPlusSetup:
         self.variable_handles = {}
         self.actuator_handles = {}
         self.construction_handles = {}
+        self.construction_names = {}
         self.enable_radiance = enable_radiance
-        self.api.runtime.callback_begin_new_environment(self.state, self._get_handles())
+        self.api.runtime.callback_begin_new_environment(
+            self.state, self._get_handles()
+        )
         self.actuators = []
         self._get_list_of_actuators()
 
@@ -115,7 +119,9 @@ class EnergyPlusSetup:
     def _actuator_func(self, state):
         if len(self.actuators) == 0:
             api_data: List[str] = (
-                self.api.api.listAllAPIDataCSV(state).decode("utf-8").splitlines()
+                self.api.api.listAllAPIDataCSV(state)
+                .decode("utf-8")
+                .splitlines()
             )
             for line in api_data:
                 if line.startswith("Actuator"):
@@ -134,14 +140,18 @@ class EnergyPlusSetup:
         with tempfile.TemporaryDirectory() as tmpdir:
             inp = Path(tmpdir) / "in.json"
             with open(inp, "w") as wtr:
-                wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
+                wtr.write(
+                    self.model.model_dump_json(by_alias=True, exclude_none=True)
+                )
 
             if self.epw is not None:
                 self.api.runtime.run_energyplus(
                     actuator_state, ["-p", "actuator", "-w", self.epw, str(inp)]
                 )
             elif self.model.sizing_period_design_day is not None:
-                self.api.runtime.run_energyplus(actuator_state, ["-D", str(inp)])
+                self.api.runtime.run_energyplus(
+                    actuator_state, ["-D", str(inp)]
+                )
             else:
                 raise ValueError(
                     "Specify weather file in EnergyPlusSetup "
@@ -167,7 +177,9 @@ class EnergyPlusSetup:
         Examples:
             >>> epsetup.actuate("Weather Data", "Outdoor Dew Point", "Environment", 10)
         """
-        if key not in self.actuator_handles:  # check if key exists in actuator handles
+        if (
+            key not in self.actuator_handles
+        ):  # check if key exists in actuator handles
             self.actuator_handles[key] = {}
         if (
             name not in self.actuator_handles[key]
@@ -280,6 +292,23 @@ class EnergyPlusSetup:
             self.state, self.variable_handles[key][name]
         )
 
+    def get_cfs_state(self, window: str) -> str:
+        """Return the current complex fenestration state with input window name
+
+        Args:
+            window: name of the window
+
+        Returns:
+            name of the cfs state
+        """
+
+        cfs_handle = self.api.exchange.get_actuator_value(
+            self.state, self.actuator_handles[window]["Construction State"]
+        )
+
+        cfs_name = self.construction_names[cfs_handle]
+        return cfs_name
+
     def request_variable(self, name: str, key: str) -> None:
         """Request a variable from the EnergyPlus model for access during runtime.
 
@@ -306,7 +335,9 @@ class EnergyPlusSetup:
             for key in self.variable_handles:
                 try:
                     for name in self.variable_handles[key]:
-                        handle = self.api.exchange.get_variable_handle(state, name, key)
+                        handle = self.api.exchange.get_variable_handle(
+                            state, name, key
+                        )
                         if handle == -1:
                             raise ValueError(
                                 "Variable handle not found: "
@@ -314,16 +345,22 @@ class EnergyPlusSetup:
                             )
                         self.variable_handles[key][name] = handle
                 except TypeError:
-                    print("No variables requested for", self.variable_handles, key)
+                    print(
+                        "No variables requested for", self.variable_handles, key
+                    )
 
             if self.model.construction_complex_fenestration_state is not None:
                 for cfs in self.model.construction_complex_fenestration_state:
-                    handle = self.api.api.getConstructionHandle(state, cfs.encode())
+                    handle = self.api.api.getConstructionHandle(
+                        state, cfs.encode()
+                    )
                     if handle == -1:
                         raise ValueError(
-                            "Construction handle not found: " f"Construction = {cfs}"
+                            "Construction handle not found: "
+                            f"Construction = {cfs}"
                         )
                     self.construction_handles[cfs] = handle
+                    self.construction_names[handle] = cfs
 
         return callback_function
 
@@ -420,10 +457,14 @@ class EnergyPlusSetup:
         }
 
         with open(f"{output_prefix}.json", "w") as wtr:
-            wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
+            wtr.write(
+                self.model.model_dump_json(by_alias=True, exclude_none=True)
+            )
 
         self.api.runtime.set_console_output_status(self.state, not silent)
-        self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
+        self.api.runtime.run_energyplus(
+            self.state, [*opt, f"{output_prefix}.json"]
+        )
 
     def set_callback(self, method_name: str, func: Callable):
         """Set callback function for EnergyPlus runtime API.
@@ -450,7 +491,9 @@ class EnergyPlusSetup:
         # method(self.state, partial(func, self))
         method(self.state, func)
 
-    def _request_variables_from_callback(self, callable_nodes: List[ast.Call]) -> None:
+    def _request_variables_from_callback(
+        self, callable_nodes: List[ast.Call]
+    ) -> None:
         key_value_pairs = set()
         for node in callable_nodes:
             key_value_dict = {}
@@ -470,29 +513,38 @@ class EnergyPlusSetup:
                 self.request_variable(**key_value_dict)
             elif node.func.attr == "get_diffuse_horizontal_irradiance":
                 self.request_variable(
-                    name="Site Diffuse Solar Radiation Rate per Area", key="Environment"
+                    name="Site Diffuse Solar Radiation Rate per Area",
+                    key="Environment",
                 )
             elif node.func.attr == "get_direct_normal_irradiance":
                 self.request_variable(
-                    name="Site Direct Solar Radiation Rate per Area", key="Environment"
+                    name="Site Direct Solar Radiation Rate per Area",
+                    key="Environment",
                 )
             elif node.func.attr in ("calculate_wpi", "calculate_edgps"):
                 self.request_variable(
-                    name="Site Diffuse Solar Radiation Rate per Area", key="Environment"
+                    name="Site Diffuse Solar Radiation Rate per Area",
+                    key="Environment",
                 )
                 self.request_variable(
-                    name="Site Direct Solar Radiation Rate per Area", key="Environment"
+                    name="Site Direct Solar Radiation Rate per Area",
+                    key="Environment",
                 )
 
-    def _check_actuators_from_callback(self, callable_nodes: List[ast.Call]) -> None:
+    def _check_actuators_from_callback(
+        self, callable_nodes: List[ast.Call]
+    ) -> None:
         def get_zone_from_pair_arg(node: ast.Call) -> str:
             if len(node.args) == 2:
                 zone = ast.literal_eval(node.args[0])
             elif len(node.keywords) == 2:
                 key_value_dict = {
-                    node.keywords[i].arg: node.keywords[i].value.value for i in range(2)
+                    node.keywords[i].arg: node.keywords[i].value.value
+                    for i in range(2)
                 }
-                zone = key_value_dict.get("zone", key_value_dict.get("surface", None))
+                zone = key_value_dict.get(
+                    "zone", key_value_dict.get("surface", None)
+                )
             else:
                 raise ValueError(f"Invalid number of arguments in {node}.")
             return zone
@@ -501,7 +553,9 @@ class EnergyPlusSetup:
             key_value = None
             if node.func.attr == "actuate":
                 if len(node.args) == 4:
-                    key_value = [ast.literal_eval(node.args[i]) for i in range(3)]
+                    key_value = [
+                        ast.literal_eval(node.args[i]) for i in range(3)
+                    ]
                 elif len(node.keywords) == 4:
                     key_value_dict = {
                         node.keywords[i].arg: node.keywords[i].value.value
@@ -519,10 +573,18 @@ class EnergyPlusSetup:
                 key_value = ["Surface", "Construction State", zone]
             elif node.func.attr == "actuate_cooling_setpoint":
                 zone = get_zone_from_pair_arg(node)
-                key_value = ["Zone Temperature Control", "Cooling Setpoint", zone]
+                key_value = [
+                    "Zone Temperature Control",
+                    "Cooling Setpoint",
+                    zone,
+                ]
             elif node.func.attr == "actuate_heating_setpoint":
                 zone = get_zone_from_pair_arg(node)
-                key_value = ["Zone Temperature Control", "Heating Setpoint", zone]
+                key_value = [
+                    "Zone Temperature Control",
+                    "Heating Setpoint",
+                    zone,
+                ]
             elif node.func.attr == "actuate_lighting_power":
                 zone = get_zone_from_pair_arg(node)
                 key_value = ["Lights", "Electricity Rate", zone]
