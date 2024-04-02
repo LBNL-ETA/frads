@@ -361,6 +361,19 @@ class EnergyPlusSetup:
                         )
                     self.construction_handles[cfs] = handle
                     self.construction_names[handle] = cfs
+            for w in self.model.fenestration_surface_detailed:
+                if (
+                    self.model.fenestration_surface_detailed[
+                        w
+                    ].construction_name
+                    in self.model.construction_complex_fenestration_state
+                ):
+                    self.actuate_cfs_state(
+                        w,
+                        self.model.fenestration_surface_detailed[
+                            w
+                        ].construction_name,
+                    )
 
         return callback_function
 
