@@ -1,50 +1,28 @@
 """Typical Radiance matrix-based simulation workflows
 """
 
-from dataclasses import dataclass, field, replace
-from datetime import datetime
 import hashlib
 import logging
 import os
+from dataclasses import dataclass, field, replace
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
 from shutil import rmtree
+from typing import Any, Dict, List, Optional, Union
 
-from frads.matrix import (
-    BASIS_DIMENSION,
-    load_matrix,
-    load_binary_matrix,
-    Matrix,
-    matrix_multiply_rgb,
-    SensorSender,
-    SkyReceiver,
-    SunReceiver,
-    SunMatrix,
-    SurfaceSender,
-    SurfaceReceiver,
-    ViewSender,
-    sparse_matrix_multiply_rgb_vtds,
-    to_sparse_matrix3,
-)
-from frads.sky import (
-    WeaData,
-    WeaMetaData,
-    gen_perez_sky,
-    parse_epw,
-    parse_wea,
-)
-from frads.utils import (
-    minutes_to_datetime,
-    parse_polygon,
-    parse_rad_header,
-    polygon_primitive,
-    random_string,
-)
 import numpy as np
 import pyradiance as pr
-from pyradiance.model import parse_view
+from pyradiance.util import parse_view
 from scipy.sparse import csr_matrix
 
+from frads.matrix import (BASIS_DIMENSION, Matrix, SensorSender, SkyReceiver,
+                          SunMatrix, SunReceiver, SurfaceReceiver,
+                          SurfaceSender, ViewSender, load_binary_matrix,
+                          load_matrix, matrix_multiply_rgb,
+                          sparse_matrix_multiply_rgb_vtds, to_sparse_matrix3)
+from frads.sky import WeaData, WeaMetaData, gen_perez_sky, parse_epw, parse_wea
+from frads.utils import (minutes_to_datetime, parse_polygon, parse_rad_header,
+                         polygon_primitive, random_string)
 
 logger: logging.Logger = logging.getLogger("frads.methods")
 
