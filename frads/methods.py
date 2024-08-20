@@ -42,7 +42,7 @@ from frads.utils import (
 )
 import numpy as np
 import pyradiance as pr
-from pyradiance.util import parse_view
+from pyradiance.model import parse_view
 from scipy.sparse import csr_matrix
 
 
