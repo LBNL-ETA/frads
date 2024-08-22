@@ -64,9 +64,7 @@ class SceneConfig:
 @dataclass
 class MatrixConfig:
     matrix_file: Union[str, Path] = ""
-    matrix_data: np.ndarray = field(
-        default_factory=lambda: np.ones((145, 145, 3))
-    )
+    matrix_data: Optional[np.ndarray] = None
 
     def __post_init__(self):
         if self.matrix_data is None:
