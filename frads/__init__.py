@@ -51,63 +51,49 @@ or on a time-step basis.
 import logging
 
 from .ep2rad import epmodel_to_radmodel
-
-from .eplus import load_energyplus_model, EnergyPlusSetup, ep_datetime_parser
-
+from .eplus import EnergyPlusSetup, ep_datetime_parser, load_energyplus_model
 from .eplus_model import EnergyPlusModel
-
 from .matrix import (
-    load_matrix,
-    load_binary_matrix,
-    matrix_multiply_rgb,
     Matrix,
-    SunMatrix,
     SensorSender,
-    SurfaceSender,
     SkyReceiver,
-    SurfaceReceiver,
-    ViewSender,
+    SunMatrix,
     SunReceiver,
+    SurfaceReceiver,
+    SurfaceSender,
+    ViewSender,
+    load_binary_matrix,
+    load_matrix,
+    matrix_multiply_rgb,
     surfaces_view_factor,
 )
-
 from .methods import (
-    WorkflowConfig,
-    TwoPhaseMethod,
-    ThreePhaseMethod,
     FivePhaseMethod,
+    MaterialConfig,
     Model,
-    Settings,
     SceneConfig,
+    SensorConfig,
+    Settings,
+    ThreePhaseMethod,
+    TwoPhaseMethod,
     ViewConfig,
     WindowConfig,
-    SensorConfig,
-    MaterialConfig,
+    WorkflowConfig,
 )
-
-from .sky import (
-    gen_perez_sky,
-    genskymtx,
-    parse_epw,
-    parse_wea,
-    WeaData,
-    WeaMetaData,
-)
-
-from .utils import gen_grid, unpack_primitives, parse_polygon
-
+from .sky import WeaData, WeaMetaData, gen_perez_sky, genskymtx, parse_epw, parse_wea
+from .utils import gen_grid, parse_polygon, unpack_primitives
 from .window import (
-    create_glazing_system,
-    Gap,
-    Gas,
-    GlazingSystem,
     AIR,
     ARGON,
     KRYPTON,
     XENON,
+    Gap,
+    Gas,
+    GlazingSystem,
+    create_glazing_system,
 )
 
-__version__ = "1.2.5"
+__version__ = "1.2.6"
 
 logger: logging.Logger = logging.getLogger(__name__)
 
