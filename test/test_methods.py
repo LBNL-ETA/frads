@@ -1,24 +1,25 @@
 from datetime import datetime
 
-from frads.methods import (
-    TwoPhaseMethod,
-    ThreePhaseMethod,
-    WorkflowConfig,
-    Model,
-    Settings,
-    SceneConfig,
-    WindowConfig,
-    MaterialConfig,
-    ViewConfig,
-    SensorConfig,
-    SurfaceConfig,
-)
-from frads.window import create_glazing_system, Gap, Gas
-from frads.ep2rad import epmodel_to_radmodel
-from frads.eplus import load_energyplus_model
+import pyradiance as pr
 import pytest
 from pyenergyplus.dataset import ref_models, weather_files
-import pyradiance as pr
+
+from frads.ep2rad import epmodel_to_radmodel
+from frads.eplus import load_energyplus_model
+from frads.methods import (
+    MaterialConfig,
+    Model,
+    SceneConfig,
+    SensorConfig,
+    Settings,
+    SurfaceConfig,
+    ThreePhaseMethod,
+    TwoPhaseMethod,
+    ViewConfig,
+    WindowConfig,
+    WorkflowConfig,
+)
+from frads.window import Gap, Gas, create_glazing_system
 
 
 @pytest.fixture
@@ -107,10 +108,10 @@ def window_2(objects_dir):
 
 
 @pytest.fixture
-def materials(objects_dir):
+def materials(resources_dir, objects_dir):
     return MaterialConfig(
         files=[objects_dir / "materials.mat"],
-        matrices={"blinds30": {"matrix_file": objects_dir / "blinds30.xml"}},
+        matrices={"blinds30": {"matrix_file": resources_dir / "blinds30.xml"}},
     )
 
 
@@ -170,8 +171,7 @@ def test_model2(materials, wpi, view_1):
     )
     assert "view_1" in model.sensors
     assert model.sensors["view_1"].data == [
-        model.views["view_1"].view.position
-        + model.views["view_1"].view.direction
+        model.views["view_1"].view.position + model.views["view_1"].view.direction
     ]
     assert isinstance(model.scene, SceneConfig)
     assert isinstance(model.windows, dict)
@@ -196,9 +196,7 @@ def test_model3(scene, window_1, materials, wpi, view_1):
         )
 
 
-def test_model4(
-    objects_dir, scene, window_1, materials, wpi, sensor_view_1, view_1
-):
+def test_model4(objects_dir, scene, window_1, materials, wpi, sensor_view_1, view_1):
     # window matrix name not in materials
     materials = MaterialConfig(files=[objects_dir / "materials.mat"])
 
