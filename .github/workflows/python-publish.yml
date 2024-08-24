@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-latest
 
     environment:
-      name: pypi
-      url: https://pypi.org/p/pyradiance
+      name: frads
+      url: https://pypi.org/p/frads
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     strategy:
