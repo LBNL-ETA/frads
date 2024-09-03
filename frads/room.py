@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-import pyradiance as pr
-from pyradiance.lib import Primitive
-from frads.geom import Polygon
-from frads import utils
 import numpy as np
+import pyradiance as pr
+from frads import utils
+from frads.geom import Polygon
+from pyradiance.lib import Primitive
 
 
 @dataclass
@@ -48,9 +48,7 @@ class Surface:
             modifier=self.base_primitive.modifier,
             identifier=self.base_primitive.identifier,
         )
-        new_polygons = [
-            plg.rotate(center, zaxis, radians) for plg in self.polygons
-        ]
+        new_polygons = [plg.rotate(center, zaxis, radians) for plg in self.polygons]
         new_primitives = []
         for idx, polygon in enumerate(new_polygons):
             new_primitives.append(
@@ -108,12 +106,8 @@ class Room:
 
     def model_dump(self) -> dict:
         model = {}
-        model["materials"] = {
-            "bytes": b" ".join(p.bytes for p in self.materials)
-        }
-        model["scene"] = {
-            "bytes": b" ".join(p.bytes for p in self.primitives())
-        }
+        model["materials"] = {"bytes": b" ".join(p.bytes for p in self.materials)}
+        model["scene"] = {"bytes": b" ".join(p.bytes for p in self.primitives())}
         model["windows"] = {}
         for primitive in self.window_primitives():
             model["windows"][primitive.identifier] = {"bytes": primitive.bytes}
@@ -160,8 +154,8 @@ def make_window(
     name: str,
     base: Polygon,
     vertices: np.ndarray,
-    vec1: np.ndarray,
-    vec2: np.ndarray,
+    upvec: np.ndarray,
+    rightvec: np.ndarray,
     dist_left: float,
     dist_bot: float,
     width: float,
@@ -190,9 +184,9 @@ def make_window(
         width: The width of the window.
         height: The height of the window.
     """
-    win_pt1 = vertices[0] + vec1 * dist_bot + vec2 * dist_left
-    win_pt2 = win_pt1 + vec1 * height
-    win_pt3 = win_pt1 + vec2 * width
+    win_pt1 = vertices[0] + upvec * dist_bot + rightvec * dist_left
+    win_pt2 = win_pt1 + upvec * height
+    win_pt3 = win_pt1 + rightvec * width
     window_polygon = Polygon.rectangle3pts(win_pt3, win_pt1, win_pt2)
     new_base = base - window_polygon
     return new_base, WindowSurface(
@@ -244,12 +238,6 @@ def create_surface(
         A Surface object.
     """
     vertices = base.vertices
-    vec1 = (vertices[1] - vertices[0]) / np.linalg.norm(
-        vertices[1] - vertices[0]
-    )
-    vec2 = (vertices[2] - vertices[1]) / np.linalg.norm(
-        vertices[2] - vertices[1]
-    )
     polygons = [base]
     windows = []
     base_primitive = utils.polygon_primitive(
@@ -268,7 +256,11 @@ def create_surface(
         # Make a window based on window position and dimension.
         for i, pd in enumerate(wpd):
             name = f"{identifier}_window{i}"
-            base, _window = make_window(name, base, vertices, vec1, vec2, *pd)
+            # vec1 = (vertices[1] - vertices[0]) / np.linalg.norm(vertices[1] - vertices[0])
+            # vec2 = (vertices[2] - vertices[1]) / np.linalg.norm(vertices[2] - vertices[1])
+            upvec = np.array((0, 0, 1))
+            rightvec = np.array((1, 0, 0))
+            base, _window = make_window(name, base, vertices, upvec, rightvec, *pd)
             windows.append(_window)
     elif wwr is not None:
         # Make a window based on window-to-wall ratio.
@@ -309,12 +301,41 @@ def create_south_facing_room(
     pt2 = pt1 + np.array((0, depth, 0))
     pt3 = pt2 + np.array((width, 0, 0))
     base_floor = Polygon.rectangle3pts(pt1, pt2, pt3)
-    _, base_ceiling, base_wwall, base_nwall, base_ewall, base_swall = (
-        base_floor.extrude(np.array((0, 0, floor_floor)))
+    # _, base_ceiling, base_wwall, base_nwall, base_ewall, base_swall = (
+    #     base_floor.extrude(np.array((0, 0, floor_floor)))
+    # )
+    base_ceiling = base_floor.flip().move(np.array((0, 0, floor_ceiling)))
+    base_nwall = Polygon(
+        [
+            np.array((width, depth, 0)),
+            np.array((0, depth, 0)),
+            np.array((0, depth, floor_floor)),
+            np.array((width, depth, floor_floor)),
+        ]
     )
-    base_ceiling = base_ceiling.flip()
-    base_ceiling = base_ceiling.move(
-        np.array((0, 0, floor_ceiling - floor_floor))
+    base_swall = Polygon(
+        [
+            np.array((0, 0, 0)),
+            np.array((width, 0, 0)),
+            np.array((width, 0, floor_floor)),
+            np.array((0, 0, floor_floor)),
+        ]
+    )
+    base_ewall = Polygon(
+        [
+            np.array((width, 0, 0)),
+            np.array((width, depth, 0)),
+            np.array((width, depth, floor_floor)),
+            np.array((width, 0, floor_floor)),
+        ]
+    )
+    base_wwall = Polygon(
+        [
+            np.array((0, 0, 0)),
+            np.array((0, 0, floor_floor)),
+            np.array((0, depth, floor_floor)),
+            np.array((0, depth, 0)),
+        ]
     )
     floor = create_surface(
         base_floor,
