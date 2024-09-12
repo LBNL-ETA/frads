@@ -445,7 +445,11 @@ class EnergyPlusSetup:
         }
 
         with open(f"{output_prefix}.json", "w") as wtr:
-            wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
+            wtr.write(
+                self.model.model_dump_json(
+                    by_alias=True, exclude_none=True, exclude_unset=True
+                )
+            )
 
         self.api.runtime.set_console_output_status(self.state, not silent)
         self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
