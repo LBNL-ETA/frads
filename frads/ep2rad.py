@@ -28,6 +28,275 @@ from epmodel.epmodel import (
 logger: logging.Logger = logging.getLogger("frads.epjson2rad")
 
 
+OMEGAS = {
+    "kf": [
+        0.0238639257641843,
+        0.02332285973188108,
+        0.02332285973188108,
+        0.02332285973188108,
+        0.02332285973188108,
+        0.02332285973188108,
+        0.02332285973188108,
+        0.02332285973188108,
+        0.02332285973188108,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.021916319185673504,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.023622221568953158,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.022385166034409335,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.02238516603440936,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.019685184640794308,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.021916319185673487,
+        0.0175372336349361,
+        0.0175372336349361,
+        0.0175372336349361,
+        0.0175372336349361,
+        0.0175372336349361,
+        0.0175372336349361,
+        0.0175372336349361,
+        0.0175372336349361,
+        0.0175372336349361,
+        0.0175372336349361,
+        0.0175372336349361,
+        0.0175372336349361,
+    ],
+    "kh": [
+        0.04025940809134382,
+        0.038724862132931824,
+        0.038724862132931824,
+        0.038724862132931824,
+        0.038724862132931824,
+        0.038724862132931824,
+        0.038724862132931824,
+        0.038724862132931824,
+        0.038724862132931824,
+        0.04640756737178026,
+        0.04640756737178026,
+        0.04640756737178026,
+        0.04640756737178026,
+        0.04640756737178026,
+        0.04640756737178026,
+        0.04640756737178026,
+        0.04640756737178026,
+        0.04640756737178026,
+        0.04640756737178026,
+        0.04640756737178026,
+        0.04640756737178026,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.04662852131277809,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.03866539339025036,
+        0.04533939830955456,
+        0.04533939830955456,
+        0.04533939830955456,
+        0.04533939830955456,
+        0.04533939830955456,
+        0.04533939830955456,
+        0.04533939830955456,
+        0.04533939830955456,
+        0.04533939830955456,
+        0.04533939830955456,
+        0.04533939830955456,
+        0.04533939830955456,
+        0.04280163786238007,
+        0.04280163786238007,
+        0.04280163786238007,
+        0.04280163786238007,
+    ],
+    "kq": [
+        0.07688024442411853,
+        0.07132814589069367,
+        0.07132814589069367,
+        0.07132814589069367,
+        0.07132814589069367,
+        0.07132814589069367,
+        0.07132814589069367,
+        0.07132814589069367,
+        0.07132814589069367,
+        0.08150924303937566,
+        0.08150924303937566,
+        0.08150924303937566,
+        0.08150924303937566,
+        0.08150924303937566,
+        0.08150924303937566,
+        0.08150924303937566,
+        0.08150924303937566,
+        0.08150924303937566,
+        0.08150924303937566,
+        0.08150924303937566,
+        0.08150924303937566,
+        0.08302065811560476,
+        0.08302065811560476,
+        0.08302065811560476,
+        0.08302065811560476,
+        0.08302065811560476,
+        0.08302065811560476,
+        0.08302065811560476,
+        0.08302065811560476,
+        0.08302065811560476,
+        0.08302065811560476,
+        0.08302065811560476,
+        0.08302065811560476,
+        0.06496605352254502,
+        0.06496605352254502,
+        0.06496605352254502,
+        0.06496605352254502,
+        0.06496605352254502,
+        0.06496605352254502,
+        0.06496605352254502,
+        0.06496605352254502,
+    ],
+}
+
+
 @dataclass
 class SurfaceWithNamedFenestrations:
     """A surface with fenestrations."""
@@ -220,9 +489,7 @@ def parse_material(name: str, material: Material) -> EPlusOpaqueMaterial:
     )
 
 
-def parse_material_no_mass(
-    name: str, material: MaterialNoMass
-) -> EPlusOpaqueMaterial:
+def parse_material_no_mass(name: str, material: MaterialNoMass) -> EPlusOpaqueMaterial:
     """Parse EP Material:NoMass"""
     name = name.replace(" ", "_")
     roughness = material.roughness.value
@@ -254,9 +521,7 @@ def parse_window_material_simple_glazing_system(
     shgc = material.solar_heat_gain_coefficient
     tmit = material.visible_transmittance or shgc
     tmis = tmit2tmis(tmit)
-    primitive = pr.Primitive(
-        "void", "glass", identifier, [], [tmis, tmis, tmis]
-    )
+    primitive = pr.Primitive("void", "glass", identifier, [], [tmis, tmis, tmis])
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
 
@@ -269,13 +534,9 @@ def parse_window_material_glazing(
     if material.optical_data_type.value.lower() == "bsdf":
         tmit = 1
     else:
-        tmit = (
-            material.visible_transmittance_at_normal_incidence or default_tmit
-        )
+        tmit = material.visible_transmittance_at_normal_incidence or default_tmit
     tmis = tmit2tmis(tmit)
-    primitive = pr.Primitive(
-        "void", "glass", identifier, [], [tmis, tmis, tmis]
-    )
+    primitive = pr.Primitive("void", "glass", identifier, [], [tmis, tmis, tmis])
     return EPlusWindowMaterial(identifier, tmit, primitive)
 
 
@@ -345,21 +606,32 @@ class EnergyPlusToRadianceModelConverter:
                 cname,
                 "default",
                 layers,
-                sum(
-                    self.materials[layer.lower()].thickness for layer in layers
-                ),
+                sum(self.materials[layer.lower()].thickness for layer in layers),
             )
-        cfs, matrices = parse_construction_complex_fenestration_state(
-            self.model
-        )
+        cfs, matrices = parse_construction_complex_fenestration_state(self.model)
         for key, val in matrices.items():
             nested = []
             mtx = val["tvf"]
             for i in range(0, len(mtx["values"]), mtx["nrows"]):
                 nested.append(mtx["values"][i : i + mtx["ncolumns"]])
+            # Convert from BSDF to transmission matrix
+            if mtx["ncolumns"] == 145:
+                solid_angles = OMEGAS["kf"]
+            elif mtx["ncolumns"] == 73:
+                solid_angles = OMEGAS["kh"]
+            elif mtx["ncolumns"] == 41:
+                solid_angles = OMEGAS["kq"]
+            else:
+                raise KeyError("Unknown bsdf basis")
+            assert len(solid_angles) == len(nested)
+            assert len(solid_angles) == len(nested[0])
             self.matrices[key] = {
                 "matrix_data": [
-                    [[ele, ele, ele] for ele in row] for row in nested
+                    [
+                        [ele * omg, ele * omg, ele * omg]
+                        for ele, omg in zip(row, solid_angles)
+                    ]
+                    for row in nested
                 ]
             }
         constructions.update(cfs)
@@ -400,9 +672,7 @@ class EnergyPlusToRadianceModelConverter:
         surfaces_fenestrations = self._pair_surfaces_fenestrations(
             surfaces, fenestrations
         )
-        surface_polygons = [
-            surface_to_polygon(srf) for srf in surfaces.values()
-        ]
+        surface_polygons = [surface_to_polygon(srf) for srf in surfaces.values()]
         center = polygon_center(*surface_polygons)
         view_direction = np.array([0.0, 0.0, 0.0])
         for sname, swnf in surfaces_fenestrations.items():
@@ -437,9 +707,7 @@ class EnergyPlusToRadianceModelConverter:
             horiz=180,
             vert=180,
         )
-        sensors[zone_name] = {
-            "data": [center.tolist() + view_direction.tolist()]
-        }
+        sensors[zone_name] = {"data": [center.tolist() + view_direction.tolist()]}
 
         return {
             "scene": {"bytes": b" ".join(scene)},
@@ -500,9 +768,7 @@ class EnergyPlusToRadianceModelConverter:
 
         # extrude the surface by thickness
         if fenestrations != {}:
-            facade = thicken(
-                surface_polygon, window_polygons, construction.thickness
-            )
+            facade = thicken(surface_polygon, window_polygons, construction.thickness)
             outer_material_name = construction.layers[0].replace(" ", "_")
             scene.append(
                 polygon_primitive(
@@ -553,9 +819,7 @@ class EnergyPlusToRadianceModelConverter:
             for fname, fen in zone_fenestrations.items():
                 if fen.building_surface_name == sname:
                     named_fen[fname] = fen
-            surface_fenestrations[sname] = SurfaceWithNamedFenestrations(
-                srf, named_fen
-            )
+            surface_fenestrations[sname] = SurfaceWithNamedFenestrations(srf, named_fen)
         return surface_fenestrations
 
     def _process_fenestration(
