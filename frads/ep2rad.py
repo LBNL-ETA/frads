@@ -700,6 +700,7 @@ class EnergyPlusToRadianceModelConverter:
                 }
             for window_polygon in window_polygons:
                 view_direction += window_polygon.area
+        view_direction *= -1
         view = pr.View(
             center.tolist(),
             view_direction.tolist(),

@@ -9,12 +9,18 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Dict, List, Optional, Union
-from frads.utils import parse_polygon, parse_rad_header, polygon_primitive, random_string
-from frads.geom import Polygon
-import numpy as np
-from scipy.sparse import csr_matrix, lil_matrix
-import pyradiance as pr
 
+import numpy as np
+import pyradiance as pr
+from scipy.sparse import csr_matrix, lil_matrix
+
+from frads.geom import Polygon
+from frads.utils import (
+    parse_polygon,
+    parse_rad_header,
+    polygon_primitive,
+    random_string,
+)
 
 logger: logging.Logger = logging.getLogger("frads.matrix")
 
@@ -808,14 +814,20 @@ def surfaces_view_factor(
     surfaces_env = env + surfaces
     for idx, surface in enumerate(surfaces):
         sender = SurfaceSender([surface], basis="u")
-        rest_of_surfaces = surfaces[:idx] + surfaces[idx + 1:]
+        rest_of_surfaces = surfaces[:idx] + surfaces[idx + 1 :]
         rest_of_surface_polygons = [parse_polygon(s) for s in rest_of_surfaces]
         rest_of_surfaces_flipped = [
             polygon_primitive(p.flip(), s.modifier, s.identifier)
-            for s,p in zip(rest_of_surfaces, rest_of_surface_polygons)
+            for s, p in zip(rest_of_surfaces, rest_of_surface_polygons)
         ]
-        receivers = [SurfaceReceiver([s], basis="u") for s in env + rest_of_surfaces_flipped if s.ptype in ("polygon", "ring")]
+        receivers = [
+            SurfaceReceiver([s], basis="u")
+            for s in env + rest_of_surfaces_flipped
+            if s.ptype in ("polygon", "ring")
+        ]
         mat = Matrix(sender, receivers, octree=None, surfaces=surfaces_env)
         mat.generate(params=["-c", f"{ray_count}"])
-        view_factors[surface.identifier] = {r.surfaces[0].identifier: [i][0] for r, i in zip(mat.receivers, mat.array)}
+        view_factors[surface.identifier] = {
+            r.surfaces[0].identifier: [i][0] for r, i in zip(mat.receivers, mat.array)
+        }
     return view_factors
