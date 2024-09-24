@@ -439,7 +439,7 @@ class EnergyPlusSetup:
 
         self.model.output_control_timestamp = {
             "OutputControl:Timestamp 1": epm.OutputControlTimestamp(
-                iso_8601_format=epm.EPBoolean.yes,
+                iso_8601_format=epm.EPBoolean.no,
                 timestamp_at_beginning_of_interval=epm.EPBoolean.yes,
             )
         }
