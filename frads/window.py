@@ -208,6 +208,26 @@ class GlazingSystem:
         return get_glazing_primitive(self.name, rgb)
 
 
+def load_glazing_system(path: Union[str, Path]):
+    """Load a glazing system from a JSON file."""
+    with open(path, "r") as f:
+        data = json.load(f)
+    layers = data.pop("layers")
+    layer_instances = []
+    for layer in layers:
+        rgb = layer.pop("rgb")
+        layer_instances.append(Layer(rgb=PaneRGB(**rgb), **layer))
+    gaps = data.pop("gaps")
+    gap_instances = []
+    for gap in gaps:
+        gas_instances = []
+        gases = gap.pop("gas")
+        for gs in gases:
+            gas_instances.append(Gas(**gs))
+        gap_instances.append(Gap(gas=gas_instances, **gap))
+    return GlazingSystem(layers=layer_instances, gaps=gap_instances, **data)
+
+
 def get_layers(input: List[pwc.ProductData]) -> List[Layer]:
     """Create a list of layers from a list of pwc.ProductData."""
     layers = []
@@ -296,6 +316,9 @@ def create_glazing_system(
         layer_data.append(product_data)
         product_data.thickness = product_data.thickness / 1000.0 or 0  # mm to m
         thickness += product_data.thickness
+
+    for gap in gaps:
+        thickness += gap.thickness
 
     glzsys = pwc.GlazingSystem(
         solid_layers=layer_data,
