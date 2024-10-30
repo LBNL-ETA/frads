@@ -93,7 +93,7 @@ from .window import (
     create_glazing_system,
 )
 
-__version__ = "1.2.8"
+__version__ = "1.2.9"
 
 logger: logging.Logger = logging.getLogger(__name__)
 
