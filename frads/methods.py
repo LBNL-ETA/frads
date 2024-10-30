@@ -1232,7 +1232,7 @@ class ThreePhaseMethod(PhaseMethod):
         time: datetime,
         dni: float,
         dhi: float,
-        ambient_bounce: int = 1,
+        ambient_bounce: int = 0,
         save_hdr: Optional[Union[str, Path]] = None,
     ) -> float:
         """Calculate enhanced simplified daylight glare probability (EDGPs) for a view.
@@ -1293,8 +1293,8 @@ class ThreePhaseMethod(PhaseMethod):
         if save_hdr is not None:
             with open(save_hdr, "wb") as f:
                 f.write(hdr)
-        res = pr.evalglare(hdr, ev=ev.item())
-        edgps = float(res.split(b":")[1].split()[0])
+        res = pr.evalglare(hdr, fast=1, correction_mode="-l-", ev=ev.item())
+        edgps = float(res)
         os.remove(octree)
         return edgps
 

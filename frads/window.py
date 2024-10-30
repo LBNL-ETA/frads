@@ -56,7 +56,6 @@ class Layer:
     ir_transmittance: float
     rgb: PaneRGB
 
-
 @dataclass
 class Gas:
     """Gas data object.
@@ -245,6 +244,7 @@ def get_layers(input: List[pwc.ProductData]) -> List[Layer]:
             )
         )
     return layers
+
 
 
 def create_pwc_gaps(gaps: List[Gap]):
