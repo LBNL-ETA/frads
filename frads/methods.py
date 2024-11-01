@@ -1293,7 +1293,7 @@ class ThreePhaseMethod(PhaseMethod):
         if save_hdr is not None:
             with open(save_hdr, "wb") as f:
                 f.write(hdr)
-        res = pr.evalglare(hdr, fast=1, correction_mode="-l-", ev=ev.item())
+        res = pr.evalglare(hdr, fast=1, correction_mode="l-", ev=ev.item())
         edgps = float(res)
         os.remove(octree)
         return edgps
