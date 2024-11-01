@@ -1234,7 +1234,7 @@ class ThreePhaseMethod(PhaseMethod):
         dhi: float,
         ambient_bounce: int = 0,
         save_hdr: Optional[Union[str, Path]] = None,
-    ) -> float:
+    ) -> tuple[float,float]:
         """Calculate enhanced simplified daylight glare probability (EDGPs) for a view.
 
         Args:
@@ -1296,7 +1296,7 @@ class ThreePhaseMethod(PhaseMethod):
         res = pr.evalglare(hdr, fast=1, correction_mode="l-", ev=ev.item())
         edgps = float(res)
         os.remove(octree)
-        return edgps
+        return edgps, ev.item()
 
     def save_matrices(self):
         """Saves the view window matrices, sensor window matrices, and daylight matrices

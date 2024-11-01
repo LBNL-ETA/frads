@@ -640,7 +640,7 @@ class EnergyPlusSetup:
             sensor_name, cfs_name, date_time, dni, dhi
         )
 
-    def calculate_edgps(self, zone: str, cfs_name: Dict[str, str]) -> float:
+    def calculate_edgps(self, zone: str, cfs_name: Dict[str, str]) -> tuple[float,float]:
         """Calculate enhanced simplified daylight glare probability in a zone.
         The view is positioned at the center of the zone with direction facing
         the windows, weighted by the window area.
