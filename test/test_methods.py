@@ -344,7 +344,7 @@ def test_eprad_threephase(resources_dir):
         dni = 800
         dhi = 100
         dt = datetime(2023, 1, 1, 12)
-        edgps = rad_workflow.calculate_edgps(
+        edgps, ev = rad_workflow.calculate_edgps(
             view="view1",
             bsdf={f"{zone}_Wall_South_Window": "ec60"},
             time=dt,
