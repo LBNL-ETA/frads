@@ -7,6 +7,7 @@ import datetime
 import inspect
 import json
 import tempfile
+import os
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Union
 
@@ -691,17 +692,24 @@ def load_idf(fpath: Union[str, Path]) -> dict:
         raise ValueError(f"File {fpath} is not an IDF file.")
     if not fpath.exists():
         raise FileNotFoundError(f"File {fpath} not found.")
-    api = EnergyPlusAPI()
-    state = api.state_manager.new_state()
-    api.runtime.set_console_output_status(state, False)
-    api.runtime.run_energyplus(state, ["--convert-only", str(fpath)])
-    api.state_manager.delete_state(state)
-    epjson_path = Path(fpath.with_suffix(".epJSON").name)
-    if not epjson_path.exists():
-        raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
-    with open(epjson_path) as f:
-        json_data = json.load(f)
-    epjson_path.unlink()
+    fpath = fpath.absolute()
+    original_dir = os.getcwd()
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            os.chdir(td)
+            api = EnergyPlusAPI()
+            state = api.state_manager.new_state()
+            api.runtime.set_console_output_status(state, False)
+            api.runtime.run_energyplus(state, ["--convert-only", str(fpath)])
+            api.state_manager.delete_state(state)
+            epjson_path = Path(fpath.with_suffix(".epJSON").name)
+            if not epjson_path.exists():
+                raise FileNotFoundError(f"Converted {str(epjson_path)} not found.")
+            with open(epjson_path) as f:
+                json_data = json.load(f)
+            epjson_path.unlink()
+        finally:
+            os.chdir(original_dir)
     return json_data
 
 
