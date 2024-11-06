@@ -1,4 +1,5 @@
 from pathlib import Path
+import tempfile
 
 from frads.eplus import EnergyPlusSetup, load_energyplus_model
 from frads.window import create_glazing_system
@@ -87,6 +88,7 @@ def test_output_meter(medium_office):
 def test_energyplussetup(medium_office):
     """Test running EnergyPlusSetup."""
 
-    ep = EnergyPlusSetup(medium_office)
-    ep.run(design_day=True)
-    assert Path("eplusout.csv").exists()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        ep = EnergyPlusSetup(medium_office)
+        ep.run(output_directory=tmpdir, design_day=True)
+        assert (Path(tmpdir)/"eplusout.csv").exists()
