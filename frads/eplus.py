@@ -131,16 +131,16 @@ class EnergyPlusSetup:
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            inp = Path(tmpdir) / "in.json"
+            inp = os.path.join(tmpdir, "in.json")
             with open(inp, "w") as wtr:
                 wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
 
             if self.epw is not None:
                 self.api.runtime.run_energyplus(
-                    actuator_state, ["-p", "actuator", "-w", self.epw, str(inp)]
+                    actuator_state, ["-p", "actuator", "-d", tmpdir, "-w", self.epw, inp]
                 )
             elif self.model.sizing_period_design_day is not None:
-                self.api.runtime.run_energyplus(actuator_state, ["-D", str(inp)])
+                self.api.runtime.run_energyplus(actuator_state, ["-D", "-d", tmpdir, inp])
             else:
                 raise ValueError(
                     "Specify weather file in EnergyPlusSetup "
