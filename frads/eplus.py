@@ -130,22 +130,22 @@ class EnergyPlusSetup:
             actuator_state, self._actuator_func
         )
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            inp = os.path.join(tmpdir, "in.json")
-            with open(inp, "w") as wtr:
-                wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
+        tmpdir = tempfile.mkdtemp()
+        inp = os.path.join(tmpdir, "in.json")
+        with open(inp, "w") as wtr:
+            wtr.write(self.model.model_dump_json(by_alias=True, exclude_none=True))
 
-            if self.epw is not None:
-                self.api.runtime.run_energyplus(
-                    actuator_state, ["-p", "actuator", "-d", tmpdir, "-w", self.epw, inp]
-                )
-            elif self.model.sizing_period_design_day is not None:
-                self.api.runtime.run_energyplus(actuator_state, ["-D", "-d", tmpdir, inp])
-            else:
-                raise ValueError(
-                    "Specify weather file in EnergyPlusSetup "
-                    "or model design day in EnergyPlusModel."
-                )
+        if self.epw is not None:
+            self.api.runtime.run_energyplus(
+                actuator_state, ["-p", "actuator", "-d", tmpdir, "-w", self.epw, inp]
+            )
+        elif self.model.sizing_period_design_day is not None:
+            self.api.runtime.run_energyplus(actuator_state, ["-D", "-d", tmpdir, inp])
+        else:
+            raise ValueError(
+                "Specify weather file in EnergyPlusSetup "
+                "or model design day in EnergyPlusModel."
+            )
         self.api.state_manager.delete_state(actuator_state)
 
     def actuate(self, component_type: str, name: str, key: str, value: float):
