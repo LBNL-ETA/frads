@@ -88,7 +88,7 @@ def test_output_meter(medium_office):
 def test_energyplussetup(medium_office):
     """Test running EnergyPlusSetup."""
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        ep = EnergyPlusSetup(medium_office)
-        ep.run(output_directory=tmpdir, design_day=True)
-        assert (Path(tmpdir)/"eplusout.csv").exists()
+    tmpdir = tempfile.mkdtemp()
+    ep = EnergyPlusSetup(medium_office)
+    ep.run(output_directory=tmpdir, design_day=True)
+    assert (Path(tmpdir)/"eplusout.csv").exists()
