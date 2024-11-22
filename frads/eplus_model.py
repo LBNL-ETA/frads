@@ -1,7 +1,8 @@
 import copy
-from typing import List
+
 import epmodel
 import epmodel.epmodel as epm
+
 from frads.window import GlazingSystem
 
 
@@ -16,7 +17,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
     """
 
     @property
-    def window_walls(self) -> List[str]:
+    def window_walls(self) -> list[str]:
         """Get list of walls with windows."""
         if self.fenestration_surface_detailed is None:
             return []
@@ -59,9 +60,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                     gas=gap.gas[0].gas.capitalize(), thickness=gap.thickness
                 )
             )
-        layer_inputs: List[
-            epmodel.ConstructionComplexFenestrationStateLayerInput
-        ] = []
+        layer_inputs: list[epmodel.ConstructionComplexFenestrationStateLayerInput] = []
         for i, layer in enumerate(glzsys.layers):
             layer_inputs.append(
                 epmodel.ConstructionComplexFenestrationStateLayerInput(
@@ -72,27 +71,21 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                     emissivity_front=layer.emissivity_front,
                     emissivity_back=layer.emissivity_back,
                     infrared_transmittance=layer.ir_transmittance,
-                    directional_absorptance_front=glzsys.solar_front_absorptance[
-                        i
-                    ],
-                    directional_absorptance_back=glzsys.solar_back_absorptance[
-                        i
-                    ],
+                    directional_absorptance_front=glzsys.solar_front_absorptance[i],
+                    directional_absorptance_back=glzsys.solar_back_absorptance[i],
                 )
             )
         input = epmodel.ConstructionComplexFenestrationStateInput(
             gaps=gap_inputs,
             layers=layer_inputs,
             solar_reflectance_back=glzsys.solar_back_reflectance,
-            solar_transmittance_back=glzsys.solar_back_transmittance,
-            visible_transmittance_back=glzsys.visible_back_reflectance,
+            solar_transmittance_front=glzsys.solar_front_transmittance,
+            visible_reflectance_back=glzsys.visible_back_reflectance,  # This is correct, there is typo in schema
             visible_transmittance_front=glzsys.visible_front_transmittance,
         )
         self.add_construction_complex_fenestration_state(name, input)
 
-    def add_lighting(
-        self, zone: str, lighting_level: float, replace: bool = False
-    ):
+    def add_lighting(self, zone: str, lighting_level: float, replace: bool = False):
         """Add lighting object to EnergyPlusModel's epjs dictionary.
 
         Args:
