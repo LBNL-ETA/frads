@@ -1,13 +1,12 @@
-from dataclasses import asdict, dataclass, field
 import json
 import os
-from pathlib import Path
 import tempfile
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
 import pyradiance as pr
 import pywincalc as pwc
-
 
 AIR = pwc.PredefinedGasType.AIR
 KRYPTON = pwc.PredefinedGasType.KRYPTON
@@ -55,6 +54,7 @@ class Layer:
     emissivity_back: float
     ir_transmittance: float
     rgb: PaneRGB
+
 
 @dataclass
 class Gas:
@@ -246,16 +246,12 @@ def get_layers(input: List[pwc.ProductData]) -> List[Layer]:
     return layers
 
 
-
 def create_pwc_gaps(gaps: List[Gap]):
     """Create a list of pwc gaps from a list of gaps."""
     pwc_gaps = []
     for gap in gaps:
         _gas = pwc.create_gas(
-            [
-                [g.ratio, getattr(pwc.PredefinedGasType, g.gas.upper())]
-                for g in gap.gas
-            ]
+            [[g.ratio, getattr(pwc.PredefinedGasType, g.gas.upper())] for g in gap.gas]
         )
         _gap = pwc.Layers.gap(gas=_gas, thickness=gap.thickness)
         pwc_gaps.append(_gap)
@@ -304,6 +300,8 @@ def create_glazing_system(
                 product_data = pwc.parse_json_file(layer)
             elif layer.endswith(".xml"):
                 product_data = pwc.parse_bsdf_xml_file(layer)
+                if product_data.product_type is None:
+                    product_data.product_type = "shading"
             else:
                 product_data = pwc.parse_optics_file(layer)
         elif isinstance(layer, bytes):
@@ -340,12 +338,10 @@ def create_glazing_system(
         layers=get_layers(layer_data),
         gaps=gaps,
         solar_front_absorptance=[
-            alpha.front.absorptance.angular_total
-            for alpha in solres.layer_results
+            alpha.front.absorptance.angular_total for alpha in solres.layer_results
         ],
         solar_back_absorptance=[
-            alpha.back.absorptance.angular_total
-            for alpha in solres.layer_results
+            alpha.back.absorptance.angular_total for alpha in solres.layer_results
         ],
         visible_back_reflectance=vissys.back.reflectance.matrix,
         visible_front_reflectance=vissys.front.reflectance.matrix,
