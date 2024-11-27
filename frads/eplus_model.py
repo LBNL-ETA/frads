@@ -55,11 +55,23 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
         name = glzsys.name
         gap_inputs = []
         for i, gap in enumerate(glzsys.gaps):
-            gap_inputs.append(
-                epmodel.ConstructionComplexFenestrationStateGapInput(
-                    gas=gap.gas[0].gas.capitalize(), thickness=gap.thickness
+            if len(gap.gas) == 1:
+                gap_inputs.append(
+                    epm.WindowMaterialGas(
+                        gas_type=gap.gas[0].gas.capitalize(),
+                        thickness=gap.thickness,
+                    )
                 )
-            )
+            else:
+                gas_dict = {
+                    "thickness": gap.thickness,
+                    "number_of_gases_in_mixture": len(gap.gas),
+                }
+                for idx, gas in enumerate(gap.gas):
+                    gas_dict[f"gas_{idx+1}_type"] = gas.gas.capitalize()
+                    gas_dict[f"gas_{idx+1}_fraction"] = gas.ratio
+                gap_inputs.append(epm.WindowMaterialGasMixture.model_validate(gas_dict))
+
         layer_inputs: list[epmodel.ConstructionComplexFenestrationStateLayerInput] = []
         for i, layer in enumerate(glzsys.layers):
             layer_inputs.append(
