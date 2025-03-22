@@ -140,7 +140,7 @@ def write_ep_rad_model(outpath: str, model: dict) -> None:
         f.write(model["model"]["materials"]["bytes"])
         f.write(model["model"]["scene"]["bytes"])
         for window in model["model"]["windows"].values():
-            f.write(window["bytes"])
+            f.write(window.bytes)
 
 
 def unpack_primitives(file: Union[str, Path, TextIOWrapper]) -> List[Primitive]:
