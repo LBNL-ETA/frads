@@ -98,7 +98,7 @@ class Polygon:
                 (self._vertices[idx] - self._vertices[0]),
                 (self._vertices[idx + 1] - self._vertices[0]),
             )
-        return abs(total * np.array((0.5, 0.5, 0.5)))
+        return total * np.array((0.5, 0.5, 0.5))
 
     def _calculate_centroid(self):
         return np.mean(self._vertices, axis=0)
