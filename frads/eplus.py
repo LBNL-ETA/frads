@@ -667,6 +667,25 @@ class EnergyPlusSetup:
             view_name, cfs_name, date_time, dni, dhi
         )
 
+    def add_proxy_geometry(self, glazing_system):
+        breakpoint()
+        for window in self.rmodels.windows:
+            rgb2 = [layer.rgb for layer in glazing_system.layers[:2]]
+            rgb1 = [glazing_system.layers[2].rgb]
+            if glazing_system.has_blinds:
+                # generate blinds geometry
+                slat_width = window_width
+                slat_height = window_height
+                slat_depth = glazing_system.slat_depth
+                slat_angle = glazing_system.slat_angle
+                nslats = int(slat_height / glazing_system.slat_spacing)
+                slat_curvature = glazing_system.slat_curvature
+                blinds = genblinds(slat_width, slat_height, slat_depth, slat_angle, nslats)
+                blinds = Xform(blinds).rotatez().translate()()
+            # get window geometry
+            if glazing_system.has_fabric:
+                pr.Primitive('void', 'aBSDF',)
+
 
 def load_idf(fpath: Union[str, Path]) -> dict:
     """Load IDF file as JSON object.
@@ -737,3 +756,53 @@ def load_energyplus_model(fpath: Union[str, Path]) -> EnergyPlusModel:
     else:
         raise ValueError(f"File {fpath} is not an IDF or epJSON file.")
     return EnergyPlusModel.model_validate(json_data)
+
+
+
+def add_proxy_geometry_to_all_zones(rmodels, glazing_system):
+    for rmodel in rmodels:
+        add_proxy_geometry(rmodel, glazing_system)
+
+
+def generate_blinds_for_window(
+    window_rects: Rectangle3D,
+    slat_depth: float,
+    nslats: int,
+    slat_angle: list[float],
+    slat_rcurv: float,
+    diff_refl: float,
+    spec_refl: float,
+    ir_refl: float,
+    roughness: float,
+):
+    FEPS = 1e-5
+    window_dimensions: list[tuple[float, float]] = []
+    for window_rect in window_rects:
+        zdiff1 = abs(window_rect[1][2] - window_rect[0][2])
+        zdiff2 = abs(window_rect[2][2] - window_rect[1][2])
+        dim1 = math.sqrt(
+            sum((window_rect[1][i] - window_rect[0][i]) ** 2 for i in range(3))
+        )
+        dim2 = math.sqrt(
+            sum((window_rect[2][i] - window_rect[1][i]) ** 2 for i in range(3))
+        )
+        if zdiff1 <= FEPS:
+            window_dimensions.append((dim1, dim2))
+        elif zdiff2 <= FEPS:
+            window_dimensions.append((dim2, dim1))
+        else:
+            print("Error: Skewed window not supported: ")
+            print(window_rect)
+            return
+    return generate_blinds_bsdf(
+        slat_depth,
+        window_width,
+        window_height,
+        nslats,
+        slat_angle,
+        slat_rcurv,
+        diff_refl,
+        spec_refl,
+        ir_refl,
+        roughness,
+    )

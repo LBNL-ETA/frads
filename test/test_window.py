@@ -13,6 +13,10 @@ def shade_path(resources_dir):
     return resources_dir / "2011-SA1.xml"
 
 @pytest.fixture
+def blinds_path(resources_dir):
+    return resources_dir / "igsdb_product_19732.json"
+
+@pytest.fixture
 def glazing_system(glass_path):
     gs = create_glazing_system(
         name="gs1",
@@ -104,3 +108,35 @@ def test_multilayer_glazing_shading(glass_path, shade_path):
 
     assert gs.visible_back_reflectance is not None
     assert gs.solar_back_absorptance is not None
+
+
+def test_venetian_blinds(glass_path, blinds_path):
+    """
+    Test GlazingSystem object with multiple layers of glazing and shading and more than one customized gap.
+
+    Check the thickness of the glazing system.
+    Check the order of the layers.
+    Check the order and composition of the gaps.
+    """
+    gs = create_glazing_system(
+        name="gs3",
+        layers=[glass_path, blinds_path],
+        slat_angle = 45,
+    )
+
+    # assert gs.layers[0].product_name == "Generic Clear Glass"
+    # assert gs.layers[1].product_name == "Generic Clear Glass"
+    # assert gs.layers[2].product_name == "Satine 5500 5%, White Pearl"
+    #
+    # assert gs.name == "gs3"
+    # assert gs.gaps[0].gas[0].gas == "air"
+    # assert gs.gaps[0].gas[0].ratio == 0.1
+    # assert gs.gaps[0].gas[1].gas == "argon"
+    # assert gs.gaps[0].gas[1].ratio == 0.9
+    # assert gs.gaps[0].thickness == 0.03
+    # assert gs.gaps[1].gas[0].gas == "air"
+    # assert gs.gaps[1].gas[0].ratio == 1
+    # assert gs.gaps[1].thickness == 0.01
+    #
+    # assert gs.visible_back_reflectance is not None
+    # assert gs.solar_back_absorptance is not None

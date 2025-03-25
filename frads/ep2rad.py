@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 import logging
-from typing import Dict, Optional, Any, List, Tuple
+from typing import Optional
 import math
 
 import pyradiance as pr
@@ -302,7 +302,7 @@ class SurfaceWithNamedFenestrations:
     """A surface with fenestrations."""
 
     surface: BuildingSurfaceDetailed
-    fenestrations: Dict[str, FenestrationSurfaceDetailed]
+    fenestrations: dict[str, FenestrationSurfaceDetailed]
 
 
 @dataclass
@@ -352,7 +352,7 @@ class EPlusOpaqueSurface:
     fenestrations: list
 
 
-def get_dict_only_value(d: Optional[Dict]) -> Any:
+def get_dict_only_value(d: Optional[dict]):
     """Get the only value in a dictionary."""
     if d is None:
         raise ValueError("Object is None.")
@@ -428,9 +428,9 @@ def surface_to_polygon(srf: BuildingSurfaceDetailed) -> Polygon:
 
 def thicken(
     surface: Polygon,
-    windows: List[Polygon],
+    windows: list[Polygon],
     thickness: float,
-) -> List[Polygon]:
+) -> list[Polygon]:
     """Thicken window-wall."""
     direction = surface.normal * thickness
     facade = surface.extrude(direction)[:2]
@@ -532,7 +532,7 @@ def parse_window_material_glazing(
     default_tmit = 0.6
     identifier = name.replace(" ", "_")
     if material.optical_data_type.value.lower() == "bsdf":
-        tmit = 1
+        tmit = 1.
     else:
         tmit = material.visible_transmittance_at_normal_incidence or default_tmit
     tmis = tmit2tmis(tmit)
@@ -582,11 +582,11 @@ class EnergyPlusToRadianceModelConverter:
     def __init__(self, ep_model: EnergyPlusModel):
         self.model = ep_model
         self._validate_ep_model()
-        self.constructions = {}
-        self.materials = {}
-        self.matrices = {}
+        self.constructions: dict = {}
+        self.materials: dict = {}
+        self.matrices: dict = {}
 
-    def parse(self) -> Dict[str, dict]:
+    def parse(self) -> dict[str, dict]:
         """Parse EnergyPlus model."""
         self.materials = self._parse_materials()
         self.constructions = self._parse_construction()
@@ -662,9 +662,9 @@ class EnergyPlusToRadianceModelConverter:
         Returns:
             dict: A dictionary of scene (static surfaces) and windows.
         """
-        scene: List[bytes] = []
-        windows: Dict[str, Dict[str, bytes]] = {}
-        sensors: Dict[str, dict] = {}
+        scene: list[bytes] = []
+        windows: dict[str, dict[str, bytes]] = {}
+        sensors: dict[str, dict] = {}
         surfaces = self._collect_zone_surfaces(zone_name)
         fenestrations = self._collect_zone_fenestrations(surfaces)
         if fenestrations == {}:  # no fenestrations in the zone
@@ -728,9 +728,9 @@ class EnergyPlusToRadianceModelConverter:
         surface_name: str,
         surface_polygon: Polygon,
         surface_construction_name: str,
-        fenestrations: Dict[str, FenestrationSurfaceDetailed],
+        fenestrations: dict[str, FenestrationSurfaceDetailed],
         zone_center: np.ndarray,
-    ) -> Tuple[List[bytes], Dict[str, Dict[str, bytes]], List[Polygon]]:
+    ) -> tuple[list[bytes], dict[str, dict[str, bytes]], list[Polygon]]:
         """Process a surface in a zone.
 
         Args:
@@ -741,11 +741,11 @@ class EnergyPlusToRadianceModelConverter:
             zone_center: Zone center.
 
         Returns:
-            Tuple[List[bytes], Dict[str, Dict[str, bytes]], List[Polygon]]: A tuple of scene, windows, and window polygons.
+            tuple[list[bytes], dict[str, dict[str, bytes]], list[Polygon]]: A tuple of scene, windows, and window polygons.
         """
-        scene: List[bytes] = []
-        windows: Dict[str, dict] = {}
-        window_polygons: List[Polygon] = []
+        scene: list[bytes] = []
+        windows: dict[str, dict] = {}
+        window_polygons: list[Polygon] = []
         opaque_surface_name = surface_name.replace(" ", "_")
         if not check_outward(surface_polygon, zone_center):
             surface_polygon = surface_polygon.flip()
@@ -789,7 +789,7 @@ class EnergyPlusToRadianceModelConverter:
 
     def _collect_zone_surfaces(
         self, zone_name: str
-    ) -> Dict[str, BuildingSurfaceDetailed]:
+    ) -> dict[str, BuildingSurfaceDetailed]:
         if self.model.building_surface_detailed is None:
             return {}
         return {
@@ -800,7 +800,7 @@ class EnergyPlusToRadianceModelConverter:
 
     def _collect_zone_fenestrations(
         self, zone_surfaces: dict
-    ) -> Dict[str, FenestrationSurfaceDetailed]:
+    ) -> dict[str, FenestrationSurfaceDetailed]:
         if self.model.fenestration_surface_detailed is None:
             return {}
         return {
@@ -811,9 +811,9 @@ class EnergyPlusToRadianceModelConverter:
 
     def _pair_surfaces_fenestrations(
         self,
-        zone_surfaces: Dict[str, BuildingSurfaceDetailed],
-        zone_fenestrations: Dict[str, FenestrationSurfaceDetailed],
-    ) -> Dict[str, SurfaceWithNamedFenestrations]:
+        zone_surfaces: dict[str, BuildingSurfaceDetailed],
+        zone_fenestrations: dict[str, FenestrationSurfaceDetailed],
+    ) -> dict[str, SurfaceWithNamedFenestrations]:
         surface_fenestrations = {}
         for sname, srf in zone_surfaces.items():
             named_fen = {}
@@ -828,7 +828,7 @@ class EnergyPlusToRadianceModelConverter:
         name: str,
         fenestration: FenestrationSurfaceDetailed,
         zone_center: np.ndarray,
-    ) -> Tuple[Polygon, pr.Primitive]:
+    ) -> tuple[Polygon, pr.Primitive]:
         fenenstration_polygon = fenestration_to_polygon(fenestration)
         if check_outward(fenenstration_polygon, zone_center):
             fenenstration_polygon = fenenstration_polygon.flip()

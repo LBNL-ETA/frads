@@ -32,6 +32,7 @@ def test_add_glazingsystem(medium_office, glazing_path):
     assert isinstance(medium_office.window_thermal_model_params, dict)
 
 
+
 def test_add_lighting(medium_office):
     try:
         medium_office.add_lighting("z1", 100)  # zone does not exist
@@ -92,3 +93,13 @@ def test_energyplussetup(medium_office):
     ep = EnergyPlusSetup(medium_office)
     ep.run(output_directory=tmpdir, design_day=True)
     assert (Path(tmpdir)/"eplusout.csv").exists()
+
+def test_add_proxy_geometry(medium_office, glazing_path):
+    gs = create_glazing_system(
+        name="test",
+        layers=[glazing_path],
+    )
+    tmpdir = tempfile.mkdtemp()
+    ep = EnergyPlusSetup(medium_office, enable_radiance=True)
+    ep.add_proxy_geometry(gs)
+

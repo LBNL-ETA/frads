@@ -129,6 +129,12 @@ class GlazingSystem:
     solar_back_reflectance: List[List[float]] = field(default_factory=list)
     solar_front_absorptance: List[List[float]] = field(default_factory=list)
     solar_back_absorptance: List[List[float]] = field(default_factory=list)
+    slat_depth: float = 0
+    slat_angle: float = 0
+    slat_spacing: float = 0
+    slat_curvature: float = 0
+    has_blinds: bool = False
+    has_fabric: bool = False
 
     def _matrix_to_str(self, matrix: List[List[float]]) -> str:
         """Convert a matrix to a string."""
@@ -227,7 +233,7 @@ def load_glazing_system(path: Union[str, Path]):
     return GlazingSystem(layers=layer_instances, gaps=gap_instances, **data)
 
 
-def get_layers(input: List[pwc.ProductData]) -> List[Layer]:
+def get_layers(input: list[pwc.ProductData]) -> list[Layer]:
     """Create a list of layers from a list of pwc.ProductData."""
     layers = []
     for inp in input:
@@ -258,10 +264,43 @@ def create_pwc_gaps(gaps: List[Gap]):
     return pwc_gaps
 
 
+def generate_blinds_xml(depth, nslats, angle, curvature, thickness, name, r_sol_diff, r_sol_spec, r_vis_diff, r_vis_spec, r_ir, nproc):
+    material_solar = pr.ShadingMaterial(r_sol_diff, r_sol_spec, 0)
+    material_visible = pr.ShadingMaterial(r_vis_diff, r_vis_spec, 0)
+    material_ir = pr.ShadingMaterial(r_ir, 0, 0)
+    geom = pr.BlindsGeometry(
+        depth=depth,
+        width=1,
+        height=1,
+        nslats=nslats,
+        angle=angle,
+        rcurv=curvature,
+    )
+    sol_blinds = pr.generate_blinds(material_solar, geom)
+    vis_blinds = pr.generate_blinds(material_visible, geom)
+    ir_blinds = pr.generate_blinds(material_ir, geom)
+    sol_results = pr.generate_bsdf(sol_blinds, nproc=nproc)
+    vis_results = pr.generate_bsdf(vis_blinds, nproc=nproc)
+    ir_results = pr.generate_bsdf(ir_blinds, basis='u')
+    return pr.generate_xml(sol_renults, vis_results, ir_results, n=name, m='unnamed', t=thickness)
+
+
+def get_dual_band_values_from_blinds_json(fpath):
+    with open(fpath) as f:
+        data = json.load(f)
+    dual_band_values = data['composition'][0]['child_product']["spectral_data"]['dual_band_values']
+    rf_sol_diff = dual_band_values["Rf_sol_diffuse"]
+    rf_sol_spec = dual_band_values["Rf_sol_specular"]
+    rf_vis_diff = dual_band_values["Rf_vis_diffuse"]
+    rf_vis_spec = dual_band_values["Rf_vis_specular"]
+    return rf_sol_diff, rf_sol_spec, rf_vis_diff, rf_vis_spec
+
 def create_glazing_system(
     name: str,
     layers: List[Union[Path, str, bytes]],
     gaps: Optional[List[Gap]] = None,
+    slat_angle: float = 0,
+    nproc: int = 1,
 ) -> GlazingSystem:
     """Create a glazing system from a list of layers and gaps.
 
@@ -285,6 +324,8 @@ def create_glazing_system(
         ...     ],
         ... )
     """
+    has_blinds = False
+    has_fabric = False
     if gaps is None:
         gaps = [Gap([Gas("air", 1)], 0.0127) for _ in range(len(layers) - 1)]
     layer_data = []
@@ -309,11 +350,42 @@ def create_glazing_system(
                 product_data = pwc.parse_json(layer)
             except json.JSONDecodeError:
                 product_data = pwc.parse_bsdf_xml_string(layer)
+                if product_data.product_type is None:
+                    product_data.product_type = "shading"
         if product_data is None:
             raise ValueError("Invalid layer type")
-        layer_data.append(product_data)
-        product_data.thickness = product_data.thickness / 1000.0 or 0  # mm to m
-        thickness += product_data.thickness
+        if product_data.product_type == 'shading':
+            if product_data.product_subtype == "venetian":
+                rf_sol_diff, rf_sol_spec, rf_vis_diff, rf_vis_spec = get_dual_band_values_from_blinds_json(layer)
+                slat_spacing = product_data.composition.geometry.slat_spacing / 1e3
+                tir = product_data.composition.material.ir_transmittance
+                nslats = int(1 / slat_spacing)
+                slat_depth = product_data.composition.geometry.slat_width / 1e3,
+                slat_curvature = product_data.composition.geometry.slat_curvature / 1e3,
+                emis_front = product_data.composition.material.emissivity_front
+                emis_back = product_data.composition.material.emissivity_back
+                name = product_data.product_name
+                layer_thickness = slat_depth * math.cos(math.radians(slat_angle))
+                if tir != 0:
+                    print("tir not zero")
+                    return
+                if emis_front != emis_back:
+                    print("front and back emissivity not the same")
+                    return
+                rf_if = 1 - tir - emis_front
+
+                xml = generate_blinds_xml(slat_depth, nslats, slat_angle, slat_curvature, layer_thickness, name, rf_sol_diff, rf_sol_spec, rf_vis_diff, rf_vis_spec, rf_ir, nproc)
+                has_blinds = True
+                layer_data.append(pwc.parse_bsdf_xml_string(xml))
+                thickness += layer_thickness
+            else:
+                has_fabric = True
+                layer_data.append(product_data)
+                product_data.thickness = product_data.thickness / 1000.0 or 0.001  # mm to m
+                thickness += product_data.thickness
+        else:
+            layer_data.append(product_data)
+            thickness += product_data.thickness
 
     for gap in gaps:
         thickness += gap.thickness
@@ -351,6 +423,12 @@ def create_glazing_system(
         solar_front_reflectance=solsys.front.reflectance.matrix,
         solar_back_transmittance=solsys.back.transmittance.matrix,
         solar_front_transmittance=solsys.front.transmittance.matrix,
+        slat_depth = slat_depth,
+        slat_angle = slat_angle,
+        slat_spacing = slat_spacing,
+        slat_curvature = slat_curvature,
+        has_blinds = has_blinds,
+        has_fabric = has_fabric,
     )
 
 
@@ -391,7 +469,7 @@ def get_layer_rgb(layer: pwc.ProductData) -> PaneRGB:
     return PaneRGB(coated_rgb, glass_rgb, tf_rgb, layer.coated_side)
 
 
-def get_glazing_primitive(name: str, panes: List[PaneRGB]) -> pr.Primitive:
+def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> pr.Primitive:
     """Generate a BRTDfunc to represent a glazing system."""
     if len(panes) > 2:
         raise ValueError("Only double pane supported")
@@ -462,3 +540,5 @@ def get_glazing_primitive(name: str, panes: List[PaneRGB]) -> pr.Primitive:
         ]
         real_arg = [0, 0, 0, 0, 0, 0, 0, 0, 0]
     return pr.Primitive("void", "BRTDfunc", name, str_arg, real_arg)
+
+
