@@ -85,6 +85,17 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                     infrared_transmittance=layer.ir_transmittance,
                     directional_absorptance_front=glzsys.solar_front_absorptance[i],
                     directional_absorptance_back=glzsys.solar_back_absorptance[i],
+                    top_opening_multiplier=layer.top_opening_multiplier,
+                    bottom_opening_multiplier=layer.bottom_opening_multiplier,
+                    left_side_opening_multiplier=layer.left_side_opening_multiplier,
+                    right_side_opening_multiplier=layer.right_side_opening_multiplier,
+                    front_opening_multiplier=layer.front_opening_multiplier,
+                    slat_width=layer.slat_width,
+                    slat_spacing=layer.slat_spacing,
+                    slat_thickness=layer.slat_thickness,
+                    slat_angle=layer.slat_angle,
+                    slat_conductivity=layer.slat_conductivity,
+                    slat_curve=layer.slat_curve,
                 )
             )
         input = epmodel.ConstructionComplexFenestrationStateInput(

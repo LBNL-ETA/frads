@@ -54,6 +54,7 @@ class Layer:
     emissivity_front: float
     emissivity_back: float
     ir_transmittance: float
+    rgb: PaneRGB
     top_opening_multiplier: float = 0
     bottom_opening_multiplier: float = 0
     left_side_opening_multiplier: float = 0
@@ -66,7 +67,6 @@ class Layer:
     slat_conductivity: float = 160.00
     slat_curve: float = 0.0
     flipped: bool = False
-    rgb: PaneRGB
 
 
 @dataclass
@@ -195,7 +195,7 @@ class GlazingSystem:
                     )
                 )
 
-    def save(self, out: Union[str, Path]):
+    def save(self, out: str | Path):
         """Save the glazing system to a file."""
         out = Path(out)
         if out.suffix == ".xml":
@@ -205,7 +205,7 @@ class GlazingSystem:
                 json.dump(asdict(self), f)
 
     @classmethod
-    def from_json(cls, path: Union[str, Path]):
+    def from_json(cls, path: str | Path):
         """Load a glazing system from a JSON file."""
         with open(path, "r") as f:
             data = json.load(f)
@@ -234,7 +234,7 @@ class GlazingSystem:
         return get_glazing_primitive(self.name, rgb)
 
 
-def load_glazing_system(path: Union[str, Path]):
+def load_glazing_system(path: str | Path):
     """Load a glazing system from a JSON file."""
     with open(path, "r") as f:
         data = json.load(f)
@@ -288,18 +288,18 @@ def create_pwc_gaps(gaps: list[Gap]):
 
 
 def generate_blinds_xml(
-    depth,
-    nslats,
-    angle,
-    curvature,
-    thickness,
-    name,
-    r_sol_diff,
-    r_sol_spec,
-    r_vis_diff,
-    r_vis_spec,
-    r_ir,
-    nproc,
+    depth: float,
+    nslats: int,
+    angle: float,
+    curvature: float,
+    thickness: float,
+    name: str,
+    r_sol_diff: float,
+    r_sol_spec: float,
+    r_vis_diff: float,
+    r_vis_spec: float,
+    r_ir: float,
+    nproc: int,
 ):
     material_solar = pr.ShadingMaterial(r_sol_diff, r_sol_spec, 0)
     material_visible = pr.ShadingMaterial(r_vis_diff, r_vis_spec, 0)
@@ -315,11 +315,17 @@ def generate_blinds_xml(
     sol_blinds = pr.generate_blinds(material_solar, geom)
     vis_blinds = pr.generate_blinds(material_visible, geom)
     ir_blinds = pr.generate_blinds(material_ir, geom)
-    sol_results = pr.generate_bsdf(sol_blinds, nproc=nproc)
-    vis_results = pr.generate_bsdf(vis_blinds, nproc=nproc)
+    sol_results = pr.generate_bsdf(sol_blinds, nproc=nproc, nsamp=5)
+    vis_results = pr.generate_bsdf(vis_blinds, nproc=nproc, nsamp=5)
     ir_results = pr.generate_bsdf(ir_blinds, basis="u")
     return pr.generate_xml(
-        sol_results, vis_results, ir_results, n=name, m="unnamed", t=thickness
+        sol_results,
+        vis_results,
+        ir_results,
+        n=name,
+        m="unnamed",
+        t=thickness,
+        tir=float(ir_results.front.transmittance.decode()),
     )
 
 
@@ -368,11 +374,11 @@ def create_glazing_system(
     # fabric_index = -1
     if gaps is None:
         gaps = [Gap([Gas("air", 1)], 0.0127) for _ in range(len(layer_inputs) - 1)]
+    product_data_list: list[pwc.ProductData] = []
     layer_data: list[Layer] = []
     thickness = 0
     for idx, layer_inp in enumerate(layer_inputs):
         product_data = None
-        layer = Layer()
         if isinstance(layer_inp.input, str) or isinstance(layer_inp.input, Path):
             if not os.path.isfile(layer_inp.input):
                 raise FileNotFoundError(f"{layer_inp} does not exist.")
@@ -403,13 +409,11 @@ def create_glazing_system(
                 slat_spacing = product_data.composition.geometry.slat_spacing / 1e3
                 tir = product_data.composition.material.ir_transmittance
                 nslats = int(1 / slat_spacing)
-                slat_depth = (product_data.composition.geometry.slat_width / 1e3,)
-                slat_curvature = (
-                    product_data.composition.geometry.slat_curvature / 1e3,
-                )
+                slat_depth = product_data.composition.geometry.slat_width / 1e3
+                slat_curvature = product_data.composition.geometry.slat_curvature / 1e3
                 emis_front = product_data.composition.material.emissivity_front
                 emis_back = product_data.composition.material.emissivity_back
-                name = product_data.product_name
+                layer_name = product_data.product_name
                 layer_thickness = slat_depth * math.cos(
                     math.radians(layer_inp.slat_angle)
                 )
@@ -427,37 +431,51 @@ def create_glazing_system(
                     layer_inp.slat_angle,
                     slat_curvature,
                     layer_thickness,
-                    name,
+                    layer_name,
                     rf_sol_diff,
                     rf_sol_spec,
                     rf_vis_diff,
                     rf_vis_spec,
                     rf_ir,
                     nproc,
-                )
+                )  # meters
                 # blinds_index = idx
                 real_product_data = pwc.parse_bsdf_xml_string(xml)
                 layer = get_layer_data(real_product_data, layer_inp)
+                layer.slat_width = slat_depth
+                layer.slat_spacing = slat_spacing
+                layer.slat_thickness = product_data.composition.material.thickness / 1e3
+                layer.slat_conductivity = product_data.composition.material.conductivity
+                layer.slat_curve = slat_curvature
+                layer.flipped = layer_inp.flipped
+                layer.product_type = "blinds"
+
+                layer.slat_angle = layer_inp.slat_angle
                 layer_data.append(layer)
+                product_data_list.append(real_product_data)
                 thickness += layer_thickness
             else:
                 # fabric_index = idx
                 layer = get_layer_data(product_data, layer_inp)
+                layer.thickness = layer.thickness / 1e3
+                layer.product_type = "fabric"
                 layer_data.append(layer)
-                product_data.thickness = (
-                    product_data.thickness / 1000.0 or 0.001
-                )  # mm to m
+                product_data_list.append(product_data)
                 thickness += layer.thickness
         else:
             layer = get_layer_data(product_data, layer_inp)
+            layer.thickness = layer.thickness
+            layer.thickness = layer.thickness / 1e3
+            layer.product_type = "glazing"
             layer_data.append(layer)
-            thickness += product_data.thickness
+            product_data_list.append(product_data)
+            thickness += layer.thickness
 
     for gap in gaps:
         thickness += gap.thickness
 
     glzsys = pwc.GlazingSystem(
-        solid_layers=layer_data,
+        solid_layers=product_data_list,
         gap_layers=create_pwc_gaps(gaps),
         width_meters=1,
         height_meters=1,

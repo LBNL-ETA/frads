@@ -1,6 +1,14 @@
 import os
 from pathlib import Path
-from frads.window import create_glazing_system, Gas, Gap, GlazingSystem, AIR, ARGON
+from frads.window import (
+    create_glazing_system,
+    Gas,
+    Gap,
+    GlazingSystem,
+    AIR,
+    ARGON,
+    LayerInput,
+)
 import pytest
 
 
@@ -8,13 +16,16 @@ import pytest
 def glass_path(resources_dir):
     return resources_dir / "CLEAR_3.DAT"
 
+
 @pytest.fixture
 def shade_path(resources_dir):
     return resources_dir / "2011-SA1.xml"
 
+
 @pytest.fixture
 def blinds_path(resources_dir):
     return resources_dir / "igsdb_product_19732.json"
+
 
 @pytest.fixture
 def glazing_system(glass_path):
@@ -23,6 +34,7 @@ def glazing_system(glass_path):
         layers=[glass_path, glass_path],
     )
     return gs
+
 
 def test_save_and_load(glazing_system):
     """
@@ -118,25 +130,27 @@ def test_venetian_blinds(glass_path, blinds_path):
     Check the order of the layers.
     Check the order and composition of the gaps.
     """
+    layer1 = LayerInput(
+        input=glass_path,
+    )
+    layer2 = LayerInput(
+        input=blinds_path,
+        slat_angle=45,
+    )
     gs = create_glazing_system(
         name="gs3",
-        layers=[glass_path, blinds_path],
-        slat_angle = 45,
+        layer_inputs=[layer1, layer2],
     )
+    print(gs.layers[0].product_name)
+    print(gs.layers[1].product_name)
 
-    # assert gs.layers[0].product_name == "Generic Clear Glass"
-    # assert gs.layers[1].product_name == "Generic Clear Glass"
-    # assert gs.layers[2].product_name == "Satine 5500 5%, White Pearl"
-    #
-    # assert gs.name == "gs3"
-    # assert gs.gaps[0].gas[0].gas == "air"
-    # assert gs.gaps[0].gas[0].ratio == 0.1
-    # assert gs.gaps[0].gas[1].gas == "argon"
-    # assert gs.gaps[0].gas[1].ratio == 0.9
-    # assert gs.gaps[0].thickness == 0.03
-    # assert gs.gaps[1].gas[0].gas == "air"
-    # assert gs.gaps[1].gas[0].ratio == 1
-    # assert gs.gaps[1].thickness == 0.01
-    #
-    # assert gs.visible_back_reflectance is not None
-    # assert gs.solar_back_absorptance is not None
+    assert gs.layers[0].product_name == "Generic Clear Glass"
+    assert gs.layers[0].thickness == 0.003048
+    assert gs.layers[1].product_name == "ODL Espresso Blind 14.8mm Slat"
+    assert gs.layers[1].thickness == 0.010465180361560904
+
+    assert gs.gaps[0].gas[0].gas == "air"
+    assert gs.gaps[0].gas[0].ratio == 1
+    assert gs.gaps[0].thickness == 0.0127
+
+    assert gs.thickness == 0.026213180361560902

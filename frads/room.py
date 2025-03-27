@@ -1,11 +1,9 @@
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import numpy as np
 import pyradiance as pr
 from frads import utils
 from frads.geom import Polygon
-from pyradiance.lib import Primitive
 
 
 @dataclass
@@ -18,11 +16,11 @@ class WindowSurface:
 class Surface:
     base: Polygon
     base_primitive: pr.Primitive
-    polygons: List[Polygon]
-    windows: List[WindowSurface]
+    polygons: list[Polygon]
+    windows: list[WindowSurface]
     modifier: str
     identifier: str
-    primitives: List[pr.Primitive]
+    primitives: list[pr.Primitive]
 
     def move_window(self, distance: float) -> None:
         """Move windows in its normal direction."""
@@ -83,9 +81,9 @@ class Room:
     ewall: Surface
     nwall: Surface
     wwall: Surface
-    materials: List[Primitive]
+    materials: list[pr.Primitive]
 
-    def primitives(self) -> List[pr.Primitive]:
+    def primitives(self) -> list[pr.Primitive]:
         return [
             *self.floor.primitives,
             *self.ceiling.primitives,
@@ -95,7 +93,7 @@ class Room:
             *self.wwall.primitives,
         ]
 
-    def window_primitives(self) -> List[pr.Primitive]:
+    def window_primitives(self) -> list[pr.Primitive]:
         return [
             *[srf.primitive for srf in self.ceiling.windows],
             *[srf.primitive for srf in self.swall.windows],
@@ -140,7 +138,7 @@ class Room:
                 )
 
 
-def thicken(base, thickness) -> List[Polygon]:
+def thicken(base, thickness) -> list[Polygon]:
     """Thicken the surface."""
     direction = base.normal * thickness
     polygons = base.extrude(direction)
@@ -160,7 +158,7 @@ def make_window(
     dist_bot: float,
     width: float,
     height: float,
-) -> Tuple[Polygon, WindowSurface]:
+) -> tuple[Polygon, WindowSurface]:
     """Make one or more window and punch a hole.
 
     -----------------
@@ -199,7 +197,7 @@ def make_window(
     )
 
 
-def make_window_wwr(base: Polygon, wwr: float) -> Tuple[Polygon, WindowSurface]:
+def make_window_wwr(base: Polygon, wwr: float) -> tuple[Polygon, WindowSurface]:
     """
     Make a single window and punch a hole based on window-to-wall ratio.
 
@@ -221,8 +219,8 @@ def create_surface(
     thickness: float = 0,
     modifier: str = "void",
     identifier: str = "void",
-    wpd: Optional[List[List[float]]] = None,
-    wwr: Optional[float] = None,
+    wpd: None | list[list[float]] = None,
+    wwr: None | float = None,
 ) -> Surface:
     """Create a surface with windows.
 
@@ -293,8 +291,8 @@ def create_south_facing_room(
     floor_floor: float,
     floor_ceiling: float,
     swall_thickness: float = 0,
-    wpd: Optional[List[List[float]]] = None,
-    wwr: Optional[float] = None,
+    wpd: None | list[list[float]] = None,
+    wwr: None | float = None,
 ) -> Room:
     materials = list(utils.material_lib().values())
     pt1 = np.array((0, 0, 0))
