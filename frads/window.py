@@ -3,7 +3,8 @@ import os
 import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+
+import math
 
 import pyradiance as pr
 import pywincalc as pwc
@@ -25,10 +26,10 @@ class PaneRGB:
         trans_rgb: Transmittance RGB.
     """
 
-    coated_rgb: Tuple[float, float, float]
-    glass_rgb: Tuple[float, float, float]
-    trans_rgb: Tuple[float, float, float]
-    coated_side: Optional[str] = None
+    coated_rgb: tuple[float, float, float]
+    glass_rgb: tuple[float, float, float]
+    trans_rgb: tuple[float, float, float]
+    coated_side: None | str = None
 
 
 @dataclass
@@ -53,7 +54,31 @@ class Layer:
     emissivity_front: float
     emissivity_back: float
     ir_transmittance: float
+    top_opening_multiplier: float = 0
+    bottom_opening_multiplier: float = 0
+    left_side_opening_multiplier: float = 0
+    right_side_opening_multiplier: float = 0
+    front_opening_multiplier: float = 0.05
+    slat_width: float = 0.0160
+    slat_spacing: float = 0.0120
+    slat_thickness: float = 0.0
+    slat_angle: float = 90.0
+    slat_conductivity: float = 160.00
+    slat_curve: float = 0.0
+    flipped: bool = False
     rgb: PaneRGB
+
+
+@dataclass
+class LayerInput:
+    input: Path | str | bytes
+    top_opening_multiplier: float = 0
+    bottom_opening_multiplier: float = 0
+    left_side_opening_multiplier: float = 0
+    right_side_opening_multiplier: float = 0
+    front_opening_multiplier: float = 0.05
+    slat_angle: float = 0
+    flipped: bool = False
 
 
 @dataclass
@@ -84,7 +109,7 @@ class Gap:
         thickness: Thickness of the gap.
     """
 
-    gas: List[Gas]
+    gas: list[Gas]
     thickness: float
 
     def __post_init__(self):
@@ -117,26 +142,22 @@ class GlazingSystem:
 
     name: str
     thickness: float = 0
-    layers: List[Layer] = field(default_factory=list)
-    gaps: List[Gap] = field(default_factory=list)
-    visible_front_transmittance: List[List[float]] = field(default_factory=list)
-    visible_back_transmittance: List[List[float]] = field(default_factory=list)
-    visible_front_reflectance: List[List[float]] = field(default_factory=list)
-    visible_back_reflectance: List[List[float]] = field(default_factory=list)
-    solar_front_transmittance: List[List[float]] = field(default_factory=list)
-    solar_back_transmittance: List[List[float]] = field(default_factory=list)
-    solar_front_reflectance: List[List[float]] = field(default_factory=list)
-    solar_back_reflectance: List[List[float]] = field(default_factory=list)
-    solar_front_absorptance: List[List[float]] = field(default_factory=list)
-    solar_back_absorptance: List[List[float]] = field(default_factory=list)
-    slat_depth: float = 0
-    slat_angle: float = 0
-    slat_spacing: float = 0
-    slat_curvature: float = 0
-    has_blinds: bool = False
-    has_fabric: bool = False
+    layers: list[Layer] = field(default_factory=list)
+    gaps: list[Gap] = field(default_factory=list)
+    visible_front_transmittance: list[list[float]] = field(default_factory=list)
+    visible_back_transmittance: list[list[float]] = field(default_factory=list)
+    visible_front_reflectance: list[list[float]] = field(default_factory=list)
+    visible_back_reflectance: list[list[float]] = field(default_factory=list)
+    solar_front_transmittance: list[list[float]] = field(default_factory=list)
+    solar_back_transmittance: list[list[float]] = field(default_factory=list)
+    solar_front_reflectance: list[list[float]] = field(default_factory=list)
+    solar_back_reflectance: list[list[float]] = field(default_factory=list)
+    solar_front_absorptance: list[list[float]] = field(default_factory=list)
+    solar_back_absorptance: list[list[float]] = field(default_factory=list)
+    # blinds_index: int = -1
+    # fabric_index: int = -1
 
-    def _matrix_to_str(self, matrix: List[List[float]]) -> str:
+    def _matrix_to_str(self, matrix: list[list[float]]) -> str:
         """Convert a matrix to a string."""
         return "\n".join([" ".join([str(n) for n in row]) for row in matrix])
 
@@ -233,26 +254,28 @@ def load_glazing_system(path: Union[str, Path]):
     return GlazingSystem(layers=layer_instances, gaps=gap_instances, **data)
 
 
-def get_layers(input: list[pwc.ProductData]) -> list[Layer]:
+def get_layer_data(inp: pwc.ProductData, layer_inp: LayerInput) -> Layer:
     """Create a list of layers from a list of pwc.ProductData."""
-    layers = []
-    for inp in input:
-        layers.append(
-            Layer(
-                product_name=inp.product_name,
-                thickness=inp.thickness,
-                product_type=inp.product_type,
-                conductivity=inp.conductivity,
-                emissivity_front=inp.emissivity_front,
-                emissivity_back=inp.emissivity_back,
-                ir_transmittance=inp.ir_transmittance,
-                rgb=get_layer_rgb(inp),
-            )
-        )
-    return layers
+    return Layer(
+        product_name=inp.product_name,
+        thickness=inp.thickness,
+        product_type=inp.product_type,
+        conductivity=inp.conductivity,
+        emissivity_front=inp.emissivity_front,
+        emissivity_back=inp.emissivity_back,
+        ir_transmittance=inp.ir_transmittance,
+        rgb=get_layer_rgb(inp),
+        top_opening_multiplier=layer_inp.top_opening_multiplier,
+        bottom_opening_multiplier=layer_inp.bottom_opening_multiplier,
+        left_side_opening_multiplier=layer_inp.left_side_opening_multiplier,
+        right_side_opening_multiplier=layer_inp.right_side_opening_multiplier,
+        front_opening_multiplier=layer_inp.front_opening_multiplier,
+        slat_angle=layer_inp.slat_angle,
+        flipped=layer_inp.flipped,
+    )
 
 
-def create_pwc_gaps(gaps: List[Gap]):
+def create_pwc_gaps(gaps: list[Gap]):
     """Create a list of pwc gaps from a list of gaps."""
     pwc_gaps = []
     for gap in gaps:
@@ -264,7 +287,20 @@ def create_pwc_gaps(gaps: List[Gap]):
     return pwc_gaps
 
 
-def generate_blinds_xml(depth, nslats, angle, curvature, thickness, name, r_sol_diff, r_sol_spec, r_vis_diff, r_vis_spec, r_ir, nproc):
+def generate_blinds_xml(
+    depth,
+    nslats,
+    angle,
+    curvature,
+    thickness,
+    name,
+    r_sol_diff,
+    r_sol_spec,
+    r_vis_diff,
+    r_vis_spec,
+    r_ir,
+    nproc,
+):
     material_solar = pr.ShadingMaterial(r_sol_diff, r_sol_spec, 0)
     material_visible = pr.ShadingMaterial(r_vis_diff, r_vis_spec, 0)
     material_ir = pr.ShadingMaterial(r_ir, 0, 0)
@@ -281,25 +317,29 @@ def generate_blinds_xml(depth, nslats, angle, curvature, thickness, name, r_sol_
     ir_blinds = pr.generate_blinds(material_ir, geom)
     sol_results = pr.generate_bsdf(sol_blinds, nproc=nproc)
     vis_results = pr.generate_bsdf(vis_blinds, nproc=nproc)
-    ir_results = pr.generate_bsdf(ir_blinds, basis='u')
-    return pr.generate_xml(sol_renults, vis_results, ir_results, n=name, m='unnamed', t=thickness)
+    ir_results = pr.generate_bsdf(ir_blinds, basis="u")
+    return pr.generate_xml(
+        sol_results, vis_results, ir_results, n=name, m="unnamed", t=thickness
+    )
 
 
 def get_dual_band_values_from_blinds_json(fpath):
     with open(fpath) as f:
         data = json.load(f)
-    dual_band_values = data['composition'][0]['child_product']["spectral_data"]['dual_band_values']
+    dual_band_values = data["composition"][0]["child_product"]["spectral_data"][
+        "dual_band_values"
+    ]
     rf_sol_diff = dual_band_values["Rf_sol_diffuse"]
     rf_sol_spec = dual_band_values["Rf_sol_specular"]
     rf_vis_diff = dual_band_values["Rf_vis_diffuse"]
     rf_vis_spec = dual_band_values["Rf_vis_specular"]
     return rf_sol_diff, rf_sol_spec, rf_vis_diff, rf_vis_spec
 
+
 def create_glazing_system(
     name: str,
-    layers: List[Union[Path, str, bytes]],
-    gaps: Optional[List[Gap]] = None,
-    slat_angle: float = 0,
+    layer_inputs: list[LayerInput],
+    gaps: None | list[Gap] = None,
     nproc: int = 1,
 ) -> GlazingSystem:
     """Create a glazing system from a list of layers and gaps.
@@ -324,67 +364,93 @@ def create_glazing_system(
         ...     ],
         ... )
     """
-    has_blinds = False
-    has_fabric = False
+    # blinds_index = -1
+    # fabric_index = -1
     if gaps is None:
-        gaps = [Gap([Gas("air", 1)], 0.0127) for _ in range(len(layers) - 1)]
-    layer_data = []
+        gaps = [Gap([Gas("air", 1)], 0.0127) for _ in range(len(layer_inputs) - 1)]
+    layer_data: list[Layer] = []
     thickness = 0
-    for layer in layers:
+    for idx, layer_inp in enumerate(layer_inputs):
         product_data = None
-        if isinstance(layer, str) or isinstance(layer, Path):
-            if not os.path.isfile(layer):
-                raise FileNotFoundError(f"{layer} does not exist.")
-            if isinstance(layer, Path):
-                layer = str(layer)
-            if layer.endswith(".json"):
-                product_data = pwc.parse_json_file(layer)
-            elif layer.endswith(".xml"):
-                product_data = pwc.parse_bsdf_xml_file(layer)
+        layer = Layer()
+        if isinstance(layer_inp.input, str) or isinstance(layer_inp.input, Path):
+            if not os.path.isfile(layer_inp.input):
+                raise FileNotFoundError(f"{layer_inp} does not exist.")
+            if isinstance(layer_inp.input, Path):
+                layer_inp.input = str(layer_inp.input)
+            if layer_inp.input.endswith(".json"):
+                product_data = pwc.parse_json_file(layer_inp.input)
+            elif layer_inp.input.endswith(".xml"):
+                product_data = pwc.parse_bsdf_xml_file(layer_inp.input)
                 if product_data.product_type is None:
                     product_data.product_type = "shading"
             else:
-                product_data = pwc.parse_optics_file(layer)
-        elif isinstance(layer, bytes):
+                product_data = pwc.parse_optics_file(layer_inp.input)
+        elif isinstance(layer_inp.input, bytes):
             try:
-                product_data = pwc.parse_json(layer)
+                product_data = pwc.parse_json(layer_inp.input)
             except json.JSONDecodeError:
-                product_data = pwc.parse_bsdf_xml_string(layer)
+                product_data = pwc.parse_bsdf_xml_string(layer_inp.input)
                 if product_data.product_type is None:
                     product_data.product_type = "shading"
         if product_data is None:
             raise ValueError("Invalid layer type")
-        if product_data.product_type == 'shading':
+        if product_data.product_type == "shading":
             if product_data.product_subtype == "venetian":
-                rf_sol_diff, rf_sol_spec, rf_vis_diff, rf_vis_spec = get_dual_band_values_from_blinds_json(layer)
+                rf_sol_diff, rf_sol_spec, rf_vis_diff, rf_vis_spec = (
+                    get_dual_band_values_from_blinds_json(layer_inp.input)
+                )
                 slat_spacing = product_data.composition.geometry.slat_spacing / 1e3
                 tir = product_data.composition.material.ir_transmittance
                 nslats = int(1 / slat_spacing)
-                slat_depth = product_data.composition.geometry.slat_width / 1e3,
-                slat_curvature = product_data.composition.geometry.slat_curvature / 1e3,
+                slat_depth = (product_data.composition.geometry.slat_width / 1e3,)
+                slat_curvature = (
+                    product_data.composition.geometry.slat_curvature / 1e3,
+                )
                 emis_front = product_data.composition.material.emissivity_front
                 emis_back = product_data.composition.material.emissivity_back
                 name = product_data.product_name
-                layer_thickness = slat_depth * math.cos(math.radians(slat_angle))
+                layer_thickness = slat_depth * math.cos(
+                    math.radians(layer_inp.slat_angle)
+                )
                 if tir != 0:
                     print("tir not zero")
                     return
                 if emis_front != emis_back:
                     print("front and back emissivity not the same")
                     return
-                rf_if = 1 - tir - emis_front
+                rf_ir = 1 - tir - emis_front
 
-                xml = generate_blinds_xml(slat_depth, nslats, slat_angle, slat_curvature, layer_thickness, name, rf_sol_diff, rf_sol_spec, rf_vis_diff, rf_vis_spec, rf_ir, nproc)
-                has_blinds = True
-                layer_data.append(pwc.parse_bsdf_xml_string(xml))
+                xml = generate_blinds_xml(
+                    slat_depth,
+                    nslats,
+                    layer_inp.slat_angle,
+                    slat_curvature,
+                    layer_thickness,
+                    name,
+                    rf_sol_diff,
+                    rf_sol_spec,
+                    rf_vis_diff,
+                    rf_vis_spec,
+                    rf_ir,
+                    nproc,
+                )
+                # blinds_index = idx
+                real_product_data = pwc.parse_bsdf_xml_string(xml)
+                layer = get_layer_data(real_product_data, layer_inp)
+                layer_data.append(layer)
                 thickness += layer_thickness
             else:
-                has_fabric = True
-                layer_data.append(product_data)
-                product_data.thickness = product_data.thickness / 1000.0 or 0.001  # mm to m
-                thickness += product_data.thickness
+                # fabric_index = idx
+                layer = get_layer_data(product_data, layer_inp)
+                layer_data.append(layer)
+                product_data.thickness = (
+                    product_data.thickness / 1000.0 or 0.001
+                )  # mm to m
+                thickness += layer.thickness
         else:
-            layer_data.append(product_data)
+            layer = get_layer_data(product_data, layer_inp)
+            layer_data.append(layer)
             thickness += product_data.thickness
 
     for gap in gaps:
@@ -399,6 +465,10 @@ def create_glazing_system(
         bsdf_hemisphere=pwc.BSDFHemisphere.create(pwc.BSDFBasisType.FULL),
     )
 
+    for index, data in enumerate(layer_data):
+        if data.flipped:
+            glzsys.flip_layer(index, True)
+
     solres = glzsys.optical_method_results("SOLAR")
     solsys = solres.system_results
     visres = glzsys.optical_method_results("PHOTOPIC")
@@ -407,7 +477,7 @@ def create_glazing_system(
     return GlazingSystem(
         name=name,
         thickness=thickness,
-        layers=get_layers(layer_data),
+        layers=layer_data,
         gaps=gaps,
         solar_front_absorptance=[
             alpha.front.absorptance.angular_total for alpha in solres.layer_results
@@ -423,12 +493,8 @@ def create_glazing_system(
         solar_front_reflectance=solsys.front.reflectance.matrix,
         solar_back_transmittance=solsys.back.transmittance.matrix,
         solar_front_transmittance=solsys.front.transmittance.matrix,
-        slat_depth = slat_depth,
-        slat_angle = slat_angle,
-        slat_spacing = slat_spacing,
-        slat_curvature = slat_curvature,
-        has_blinds = has_blinds,
-        has_fabric = has_fabric,
+        # blinds_index=blinds_index,
+        # fabric_index=fabric_index,
     )
 
 
@@ -540,5 +606,3 @@ def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> pr.Primitive:
         ]
         real_arg = [0, 0, 0, 0, 0, 0, 0, 0, 0]
     return pr.Primitive("void", "BRTDfunc", name, str_arg, real_arg)
-
-

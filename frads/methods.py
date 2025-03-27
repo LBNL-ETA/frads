@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pyradiance as pr
-from pyradiance.util import parse_view
+from pyradiance import parse_view
 from scipy.sparse import csr_matrix
 
 from frads.matrix import (
@@ -1234,7 +1234,7 @@ class ThreePhaseMethod(PhaseMethod):
         dhi: float,
         ambient_bounce: int = 0,
         save_hdr: Optional[Union[str, Path]] = None,
-    ) -> tuple[float,float]:
+    ) -> tuple[float, float]:
         """Calculate enhanced simplified daylight glare probability (EDGPs) for a view.
 
         Args:

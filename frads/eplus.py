@@ -8,6 +8,7 @@ import inspect
 import json
 import tempfile
 import os
+import math
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Union
 
@@ -641,7 +642,9 @@ class EnergyPlusSetup:
             sensor_name, cfs_name, date_time, dni, dhi
         )
 
-    def calculate_edgps(self, zone: str, cfs_name: Dict[str, str]) -> tuple[float,float]:
+    def calculate_edgps(
+        self, zone: str, cfs_name: Dict[str, str]
+    ) -> tuple[float, float]:
         """Calculate enhanced simplified daylight glare probability in a zone.
         The view is positioned at the center of the zone with direction facing
         the windows, weighted by the window area.
@@ -680,11 +683,16 @@ class EnergyPlusSetup:
                 slat_angle = glazing_system.slat_angle
                 nslats = int(slat_height / glazing_system.slat_spacing)
                 slat_curvature = glazing_system.slat_curvature
-                blinds = genblinds(slat_width, slat_height, slat_depth, slat_angle, nslats)
+                blinds = genblinds(
+                    slat_width, slat_height, slat_depth, slat_angle, nslats
+                )
                 blinds = Xform(blinds).rotatez().translate()()
             # get window geometry
             if glazing_system.has_fabric:
-                pr.Primitive('void', 'aBSDF',)
+                pr.Primitive(
+                    "void",
+                    "aBSDF",
+                )
 
 
 def load_idf(fpath: Union[str, Path]) -> dict:
@@ -758,14 +766,13 @@ def load_energyplus_model(fpath: Union[str, Path]) -> EnergyPlusModel:
     return EnergyPlusModel.model_validate(json_data)
 
 
-
-def add_proxy_geometry_to_all_zones(rmodels, glazing_system):
-    for rmodel in rmodels:
-        add_proxy_geometry(rmodel, glazing_system)
+# def add_proxy_geometry_to_all_zones(rmodels, glazing_system):
+#     for rmodel in rmodels:
+#         add_proxy_geometry(rmodel, glazing_system)
 
 
 def generate_blinds_for_window(
-    window_rects: Rectangle3D,
+    window_rects,
     slat_depth: float,
     nslats: int,
     slat_angle: list[float],
@@ -794,15 +801,15 @@ def generate_blinds_for_window(
             print("Error: Skewed window not supported: ")
             print(window_rect)
             return
-    return generate_blinds_bsdf(
-        slat_depth,
-        window_width,
-        window_height,
-        nslats,
-        slat_angle,
-        slat_rcurv,
-        diff_refl,
-        spec_refl,
-        ir_refl,
-        roughness,
-    )
+    # return generate_blinds_bsdf(
+    #     slat_depth,
+    #     window_width,
+    #     window_height,
+    #     nslats,
+    #     slat_angle,
+    #     slat_rcurv,
+    #     diff_refl,
+    #     spec_refl,
+    #     ir_refl,
+    #     roughness,
+    # )
