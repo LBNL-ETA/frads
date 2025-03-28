@@ -15,7 +15,7 @@ XENON = pwc.PredefinedGasType.XENON
 ARGON = pwc.PredefinedGasType.ARGON
 
 
-@dataclass
+@dataclass(slots=True, eq=True)
 class PaneRGB:
     """Pane color data object.
 
@@ -54,7 +54,9 @@ class Layer:
     emissivity_front: float
     emissivity_back: float
     ir_transmittance: float
-    rgb: PaneRGB
+    rgb: None | PaneRGB
+    fabric_xml: None | bytes
+    shading_material: None | pr.ShadingMaterial
     top_opening_multiplier: float = 0
     bottom_opening_multiplier: float = 0
     left_side_opening_multiplier: float = 0
@@ -224,14 +226,16 @@ class GlazingSystem:
             gap_instances.append(Gap(gas=gas_instances, **gap))
         return cls(layers=layer_instances, gaps=gap_instances, **data)
 
-    def get_brtdfunc(self) -> pr.Primitive:
+    def get_brtdfunc(self, name: None | str = None) -> pr.Primitive:
         """Get a BRTDfunc primitive for the glazing system."""
-        if any(layer.product_type != "glazing" for layer in self.layers):
-            raise ValueError("Only glass layers supported.")
-        if len(self.layers) > 2:
-            raise ValueError("Only double pane supported.")
-        rgb = [layer.rgb for layer in self.layers]
-        return get_glazing_primitive(self.name, rgb)
+        if name is None:
+            name = self.name
+        # if any(layer.product_type != "glazing" for layer in self.layers):
+        #     raise ValueError("Only glass layers supported.")
+        # if len(self.layers) > 2:
+        #     raise ValueError("Only double pane supported.")
+        rgb = [layer.rgb for layer in self.layers if layer.rgb is not None]
+        return get_glazing_primitive(name, rgb)
 
 
 def load_glazing_system(path: str | Path):
@@ -377,6 +381,7 @@ def create_glazing_system(
     product_data_list: list[pwc.ProductData] = []
     layer_data: list[Layer] = []
     thickness = 0
+    fabric_xml: None | bytes
     for idx, layer_inp in enumerate(layer_inputs):
         product_data = None
         if isinstance(layer_inp.input, str) or isinstance(layer_inp.input, Path):
@@ -387,6 +392,8 @@ def create_glazing_system(
             if layer_inp.input.endswith(".json"):
                 product_data = pwc.parse_json_file(layer_inp.input)
             elif layer_inp.input.endswith(".xml"):
+                with open(layer_inp.input, "rb") as f:
+                    fabric_xml = f.read()
                 product_data = pwc.parse_bsdf_xml_file(layer_inp.input)
                 if product_data.product_type is None:
                     product_data.product_type = "shading"
@@ -397,6 +404,7 @@ def create_glazing_system(
                 product_data = pwc.parse_json(layer_inp.input)
             except json.JSONDecodeError:
                 product_data = pwc.parse_bsdf_xml_string(layer_inp.input)
+                fabric_xml = layer_inp.input
                 if product_data.product_type is None:
                     product_data.product_type = "shading"
         if product_data is None:
@@ -449,6 +457,7 @@ def create_glazing_system(
                 layer.slat_curve = slat_curvature
                 layer.flipped = layer_inp.flipped
                 layer.product_type = "blinds"
+                layer.shading_material = pr.ShadingMaterial(rf_vis_diff, rf_vis_spec, 0)
 
                 layer.slat_angle = layer_inp.slat_angle
                 layer_data.append(layer)
@@ -459,6 +468,7 @@ def create_glazing_system(
                 layer = get_layer_data(product_data, layer_inp)
                 layer.thickness = layer.thickness / 1e3
                 layer.product_type = "fabric"
+                layer.fabric_xml = fabric_xml
                 layer_data.append(layer)
                 product_data_list.append(product_data)
                 thickness += layer.thickness
@@ -516,16 +526,17 @@ def create_glazing_system(
     )
 
 
-def get_layer_rgb(layer: pwc.ProductData) -> PaneRGB:
+def get_layer_rgb(layer: pwc.ProductData) -> None | PaneRGB:
     """Get the RGB values for a pane layer."""
     photopic_wvl = range(380, 781, 10)
     if isinstance(layer.measurements, pwc.DualBandBSDF):
-        return PaneRGB(
-            coated_rgb=(0, 0, 0),
-            glass_rgb=(0, 0, 0),
-            trans_rgb=(0, 0, 0),
-            coated_side=None,
-        )
+        # return PaneRGB(
+        #     coated_rgb=(0, 0, 0),
+        #     glass_rgb=(0, 0, 0),
+        #     trans_rgb=(0, 0, 0),
+        #     coated_side=None,
+        # )
+        return None
     hemi = {
         int(round(d.wavelength * 1e3)): (
             d.direct_component.transmittance_front,
@@ -553,10 +564,8 @@ def get_layer_rgb(layer: pwc.ProductData) -> PaneRGB:
     return PaneRGB(coated_rgb, glass_rgb, tf_rgb, layer.coated_side)
 
 
-def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> pr.Primitive:
+def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> None | pr.Primitive:
     """Generate a BRTDfunc to represent a glazing system."""
-    if len(panes) > 2:
-        raise ValueError("Only double pane supported")
     if len(panes) == 1:
         str_arg = [
             "sr_clear_r",
@@ -586,7 +595,7 @@ def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> pr.Primitive:
             *[round(i, 3) for i in panes[0].coated_rgb],
             *[round(i, 3) for i in panes[0].trans_rgb],
         ]
-    else:
+    elif len(panes) == 2:
         s12t_r, s12t_g, s12t_b = panes[0].trans_rgb
         s34t_r, s34t_g, s34t_b = panes[1].trans_rgb
         if panes[0].coated_side == "back":
@@ -623,4 +632,23 @@ def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> pr.Primitive:
             "glaze2.cal",
         ]
         real_arg = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    elif len(panes) == 3:
+        str_arg = ["sr_red", "sr_grn", "sr_blu", "st_red", "st_grn", "st_blu", "0", "0", "0", "glass3.cal"]
+        if panes[2].coated_side == "back":
+            rfspc, gfspc, bfspc = panes[2].coated_rgb
+        else:
+            rfspc, gfspc, bfspc = panes[2].glass_rgb
+        if panes[0].coated_side == "back":
+            rfspc, gfspc, bfspc = panes[0].glass_rgb
+        else:
+            rfspc, gfspc, bfspc = panes[0].coated_rgb
+        trans_rgb = []
+        for i in range(3):
+            trans_rgb.append(panes[0].trans_rgb[i] * panes[1].trans_rgb[i] * panes[2].trans_rgb[i])
+        rtspc, gtspc, btspc = trans_rgb
+        real_arg = [18, 0, 0, 0, 0, 0, 0, 0, 0, 0, rfspc, gfspc, bfspc, rbspc, gbspc, bbspc, rtspc, gtspc, btspc]
+    else:
+        print("At most three pane supported")
+        return None
+
     return pr.Primitive("void", "BRTDfunc", name, str_arg, real_arg)

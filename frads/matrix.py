@@ -83,19 +83,20 @@ class ViewSender:
         self.view = view
         self.xres = xres
         self.yres = yres
+        view_args = pr.get_view_args(view)
         res_eval = pr.vwrays(
-            view=view.args(), xres=xres, yres=yres, dimensions=True
+            view=view_args, xres=xres, yres=yres, dimensions=True
         ).split()
         new_xres, new_yres = int(res_eval[1]), int(res_eval[3])
         vwrays_proc = pr.vwrays(
-            view=view.args(),
+            view=view_args,
             outform="f",
             xres=new_xres,
             yres=new_yres,
             ray_count=ray_count,
             pixel_jitter=0.7,
         )
-        if view.vtype == "a":
+        if view.type == "a":
             ray_flush_exp = (
                 f"DIM:{xres};CNT:{ray_count};"
                 "pn=(recno-1)/CNT+.5;"

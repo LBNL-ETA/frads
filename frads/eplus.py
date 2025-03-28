@@ -19,6 +19,8 @@ from pyenergyplus.api import EnergyPlusAPI
 from frads.ep2rad import epmodel_to_radmodel
 from frads.eplus_model import EnergyPlusModel
 from frads.methods import ThreePhaseMethod, WorkflowConfig
+from frads.window import GlazingSystem, Layer
+from frads.utils import polygon_primitive
 
 
 def ep_datetime_parser(inp: str):
@@ -766,50 +768,111 @@ def load_energyplus_model(fpath: Union[str, Path]) -> EnergyPlusModel:
     return EnergyPlusModel.model_validate(json_data)
 
 
-# def add_proxy_geometry_to_all_zones(rmodels, glazing_system):
-#     for rmodel in rmodels:
-#         add_proxy_geometry(rmodel, glazing_system)
+def analyze_glazing_system(layers: list[Layer]) -> list:
+    if not layers or not isinstance(layers[0], Layer):
+        return {"error": "Invalid input. Please provide a string of layer types (g, f, b)."}
 
+    # Group consecutive glazing layers
+    grouped_system = []
+    current_group = ""
+    current_type = None
 
-def generate_blinds_for_window(
-    window_rects,
-    slat_depth: float,
-    nslats: int,
-    slat_angle: list[float],
-    slat_rcurv: float,
-    diff_refl: float,
-    spec_refl: float,
-    ir_refl: float,
-    roughness: float,
-):
-    FEPS = 1e-5
-    window_dimensions: list[tuple[float, float]] = []
-    for window_rect in window_rects:
-        zdiff1 = abs(window_rect[1][2] - window_rect[0][2])
-        zdiff2 = abs(window_rect[2][2] - window_rect[1][2])
-        dim1 = math.sqrt(
-            sum((window_rect[1][i] - window_rect[0][i]) ** 2 for i in range(3))
-        )
-        dim2 = math.sqrt(
-            sum((window_rect[2][i] - window_rect[1][i]) ** 2 for i in range(3))
-        )
-        if zdiff1 <= FEPS:
-            window_dimensions.append((dim1, dim2))
-        elif zdiff2 <= FEPS:
-            window_dimensions.append((dim2, dim1))
+    for layer in layers:
+        if layer.product_type == 'glazing':
+            if current_type == 'glazing':
+                current_group += 'glazing'
+            else:
+                if current_group:
+                    grouped_system.append((current_type, current_group))
+                current_group = 'glazing'
+                current_type = 'glazing'
         else:
-            print("Error: Skewed window not supported: ")
-            print(window_rect)
-            return
-    # return generate_blinds_bsdf(
-    #     slat_depth,
-    #     window_width,
-    #     window_height,
-    #     nslats,
-    #     slat_angle,
-    #     slat_rcurv,
-    #     diff_refl,
-    #     spec_refl,
-    #     ir_refl,
-    #     roughness,
-    # )
+            if current_group:
+                grouped_system.append((current_type, current_group))
+            grouped_system.append((layer, layer))
+            current_group = ""
+            current_type = None
+
+    # Add the last group if it exists
+    if current_group:
+        grouped_system.append((current_type, current_group))
+
+    # Create a simplified representation
+    return [(layer_type, len(group)) for layer_type, group in grouped_system]
+
+
+def add_proxy_geometry_to_rmodels(epsetup: EnergyPlusSetup, gs: GlazingSystem):
+    FEPS = 1e-5
+    layer_groups = analyze_glazing_system(gs.layers)
+    for zone_name, zone in epsetup.rmodels.items():
+        windows = zone['model']['windows']
+        for window_name, window in windows.items():
+            # add blinds to window
+            window_vertices = window.polygon.vertices
+
+            primitives: bytes
+            current_index = 0
+            for group in layer_groups:
+                if group[0] == "glazing":
+                    glazing_layer_count = group[1]
+                    # Get BRTDFunc
+                    mat_name = f"mat_{gs.name}_glazing_{current_index}"
+                    geom_name = f"{gs.name}_glazing_{current_index}"
+                    mat: bytes = gs.get_brtdfunc(name=name).bytes
+                    geom = polygon_primitive(window.polygon, mat_name, geom_name).bytes
+                    primitives += mat + geom
+                    current_index += glazing_layer_count
+                elif group[0] == "fabric":
+                    mat_name = f"mat_{gs.name}_fabric_{current_index}"
+                    geom_name = f"{gs.name}_fabric_{current_index}"
+                    xml_name = f"{gs.name}_fabric_{current_index}.xml"
+                    # Get aBSDF primitive
+                    with open(xml_name, "wb") as f:
+                        f.write(gs.layers[current_index].fabric_xml)
+                    mat: bytes = pr.Primitive("void", "aBSDF", mat_name, [xml_name, "0", "0", "1", "."], []).bytes
+                    geom = polygon_primitive(window.polygon, mat_name, geom_name).bytes
+                    primitives += mat + geom
+                    current_index += 1
+                elif group[0] == "blinds":
+                    # NOTE: For blinds only
+                    zdiff1 = abs(window_vertices[1][2] - window_vertices[0][2])
+                    zdiff2 = abs(window_vertices[2][2] - window_vertices[1][2])
+                    dim1 = math.sqrt(
+                        sum((window_rect[1][i] - window_rect[0][i]) ** 2 for i in range(3))
+                    )
+                    dim2 = math.sqrt(
+                        sum((window_rect[2][i] - window_rect[1][i]) ** 2 for i in range(3))
+                    )
+                    if dim1 <= FEPS | dim2 <= FEPS:
+                        print("One of the sides of the window polygon is zero")
+                    width = height = 0
+                    if zdiff1 <= FEPS:
+                        width = dim1
+                        height = dim2
+                    elif zdiff2 <= FEPS:
+                        width = dim2
+                        height = dim1
+                    else:
+                        print("Error: Skewed window not supported: ")
+                        print(window_vertices)
+                    mat_name = f"mat_{gs.name}_blinds_{current_index}"
+                    mat = gs.layer[current_index].shading_material
+                    primitives += pr.Primitive("void", "plastic", mat_name, [], [mat.diffuse_reflectance, mat.diffuse_reflectance, mat.diffuse_reflectance, mat.specular_reflectance, 0]).bytes
+                    geom = pr.BlindsGeometry(
+                        depth=depth,
+                        width=width,
+                        height=height,
+                        nslats=gs.nslats,
+                        angle=angle,
+                        rcurv=curvature,
+                    )
+                    blinds: bytes = pr.generate_blinds(mat_visible, geom)
+                    blinds_normal = np.array((1, 0, 0))
+                    rotated_blinds: bytes = Xform(blinds).rotatez(angle_between(blinds_normal, window.normal))()
+                    xmin, xmax, ymin, ymax, zmin, zmax = pr.getbbox(rotated_blinds)
+                    rotated_blinds_centroid = np.array(((xmax - xmin)/2, (ymax - ymin)/2, (zmax - zmin)/2))
+                    blinds_at_window = Xform(rotated_blinds).translate(window.centroid - rotated_blinds_centroid)()
+                    primitives += Xform(blinds_at_window).translate(*(window.normal * gs.layer[current_index].thickness))()
+                    current_index += 1
+
+            window['proxy_geometry'][gs.name] = primitives

@@ -701,13 +701,12 @@ class EnergyPlusToRadianceModelConverter:
             for window_polygon in window_polygons:
                 view_direction += window_polygon.area
         view_direction *= -1
-        view = pr.View(
-            center.tolist(),
-            view_direction.tolist(),
-            "a",
-            horiz=180,
-            vert=180,
-        )
+        view = pr.create_default_view()
+        view.vp = tuple(center)
+        view.vdir = tuple(view_direction)
+        view.type = "a"
+        view.horiz = 180
+        view.vert = 180
         sensors[zone_name] = {"data": [center.tolist() + view_direction.tolist()]}
 
         return {
@@ -755,7 +754,7 @@ class EnergyPlusToRadianceModelConverter:
             )
             window_polygons.append(fenestration_polygon)
             surface_polygon -= fenestration_polygon
-            windows[fname] = {"bytes": window.bytes}
+            windows[fname] = {"bytes": window.bytes, "polygon": fenestration_polygon}
             if fene.construction_name in self.matrices:
                 windows[fname]["matrix_name"] = fene.construction_name
         # polygon to primitive

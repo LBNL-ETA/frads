@@ -39,6 +39,8 @@ from frads.utils import (
     random_string,
 )
 
+from frads.geom import Polygon
+
 logger: logging.Logger = logging.getLogger("frads.methods")
 
 
@@ -153,9 +155,10 @@ class WindowConfig:
         ValueError: If neither file nor bytes are provided.
     """
 
-    file: Union[str, Path] = ""
+    file: str | Path = ""
     bytes: bytes = b""
     matrix_name: str = ""
+    polygon: None | Polygon = None
     proxy_geometry: Dict[str, List[pr.Primitive]] = field(default_factory=dict)
     files_mtime: List[float] = field(init=False, default_factory=list)
 
@@ -460,15 +463,15 @@ class Model:
         # add view to sensors if not already there
         for k, v in self.views.items():
             if k in self.sensors:
-                if self.sensors[k].data == [
-                    self.views[k].view.position + self.views[k].view.direction
+                if [tuple(self.sensors[k].data[0])] == [
+                    self.views[k].view.vp + self.views[k].view.vdir
                 ]:
                     continue
                 else:
                     raise ValueError(f"Sensor {k} data does not match view {k} data")
             else:
                 self.sensors[k] = SensorConfig(
-                    data=[self.views[k].view.position + self.views[k].view.direction]
+                    data=[self.views[k].view.vp + self.views[k].view.vdir]
                 )
 
         for k, v in self.windows.items():
