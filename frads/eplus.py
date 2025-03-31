@@ -14,6 +14,7 @@ from typing import Callable, Dict, List, Optional, Union
 
 import numpy as np
 from epmodel import epmodel as epm
+import pyradiance as pr
 from pyenergyplus.api import EnergyPlusAPI
 
 from frads.ep2rad import epmodel_to_radmodel
@@ -64,6 +65,7 @@ class EnergyPlusSetup:
         epmodel: EnergyPlusModel,
         weather_file: Optional[str] = None,
         enable_radiance: bool = False,
+        nproc: int = 1,
     ):
         """Class for setting up and running EnergyPlus simulations.
 
@@ -91,6 +93,7 @@ class EnergyPlusSetup:
             self.rworkflows = {k: ThreePhaseMethod(v) for k, v in self.rconfigs.items()}
             for v in self.rworkflows.values():
                 v.config.settings.save_matrices = True
+                v.config.settings.num_processors = nproc
                 v.generate_matrices(view_matrices=False)
         self.api = EnergyPlusAPI()
         self.epw = weather_file
@@ -328,8 +331,7 @@ class EnergyPlusSetup:
                         handle = self.api.exchange.get_variable_handle(state, name, key)
                         if handle == -1:
                             raise ValueError(
-                                "Variable handle not found: "
-                                f"name = {name}, key = {key}"
+                                f"Variable handle not found: name = {name}, key = {key}"
                             )
                         self.variable_handles[key][name] = handle
                 except TypeError:
@@ -340,7 +342,7 @@ class EnergyPlusSetup:
                     handle = self.api.api.getConstructionHandle(state, cfs.encode())
                     if handle == -1:
                         raise ValueError(
-                            "Construction handle not found: " f"Construction = {cfs}"
+                            f"Construction handle not found: Construction = {cfs}"
                         )
                     self.construction_handles[cfs] = handle
                     self.construction_names[handle] = cfs
@@ -484,7 +486,6 @@ class EnergyPlusSetup:
         method(self.state, func)
 
     def _request_variables_from_callback(self, callable_nodes: List[ast.Call]) -> None:
-        key_value_pairs = set()
         for node in callable_nodes:
             key_value_dict = {}
             if node.func.attr == "get_variable_value":
@@ -499,7 +500,7 @@ class EnergyPlusSetup:
                         node.keywords[1].arg: node.keywords[1].value.value,
                     }
                 else:
-                    raise ValueError(f"Invalid number of arguments in {func}.")
+                    raise ValueError(f"Invalid number of arguments in {node.func}.")
                 self.request_variable(**key_value_dict)
             elif node.func.attr == "get_diffuse_horizontal_irradiance":
                 self.request_variable(
@@ -672,29 +673,6 @@ class EnergyPlusSetup:
             view_name, cfs_name, date_time, dni, dhi
         )
 
-    def add_proxy_geometry(self, glazing_system):
-        breakpoint()
-        for window in self.rmodels.windows:
-            rgb2 = [layer.rgb for layer in glazing_system.layers[:2]]
-            rgb1 = [glazing_system.layers[2].rgb]
-            if glazing_system.has_blinds:
-                # generate blinds geometry
-                slat_width = window_width
-                slat_height = window_height
-                slat_depth = glazing_system.slat_depth
-                slat_angle = glazing_system.slat_angle
-                nslats = int(slat_height / glazing_system.slat_spacing)
-                slat_curvature = glazing_system.slat_curvature
-                blinds = genblinds(
-                    slat_width, slat_height, slat_depth, slat_angle, nslats
-                )
-                blinds = Xform(blinds).rotatez().translate()()
-            # get window geometry
-            if glazing_system.has_fabric:
-                pr.Primitive(
-                    "void",
-                    "aBSDF",
-                )
 
 
 def load_idf(fpath: Union[str, Path]) -> dict:
@@ -770,7 +748,9 @@ def load_energyplus_model(fpath: Union[str, Path]) -> EnergyPlusModel:
 
 def analyze_glazing_system(layers: list[Layer]) -> list:
     if not layers or not isinstance(layers[0], Layer):
-        return {"error": "Invalid input. Please provide a string of layer types (g, f, b)."}
+        return {
+            "error": "Invalid input. Please provide a string of layer types (g, f, b)."
+        }
 
     # Group consecutive glazing layers
     grouped_system = []
@@ -778,14 +758,14 @@ def analyze_glazing_system(layers: list[Layer]) -> list:
     current_type = None
 
     for layer in layers:
-        if layer.product_type == 'glazing':
-            if current_type == 'glazing':
-                current_group += 'glazing'
+        if layer.product_type == "glazing":
+            if current_type == "glazing":
+                current_group += "glazing"
             else:
                 if current_group:
                     grouped_system.append((current_type, current_group))
-                current_group = 'glazing'
-                current_type = 'glazing'
+                current_group = "glazing"
+                current_type = "glazing"
         else:
             if current_group:
                 grouped_system.append((current_type, current_group))
@@ -805,12 +785,12 @@ def add_proxy_geometry_to_rmodels(epsetup: EnergyPlusSetup, gs: GlazingSystem):
     FEPS = 1e-5
     layer_groups = analyze_glazing_system(gs.layers)
     for zone_name, zone in epsetup.rmodels.items():
-        windows = zone['model']['windows']
+        windows = zone["model"]["windows"]
         for window_name, window in windows.items():
             # add blinds to window
             window_vertices = window.polygon.vertices
 
-            primitives: bytes
+            primitives: list[pr.Primitive] = []
             current_index = 0
             for group in layer_groups:
                 if group[0] == "glazing":
@@ -818,9 +798,10 @@ def add_proxy_geometry_to_rmodels(epsetup: EnergyPlusSetup, gs: GlazingSystem):
                     # Get BRTDFunc
                     mat_name = f"mat_{gs.name}_glazing_{current_index}"
                     geom_name = f"{gs.name}_glazing_{current_index}"
-                    mat: bytes = gs.get_brtdfunc(name=name).bytes
-                    geom = polygon_primitive(window.polygon, mat_name, geom_name).bytes
-                    primitives += mat + geom
+                    mat: bytes = gs.get_brtdfunc(name=mat_name)
+                    geom = polygon_primitive(window.polygon, mat_name, geom_name)
+                    primitives.append(mat.bytes)
+                    primitives.append(geom.bytes)
                     current_index += glazing_layer_count
                 elif group[0] == "fabric":
                     mat_name = f"mat_{gs.name}_fabric_{current_index}"
@@ -829,19 +810,28 @@ def add_proxy_geometry_to_rmodels(epsetup: EnergyPlusSetup, gs: GlazingSystem):
                     # Get aBSDF primitive
                     with open(xml_name, "wb") as f:
                         f.write(gs.layers[current_index].fabric_xml)
-                    mat: bytes = pr.Primitive("void", "aBSDF", mat_name, [xml_name, "0", "0", "1", "."], []).bytes
-                    geom = polygon_primitive(window.polygon, mat_name, geom_name).bytes
-                    primitives += mat + geom
+                    mat: pr.Primitive = pr.Primitive(
+                        "void", "aBSDF", mat_name, [xml_name, "0", "0", "1", "."], []
+                    )
+                    geom = polygon_primitive(window.polygon, mat_name, geom_name)
+                    primitives.append(mat.bytes)
+                    primitives.append(geom.bytes)
                     current_index += 1
                 elif group[0] == "blinds":
                     # NOTE: For blinds only
                     zdiff1 = abs(window_vertices[1][2] - window_vertices[0][2])
                     zdiff2 = abs(window_vertices[2][2] - window_vertices[1][2])
                     dim1 = math.sqrt(
-                        sum((window_rect[1][i] - window_rect[0][i]) ** 2 for i in range(3))
+                        sum(
+                            (window_vertices[1][i] - window_vertices[0][i]) ** 2
+                            for i in range(3)
+                        )
                     )
                     dim2 = math.sqrt(
-                        sum((window_rect[2][i] - window_rect[1][i]) ** 2 for i in range(3))
+                        sum(
+                            (window_vertices[2][i] - window_vertices[1][i]) ** 2
+                            for i in range(3)
+                        )
                     )
                     if dim1 <= FEPS | dim2 <= FEPS:
                         print("One of the sides of the window polygon is zero")
@@ -855,24 +845,29 @@ def add_proxy_geometry_to_rmodels(epsetup: EnergyPlusSetup, gs: GlazingSystem):
                     else:
                         print("Error: Skewed window not supported: ")
                         print(window_vertices)
-                    mat_name = f"mat_{gs.name}_blinds_{current_index}"
-                    mat = gs.layer[current_index].shading_material
-                    primitives += pr.Primitive("void", "plastic", mat_name, [], [mat.diffuse_reflectance, mat.diffuse_reflectance, mat.diffuse_reflectance, mat.specular_reflectance, 0]).bytes
+                    blinds_layer = gs.layers[current_index]
                     geom = pr.BlindsGeometry(
-                        depth=depth,
+                        depth=blinds_layer.slat_depth,
                         width=width,
                         height=height,
                         nslats=gs.nslats,
-                        angle=angle,
-                        rcurv=curvature,
+                        angle=blinds_layer.slat_angle,
+                        rcurv=blinds_layer.slat_curvature,
                     )
-                    blinds: bytes = pr.generate_blinds(mat_visible, geom)
+                    blinds: bytes = pr.generate_blinds(blinds_layer.shading_material, geom)
                     blinds_normal = np.array((1, 0, 0))
-                    rotated_blinds: bytes = Xform(blinds).rotatez(angle_between(blinds_normal, window.normal))()
+                    rotated_blinds: bytes = pr.Xform(blinds).rotatez(
+                        pr.angle_between(blinds_normal, window.normal)
+                    )()
                     xmin, xmax, ymin, ymax, zmin, zmax = pr.getbbox(rotated_blinds)
-                    rotated_blinds_centroid = np.array(((xmax - xmin)/2, (ymax - ymin)/2, (zmax - zmin)/2))
-                    blinds_at_window = Xform(rotated_blinds).translate(window.centroid - rotated_blinds_centroid)()
-                    primitives += Xform(blinds_at_window).translate(*(window.normal * gs.layer[current_index].thickness))()
+                    rotated_blinds_centroid = np.array(
+                        ((xmax - xmin) / 2, (ymax - ymin) / 2, (zmax - zmin) / 2)
+                    )
+                    blinds_at_window = pr.Xform(rotated_blinds).translate(
+                        window.centroid - rotated_blinds_centroid
+                    )()
+                    primitives.append(pr.Xform(blinds_at_window).translate(
+                        *(window.normal * gs.layer[current_index].thickness)
+                    )())
                     current_index += 1
-
-            window['proxy_geometry'][gs.name] = primitives
+            window["proxy_geometry"][gs.name] = b"\n".join(primitives)

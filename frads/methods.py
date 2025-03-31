@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from shutil import rmtree
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import pyradiance as pr
@@ -35,7 +35,6 @@ from frads.utils import (
     minutes_to_datetime,
     parse_polygon,
     parse_rad_header,
-    polygon_primitive,
     random_string,
 )
 
@@ -68,9 +67,9 @@ class SceneConfig:
         files_mtime: Files last modification time.
     """
 
-    files: List[Path] = field(default_factory=list)
+    files: list[Path] = field(default_factory=list)
     bytes: bytes = b""
-    files_mtime: List[float] = field(init=False, default_factory=list)
+    files_mtime: list[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
         if len(self.files) > 0:
@@ -80,8 +79,8 @@ class SceneConfig:
 
 @dataclass
 class MatrixConfig:
-    matrix_file: Union[str, Path] = ""
-    matrix_data: Optional[np.ndarray] = None
+    matrix_file: str | Path = ""
+    matrix_data: None | np.ndarray = None
 
     def __post_init__(self):
         if self.matrix_data is None:
@@ -92,8 +91,8 @@ class MatrixConfig:
 
 @dataclass
 class ShadingGeometryConfig:
-    shading_geometry_file: Union[str, Path] = ""
-    shading_geometry_bytes: Optional[np.ndarray] = None
+    shading_geometry_file: str | Path = ""
+    shading_geometry_bytes: None | np.ndarray = None
 
     def __post_init__(self): ...
 
@@ -117,11 +116,11 @@ class MaterialConfig:
         ValueError: If no file, bytes, or matrices are provided.
     """
 
-    files: List[Path] = field(default_factory=list)
+    files: list[Path] = field(default_factory=list)
     bytes: bytes = b""
-    matrices: Dict[str, MatrixConfig] = field(default_factory=dict)
-    glazing_materials: Dict[str, pr.Primitive] = field(default_factory=dict)
-    files_mtime: List[float] = field(init=False, default_factory=list)
+    matrices: dict[str, MatrixConfig] = field(default_factory=dict)
+    glazing_materials: dict[str, pr.Primitive] = field(default_factory=dict)
+    files_mtime: list[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
         if len(self.files) > 0:
@@ -159,8 +158,8 @@ class WindowConfig:
     bytes: bytes = b""
     matrix_name: str = ""
     polygon: None | Polygon = None
-    proxy_geometry: Dict[str, List[pr.Primitive]] = field(default_factory=dict)
-    files_mtime: List[float] = field(init=False, default_factory=list)
+    proxy_geometry: dict[str, bytes] = field(default_factory=dict)
+    files_mtime: list[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
         if os.path.exists(self.file):
@@ -183,7 +182,7 @@ class SensorConfig:
 
     Attributes:
         file: Path to the file containing sensor data. Default is an empty string.
-        data: List of lists containing float data.
+        data: list of lists containing float data.
             Default is an empty list.
         file_mtime: Modification time of the file. This attribute is
             automatically initialized based on the 'file' attribute.
@@ -193,7 +192,7 @@ class SensorConfig:
     """
 
     file: str = ""
-    data: List[List[float]] = field(default_factory=list)
+    data: list[list[float]] = field(default_factory=list)
     file_mtime: float = field(init=False, default=0.0)
 
     def __post_init__(self):
@@ -231,8 +230,8 @@ class ViewConfig:
         ValueError: If neither file nor view are provided.
     """
 
-    file: Union[str, Path] = ""
-    view: Union[pr.View, str] = field(default_factory=str)
+    file: str | Path = ""
+    view: pr.View | str = field(default_factory=str)
     xres: int = 512
     yres: int = 512
     file_mtime: float = field(init=False, default=0.0)
@@ -268,8 +267,8 @@ class SurfaceConfig:
         ValueError: If neither file nor primitives are provided.
     """
 
-    file: Union[str, Path] = ""
-    primitives: List[pr.Primitive] = field(default_factory=list)
+    file: str | Path = ""
+    primitives: list[pr.Primitive] = field(default_factory=list)
     basis: str = "u"
     file_mtime: float = field(init=False, default=0.0)
 
@@ -341,10 +340,10 @@ class Settings:
     time_zone: int = field(default=120)
     orientation: float = field(default=0)
     site_elevation: float = field(default=100)
-    sensor_sky_matrix: List[str] = field(
+    sensor_sky_matrix: list[str] = field(
         default_factory=lambda: ["-ab", "6", "-ad", "8192", "-lw", "5e-5"]
     )
-    sensor_sun_matrix: List[str] = field(
+    sensor_sun_matrix: list[str] = field(
         default_factory=lambda: [
             "-ab",
             "1",
@@ -358,7 +357,7 @@ class Settings:
             "0",
         ]
     )
-    view_sun_matrix: List[str] = field(
+    view_sun_matrix: list[str] = field(
         default_factory=lambda: [
             "-ab",
             "1",
@@ -372,16 +371,16 @@ class Settings:
             "0",
         ]
     )
-    view_sky_matrix: List[str] = field(
+    view_sky_matrix: list[str] = field(
         default_factory=lambda: ["-ab", "6", "-ad", "8192", "-lw", "5e-5"]
     )
-    daylight_matrix: List[str] = field(
+    daylight_matrix: list[str] = field(
         default_factory=lambda: ["-ab", "2", "-c", "5000"]
     )
-    sensor_window_matrix: List[str] = field(
+    sensor_window_matrix: list[str] = field(
         default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
     )
-    surface_window_matrix: List[str] = field(
+    surface_window_matrix: list[str] = field(
         default_factory=lambda: [
             "-ab",
             "5",
@@ -393,10 +392,10 @@ class Settings:
             "10000",
         ]
     )
-    view_window_matrix: List[str] = field(
+    view_window_matrix: list[str] = field(
         default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
     )
-    files_mtime: List[float] = field(init=False, default_factory=list)
+    files_mtime: list[float] = field(init=False, default_factory=list)
 
     def __post_init__(self):
         if self.wea_file != "":
@@ -419,10 +418,10 @@ class Model:
 
     materials: "MaterialConfig"
     scene: "SceneConfig" = field(default_factory=SceneConfig)
-    windows: Dict[str, "WindowConfig"] = field(default_factory=dict)
-    sensors: Dict[str, "SensorConfig"] = field(default_factory=dict)
-    views: Dict[str, "ViewConfig"] = field(default_factory=dict)
-    surfaces: Dict[str, "SurfaceConfig"] = field(default_factory=dict)
+    windows: dict[str, "WindowConfig"] = field(default_factory=dict)
+    sensors: dict[str, "SensorConfig"] = field(default_factory=dict)
+    views: dict[str, "ViewConfig"] = field(default_factory=dict)
+    surfaces: dict[str, "SurfaceConfig"] = field(default_factory=dict)
 
     # Make Path() out of all path strings
     def __post_init__(self):
@@ -522,7 +521,7 @@ class WorkflowConfig:
         self.hash_str = hashlib.md5(str(self.__dict__).encode()).hexdigest()[:16]
 
     @staticmethod
-    def from_dict(obj: Dict[str, Any]) -> "WorkflowConfig":
+    def from_dict(obj: dict[str, Any]) -> "WorkflowConfig":
         """Generate a WorkflowConfig object from a dictionary.
         Args:
             obj: A dictionary of workflow configuration.
@@ -662,9 +661,9 @@ class PhaseMethod:
 
     def get_sky_matrix(
         self,
-        time: Union[datetime, List[datetime]],
-        dni: Union[float, List[float]],
-        dhi: Union[float, List[float]],
+        time: datetime | list[datetime],
+        dni: float | list[float],
+        dhi: float | list[float],
         solar_spectrum: bool = False,
     ) -> np.ndarray:
         """Generates a sky matrix based on the time, Direct Normal Irradiance (DNI), and
@@ -941,7 +940,7 @@ class ThreePhaseMethod(PhaseMethod):
                     stdin=config.model.materials.bytes + config.model.scene.bytes,
                 )
             )
-        self.window_senders: Dict[str, SurfaceSender] = {}
+        self.window_senders: dict[str, SurfaceSender] = {}
         self.window_receivers = {}
         self.window_bsdfs = {}
         self.daylight_matrices = {}
@@ -1081,7 +1080,7 @@ class ThreePhaseMethod(PhaseMethod):
     def calculate_sensor(
         self,
         sensor: str,
-        bsdf: Dict[str, str],
+        bsdf: dict[str, str],
         time: datetime,
         dni: float,
         dhi: float,
@@ -1202,12 +1201,12 @@ class ThreePhaseMethod(PhaseMethod):
     def calculate_surface(
         self,
         surface: str,
-        bsdf: Dict[str, str],
+        bsdf: dict[str, str],
         time: datetime,
         dni: float,
         dhi: float,
         solar_spectrum: bool = False,
-        sky_matrix: Optional[np.ndarray] = None,
+        sky_matrix: None | np.ndarray = None,
     ) -> np.ndarray:
         weights = [47.4, 119.9, 11.6]
         if solar_spectrum:
@@ -1231,12 +1230,12 @@ class ThreePhaseMethod(PhaseMethod):
     def calculate_edgps(
         self,
         view: str,
-        bsdf: Dict[str, str],
+        bsdf: dict[str, str],
         time: datetime,
         dni: float,
         dhi: float,
         ambient_bounce: int = 0,
-        save_hdr: Optional[Union[str, Path]] = None,
+        save_hdr: None | str | Path = None,
     ) -> tuple[float, float]:
         """Calculate enhanced simplified daylight glare probability (EDGPs) for a view.
 
@@ -1330,12 +1329,12 @@ class FivePhaseMethod(PhaseMethod):
         blacked_out_octree: Path to the octree with blacked-out surfaces.
         vmap_oct: Path to the vmap octree.
         cdmap_oct: Path to the cdmap octree.
-        window_senders: Dictionary of window sender objects.
-        window_receivers: Dictionary of window receiver objects.
-        window_bsdfs: Dictionary of window BSDFs.
-        view_window_matrices: Dictionary of view window matrices.
-        sensor_window_matrices: Dictionary of sensor window matrices.
-        daylight_matrices: Dictionary of daylight matrices.
+        window_senders: dictionary of window sender objects.
+        window_receivers: dictionary of window receiver objects.
+        window_bsdfs: dictionary of window BSDFs.
+        view_window_matrices: dictionary of view window matrices.
+        sensor_window_matrices: dictionary of sensor window matrices.
+        daylight_matrices: dictionary of daylight matrices.
         direct_sun_matrix: Direct sun matrix.
     """
 
@@ -1364,20 +1363,20 @@ class FivePhaseMethod(PhaseMethod):
         self.blacked_out_octree: Path = self.octdir / f"{random_string(5)}.oct"
         self.vmap_oct: Path = self.octdir / f"vmap_{random_string(5)}.oct"
         self.cdmap_oct: Path = self.octdir / f"cdmap_{random_string(5)}.oct"
-        self.window_senders: Dict[str, SurfaceSender] = {}
-        self.window_receivers: Dict[str, SurfaceReceiver] = {}
-        self.window_bsdfs: Dict[str, np.ndarray] = {}
-        self.view_window_matrices: Dict[str, Matrix] = {}
-        self.sensor_window_matrices: Dict[str, Matrix] = {}
-        self.daylight_matrices: Dict[str, Matrix] = {}
-        self.view_window_direct_matrices: Dict[str, Matrix] = {}
-        self.sensor_window_direct_matrices: Dict[str, Matrix] = {}
-        self.daylight_direct_matrices: Dict[str, Matrix] = {}
-        self.sensor_sun_direct_matrices: Dict[str, SunMatrix] = {}
-        self.view_sun_direct_matrices: Dict[str, SunMatrix] = {}
-        self.view_sun_direct_illuminance_matrices: Dict[str, SunMatrix] = {}
-        self.vmap: Dict[str, np.ndarray] = {}
-        self.cdmap: Dict[str, np.ndarray] = {}
+        self.window_senders: dict[str, SurfaceSender] = {}
+        self.window_receivers: dict[str, SurfaceReceiver] = {}
+        self.window_bsdfs: dict[str, np.ndarray] = {}
+        self.view_window_matrices: dict[str, Matrix] = {}
+        self.sensor_window_matrices: dict[str, Matrix] = {}
+        self.daylight_matrices: dict[str, Matrix] = {}
+        self.view_window_direct_matrices: dict[str, Matrix] = {}
+        self.sensor_window_direct_matrices: dict[str, Matrix] = {}
+        self.daylight_direct_matrices: dict[str, Matrix] = {}
+        self.sensor_sun_direct_matrices: dict[str, SunMatrix] = {}
+        self.view_sun_direct_matrices: dict[str, SunMatrix] = {}
+        self.view_sun_direct_illuminance_matrices: dict[str, SunMatrix] = {}
+        self.vmap: dict[str, np.ndarray] = {}
+        self.cdmap: dict[str, np.ndarray] = {}
         self.direct_sun_matrix: np.ndarray = self.get_sky_matrix_from_wea(
             mfactor=int(self.config.settings.sun_basis[-1]),
             onesun=True,

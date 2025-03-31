@@ -55,8 +55,8 @@ class Layer:
     emissivity_back: float
     ir_transmittance: float
     rgb: None | PaneRGB
-    fabric_xml: None | bytes
-    shading_material: None | pr.ShadingMaterial
+    shading_material: None | pr.ShadingMaterial = None
+    fabric_xml: None | bytes = None
     top_opening_multiplier: float = 0
     bottom_opening_multiplier: float = 0
     left_side_opening_multiplier: float = 0
@@ -304,6 +304,7 @@ def generate_blinds_xml(
     r_vis_spec: float,
     r_ir: float,
     nproc: int,
+    nsamp: int,
 ):
     material_solar = pr.ShadingMaterial(r_sol_diff, r_sol_spec, 0)
     material_visible = pr.ShadingMaterial(r_vis_diff, r_vis_spec, 0)
@@ -319,8 +320,8 @@ def generate_blinds_xml(
     sol_blinds = pr.generate_blinds(material_solar, geom)
     vis_blinds = pr.generate_blinds(material_visible, geom)
     ir_blinds = pr.generate_blinds(material_ir, geom)
-    sol_results = pr.generate_bsdf(sol_blinds, nproc=nproc, nsamp=5)
-    vis_results = pr.generate_bsdf(vis_blinds, nproc=nproc, nsamp=5)
+    sol_results = pr.generate_bsdf(sol_blinds, nproc=nproc, nsamp=nsamp)
+    vis_results = pr.generate_bsdf(vis_blinds, nproc=nproc, nsamp=nsamp)
     ir_results = pr.generate_bsdf(ir_blinds, basis="u")
     return pr.generate_xml(
         sol_results,
@@ -351,6 +352,7 @@ def create_glazing_system(
     layer_inputs: list[LayerInput],
     gaps: None | list[Gap] = None,
     nproc: int = 1,
+    nsamp: int = 2000,
 ) -> GlazingSystem:
     """Create a glazing system from a list of layers and gaps.
 
@@ -446,6 +448,7 @@ def create_glazing_system(
                     rf_vis_spec,
                     rf_ir,
                     nproc,
+                    nsamp,
                 )  # meters
                 # blinds_index = idx
                 real_product_data = pwc.parse_bsdf_xml_string(xml)
@@ -633,7 +636,18 @@ def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> None | pr.Primitiv
         ]
         real_arg = [0, 0, 0, 0, 0, 0, 0, 0, 0]
     elif len(panes) == 3:
-        str_arg = ["sr_red", "sr_grn", "sr_blu", "st_red", "st_grn", "st_blu", "0", "0", "0", "glass3.cal"]
+        str_arg = [
+            "sr_red",
+            "sr_grn",
+            "sr_blu",
+            "st_red",
+            "st_grn",
+            "st_blu",
+            "0",
+            "0",
+            "0",
+            "glass3.cal",
+        ]
         if panes[2].coated_side == "back":
             rfspc, gfspc, bfspc = panes[2].coated_rgb
         else:
@@ -642,11 +656,30 @@ def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> None | pr.Primitiv
             rfspc, gfspc, bfspc = panes[0].glass_rgb
         else:
             rfspc, gfspc, bfspc = panes[0].coated_rgb
-        trans_rgb = []
-        for i in range(3):
-            trans_rgb.append(panes[0].trans_rgb[i] * panes[1].trans_rgb[i] * panes[2].trans_rgb[i])
-        rtspc, gtspc, btspc = trans_rgb
-        real_arg = [18, 0, 0, 0, 0, 0, 0, 0, 0, 0, rfspc, gfspc, bfspc, rbspc, gbspc, bbspc, rtspc, gtspc, btspc]
+        rtspc = panes[0].trans_rgb[0] * panes[1].trans_rgb[0] * panes[2].trans_rgb[0]
+        gtspc = panes[0].trans_rgb[1] * panes[1].trans_rgb[1] * panes[2].trans_rgb[1]
+        btspc = panes[0].trans_rgb[2] * panes[1].trans_rgb[2] * panes[2].trans_rgb[2]
+        real_arg = [
+            18,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            rfspc,
+            gfspc,
+            bfspc,
+            rbspc,
+            gbspc,
+            bbspc,
+            rtspc,
+            gtspc,
+            btspc,
+        ]
     else:
         print("At most three pane supported")
         return None

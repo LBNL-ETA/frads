@@ -532,7 +532,7 @@ def parse_window_material_glazing(
     default_tmit = 0.6
     identifier = name.replace(" ", "_")
     if material.optical_data_type.value.lower() == "bsdf":
-        tmit = 1.
+        tmit = 1.0
     else:
         tmit = material.visible_transmittance_at_normal_incidence or default_tmit
     tmis = tmit2tmis(tmit)

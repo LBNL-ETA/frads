@@ -397,7 +397,7 @@ def gen_port_prims_from_window_ncp(
     all_ports = gen_ports_from_window_ncp(wplg, nplgs)
     port_prims = []
     for idx, plg in enumerate(all_ports):
-        new_prim = utils.polygon2prim(plg, "port", f"portf{idx+1}")
+        new_prim = utils.polygon2prim(plg, "port", f"portf{idx + 1}")
         logger.debug(str(new_prim))
         port_prims.append(new_prim)
     return port_prims
@@ -418,7 +418,7 @@ def gen_port_prims_from_window(
     all_ports = scaled_window.extrude(extrude_vector)[1:]
     port_prims = []
     for idx, plg in enumerate(all_ports):
-        new_prim = utils.polygon2prim(plg, "port", f"portf{idx+1}")
+        new_prim = utils.polygon2prim(plg, "port", f"portf{idx + 1}")
         logger.debug(str(new_prim))
         port_prims.append(new_prim)
     return port_prims

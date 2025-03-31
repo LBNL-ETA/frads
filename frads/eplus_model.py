@@ -68,8 +68,8 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                     "number_of_gases_in_mixture": len(gap.gas),
                 }
                 for idx, gas in enumerate(gap.gas):
-                    gas_dict[f"gas_{idx+1}_type"] = gas.gas.capitalize()
-                    gas_dict[f"gas_{idx+1}_fraction"] = gas.ratio
+                    gas_dict[f"gas_{idx + 1}_type"] = gas.gas.capitalize()
+                    gas_dict[f"gas_{idx + 1}_fraction"] = gas.ratio
                 gap_inputs.append(epm.WindowMaterialGasMixture.model_validate(gas_dict))
 
         layer_inputs: list[epmodel.ConstructionComplexFenestrationStateLayerInput] = []

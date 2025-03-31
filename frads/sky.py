@@ -69,7 +69,7 @@ class WeaData(NamedTuple):
     cc: float = 0
 
     def __str__(self) -> str:
-        return f"{self.time.month} {self.time.day} {self.time.hour+self.time.minute/60} {self.dni} {self.dhi}"
+        return f"{self.time.month} {self.time.day} {self.time.hour + self.time.minute / 60} {self.dni} {self.dhi}"
 
     def dt_str(self) -> str:
         return f"{self.time.month:02d}{self.time.day:02d}_{self.time.hour:02d}{self.time.minute:02d}"

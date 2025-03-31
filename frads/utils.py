@@ -1,6 +1,7 @@
 """
 This module contains all utility functions used throughout frads.
 """
+
 from datetime import datetime, timedelta
 from io import TextIOWrapper
 import logging
@@ -428,8 +429,8 @@ def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> List[List[
     imin, imax, jmin, jmax, _, _ = polygon.extreme
     xlen_spc = (imax - imin) / spacing
     ylen_spc = (jmax - jmin) / spacing
-    xstart = ((xlen_spc - int(xlen_spc) + 1)) * spacing / 2
-    ystart = ((ylen_spc - int(ylen_spc) + 1)) * spacing / 2
+    xstart = (xlen_spc - int(xlen_spc) + 1) * spacing / 2
+    ystart = (ylen_spc - int(ylen_spc) + 1) * spacing / 2
     x0 = np.arange(imin, imax, spacing) + xstart
     y0 = np.arange(jmin, jmax, spacing) + ystart
     grid_dir = polygon.normal * -1
@@ -470,7 +471,7 @@ def gen_blinds(depth, width, height, spacing, angle, curve, movedown) -> str:
     slat_cmd = "!genblinds blindmaterial blinds "
     slat_cmd += f"{depth} {width} {height} {nslats} {angle} {curve}"
     slat_cmd += "| xform -rz -90 -rx -90 -t "
-    slat_cmd += f"{-width/2} {-height/2} {-movedown}\n"
+    slat_cmd += f"{-width / 2} {-height / 2} {-movedown}\n"
     return slat_cmd
 
 
