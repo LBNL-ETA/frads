@@ -7,6 +7,7 @@ from pyenergyplus.dataset import ref_models
 import unittest
 
 class TestGlazingSystem(unittest.TestCase):
+
     @classmethod
     def setUpClass(cls):
         # Setup the resources directory - replace with your actual resources path
@@ -15,8 +16,12 @@ class TestGlazingSystem(unittest.TestCase):
     def setUp(self):
         # Create a new medium_office for each test - adjust based on how it's created in your tests
         self.medium_office = load_energyplus_model(ref_models["medium_office"])
-        self.glazing1_system = GlazingSystem.from_json("glazing1_system.json")
-        self.glazing_blinds_system = GlazingSystem.from_json("glazing_blinds_system.json")
+        glass_path = self.resources_dir / "CLEAR_3.DAT"
+        blinds_path = self.resources_dir / "igsdb_product_19732.json"
+        glass_layer = LayerInput(glass_path)
+        blinds_layer = LayerInput(blinds_path, slat_angle=45)
+        single_glaze_blinds = [glass_layer, blinds_layer]
+        self.glazing_blinds_system = create_glazing_system(name="gs1", layer_inputs=single_glaze_blinds, nproc=8, nsamp=5)
 
     def test_add_glazingsystem(self):
         self.medium_office.add_glazing_system(self.glazing1_system)
@@ -42,8 +47,8 @@ class TestGlazingSystem(unittest.TestCase):
 
     def test_add_blinds_geometry(self):
         self.medium_office.add_glazing_system(self.glazing_blinds_system)
-        epsetup = EnergyPlusSetup(self.medium_office, enable_radiance=True)
-        add_blinds_to_rmodels(epsetup, self.glazing_blinds_system)
+        epsetup = EnergyPlusSetup(self.medium_office, enable_radiance=True, nproc=8)
+        add_proxy_geometry_to_rmodels(epsetup, self.glazing_blinds_system)
 
 if __name__ == "__main__":
     unittest.main()
