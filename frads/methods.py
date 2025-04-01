@@ -8,7 +8,26 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from shutil import rmtree
 
-import frads as fr
+from frads.geom import Polygon, parse_polygon
+from frads.matrix import (
+    load_matrix,
+    SensorSender,
+    SurfaceSender,
+    SurfaceReceiver,
+    ViewSender,
+    SunReceiver,
+    SkyReceiver,
+    load_binary_matrix,
+    BASIS_DIMENSION,
+    parse_rad_header,
+    Matrix,
+    matrix_multiply_rgb,
+    SunMatrix,
+    to_sparse_matrix3,
+    sparse_matrix_multiply_rgb_vtds,
+)
+from frads.sky import parse_epw, parse_wea, WeaMetaData, WeaData, gen_perez_sky
+from frads.utils import random_string
 import numpy as np
 import pyradiance as pr
 from pyradiance import parse_view
@@ -59,7 +78,7 @@ class MatrixConfig:
 
     def __post_init__(self):
         if self.matrix_data is None:
-            self.matrix_data = fr.load_matrix(self.matrix_file)
+            self.matrix_data = load_matrix(self.matrix_file)
         elif isinstance(self.matrix_data, list):
             self.matrix_data = np.array(self.matrix_data)
 
@@ -132,7 +151,7 @@ class WindowConfig:
     file: str | Path = ""
     bytes: bytes = b""
     matrix_name: str = ""
-    polygon: None | fr.geom.Polygon = None
+    polygon: None | Polygon = None
     proxy_geometry: dict[str, bytes] = field(default_factory=dict)
     files_mtime: list[float] = field(init=False, default_factory=list)
 
@@ -544,29 +563,29 @@ class PhaseMethod:
         self.sensor_senders = {}
         self.surface_senders = {}
         for name, sensors in self.config.model.sensors.items():
-            self.sensor_senders[name] = fr.SensorSender(sensors.data)
+            self.sensor_senders[name] = SensorSender(sensors.data)
         for name, view in self.config.model.views.items():
-            self.view_senders[name] = fr.ViewSender(
+            self.view_senders[name] = ViewSender(
                 view.view, xres=view.xres, yres=view.yres
             )
         for name, surface in self.config.model.surfaces.items():
-            self.surface_senders[name] = fr.SurfaceSender(
+            self.surface_senders[name] = SurfaceSender(
                 surfaces=surface.primitives,
                 basis=surface.basis,
             )
 
         # Setup the sky receiver object
-        self.sky_receiver = fr.SkyReceiver(self.config.settings.sky_basis)
+        self.sky_receiver = SkyReceiver(self.config.settings.sky_basis)
 
         # Figure out the weather related stuff
         if self.config.settings.epw_file != "":
             with open(self.config.settings.epw_file) as f:
-                self.wea_metadata, self.wea_data = fr.sky.parse_epw(f.read())
+                self.wea_metadata, self.wea_data = parse_epw(f.read())
             self.wea_header = self.wea_metadata.wea_header()
             self.wea_str = self.wea_header + "\n".join(str(d) for d in self.wea_data)
         elif self.config.settings.wea_file != "":
             with open(self.config.settings.wea_file) as f:
-                self.wea_metadata, self.wea_data = fr.sky.parse_wea(f.read())
+                self.wea_metadata, self.wea_data = parse_wea(f.read())
             self.wea_header = self.wea_metadata.wea_header()
             self.wea_str = self.wea_header + "\n".join(str(d) for d in self.wea_data)
         else:
@@ -585,7 +604,7 @@ class PhaseMethod:
                 f"site_elevation {self.config.settings.site_elevation}\n"
                 f"weather_data_file_units 1\n"
             )
-            self.wea_metadata = fr.sky.WeaMetaData(
+            self.wea_metadata = WeaMetaData(
                 "city",
                 "country",
                 self.config.settings.latitude,
@@ -605,7 +624,7 @@ class PhaseMethod:
         self.mfile = (self.mtxdir / self.config.hash_str).with_suffix(".npz")
 
         # Generate a base octree
-        self.octree = self.octdir / f"{fr.utils.random_string(5)}.oct"
+        self.octree = self.octdir / f"{random_string(5)}.oct"
 
     def __enter__(self):
         """
@@ -660,9 +679,9 @@ class PhaseMethod:
             and isinstance(dni, (float, int))
             and isinstance(dhi, (float, int))
         ):
-            _wea += str(fr.sky.WeaData(time, dni, dhi))
+            _wea += str(WeaData(time, dni, dhi))
         elif isinstance(time, list) and isinstance(dni, list) and isinstance(dhi, list):
-            rows = [str(fr.sky.WeaData(t, n, d)) for t, n, d in zip(time, dni, dhi)]
+            rows = [str(WeaData(t, n, d)) for t, n, d in zip(time, dni, dhi)]
             _wea += "\n".join(rows)
             _ncols = len(time)
         else:
@@ -676,9 +695,9 @@ class PhaseMethod:
             header=False,
             solar_radiance=solar_spectrum,
         )
-        return fr.load_binary_matrix(
+        return load_binary_matrix(
             smx,
-            nrows=fr.matrix.BASIS_DIMENSION[self.config.settings.sky_basis] + 1,
+            nrows=BASIS_DIMENSION[self.config.settings.sky_basis] + 1,
             ncols=_ncols,
             ncomp=3,
             dtype="d",
@@ -707,8 +726,8 @@ class PhaseMethod:
             daylight_hours_only=True,
             mfactor=mfactor,
         )
-        _nrows, _ncols, _ncomp, _dtype = fr.utils.parse_rad_header(pr.getinfo(_matrix).decode())
-        return fr.matrix.load_binary_matrix(
+        _nrows, _ncols, _ncomp, _dtype = parse_rad_header(pr.getinfo(_matrix).decode())
+        return load_binary_matrix(
             _matrix,
             nrows=_nrows,
             ncols=_ncols,
@@ -745,11 +764,11 @@ class TwoPhaseMethod(PhaseMethod):
         self.view_sky_matrices = {}
         self.sensor_sky_matrices = {}
         for vs in self.view_senders:
-            self.view_sky_matrices[vs] = fr.Matrix(
+            self.view_sky_matrices[vs] = Matrix(
                 self.view_senders[vs], [self.sky_receiver], self.octree
             )
         for ss in self.sensor_senders:
-            self.sensor_sky_matrices[ss] = fr.Matrix(
+            self.sensor_sky_matrices[ss] = Matrix(
                 self.sensor_senders[ss], [self.sky_receiver], self.octree
             )
 
@@ -799,7 +818,7 @@ class TwoPhaseMethod(PhaseMethod):
             A image as a numpy array
         """
         sky_matrix = self.get_sky_matrix(time, dni, dhi)
-        return fr.matrix_multiply_rgb(self.view_sky_matrices[view].array, sky_matrix)
+        return matrix_multiply_rgb(self.view_sky_matrices[view].array, sky_matrix)
 
     def calculate_sensor(
         self, sensor: str, time: datetime, dni: float, dhi: float
@@ -815,7 +834,7 @@ class TwoPhaseMethod(PhaseMethod):
             Sensor illuminance value
         """
         sky_matrix = self.get_sky_matrix(time, dni, dhi)
-        return fr.matrix_multiply_rgb(
+        return matrix_multiply_rgb(
             self.sensor_sky_matrices[sensor].array,
             sky_matrix,
             weights=[47.4, 119.9, 11.6],
@@ -852,7 +871,7 @@ class TwoPhaseMethod(PhaseMethod):
         for idx in range(0, sky_matrix.shape[1], chunksize):
             end = min(idx + chunksize, sky_matrix.shape[1])
             _chunksize = end - idx
-            res = fr.matrix_multiply_rgb(
+            res = matrix_multiply_rgb(
                 self.view_sky_matrices[view].array,
                 sky_matrix[:, idx:end, :],
             )
@@ -873,7 +892,7 @@ class TwoPhaseMethod(PhaseMethod):
         """
         if self.wea_data is None:
             raise ValueError("No wea data available")
-        return fr.matrix_multiply_rgb(
+        return matrix_multiply_rgb(
             self.sensor_sky_matrices[sensor].array,
             self.get_sky_matrix_from_wea(int(self.config.settings.sky_basis[-1])),
             weights=[47.4, 119.9, 11.6],
@@ -915,7 +934,7 @@ class ThreePhaseMethod(PhaseMethod):
                     stdin=config.model.materials.bytes + config.model.scene.bytes,
                 )
             )
-        self.window_senders: dict[str, fr.SurfaceSender] = {}
+        self.window_senders: dict[str, SurfaceSender] = {}
         self.window_receivers = {}
         self.window_bsdfs = {}
         self.daylight_matrices = {}
@@ -927,7 +946,7 @@ class ThreePhaseMethod(PhaseMethod):
                 ].matrix_data
                 window_basis = [
                     k
-                    for k, v in fr.matrix.BASIS_DIMENSION.items()
+                    for k, v in BASIS_DIMENSION.items()
                     if v == self.window_bsdfs[_name].shape[0]
                 ][0]
             else:
@@ -936,17 +955,17 @@ class ThreePhaseMethod(PhaseMethod):
             if _name in self.window_bsdfs:
                 window_basis = [
                     k
-                    for k, v in fr.matrix.BASIS_DIMENSION.items()
+                    for k, v in BASIS_DIMENSION.items()
                     if v == self.window_bsdfs[_name].shape[0]
                 ][0]
             else:
                 window_basis = self.config.settings.window_basis
-            self.window_receivers[_name] = fr.SurfaceReceiver(
+            self.window_receivers[_name] = SurfaceReceiver(
                 _prims,
                 window_basis,
             )
-            self.window_senders[_name] = fr.SurfaceSender(_prims, window_basis)
-            self.daylight_matrices[_name] = fr.Matrix(
+            self.window_senders[_name] = SurfaceSender(_prims, window_basis)
+            self.daylight_matrices[_name] = Matrix(
                 self.window_senders[_name],
                 [self.sky_receiver],
                 self.octree,
@@ -955,15 +974,15 @@ class ThreePhaseMethod(PhaseMethod):
         self.sensor_window_matrices = {}
         self.surface_window_matrices = {}
         for _v, sender in self.view_senders.items():
-            self.view_window_matrices[_v] = fr.Matrix(
+            self.view_window_matrices[_v] = Matrix(
                 sender, list(self.window_receivers.values()), self.octree
             )
         for _s, sender in self.sensor_senders.items():
-            self.sensor_window_matrices[_s] = fr.Matrix(
+            self.sensor_window_matrices[_s] = Matrix(
                 sender, list(self.window_receivers.values()), self.octree
             )
         for _s, sender in self.surface_senders.items():
-            self.surface_window_matrices[_s] = fr.Matrix(
+            self.surface_window_matrices[_s] = Matrix(
                 sender, list(self.window_receivers.values()), self.octree
             )
 
@@ -1043,7 +1062,7 @@ class ThreePhaseMethod(PhaseMethod):
         for idx, _name in enumerate(self.config.model.windows):
             _bsdf = bsdf[idx] if isinstance(bsdf, list) else bsdf
             res.append(
-                fr.matrix_multiply_rgb(
+                matrix_multiply_rgb(
                     self.view_window_matrices[view].array[idx],
                     _bsdf,
                     self.daylight_matrices[_name].array,
@@ -1079,7 +1098,7 @@ class ThreePhaseMethod(PhaseMethod):
         for idx, _name in enumerate(self.config.model.windows):
             _bsdf = self.config.model.materials.matrices[bsdf[_name]].matrix_data
             res.append(
-                fr.matrix_multiply_rgb(
+                matrix_multiply_rgb(
                     self.sensor_window_matrices[sensor].array[idx],
                     _bsdf,
                     self.daylight_matrices[_name].array,
@@ -1127,7 +1146,7 @@ class ThreePhaseMethod(PhaseMethod):
                 )
             )
             for widx, _name in enumerate(self.config.model.windows):
-                res += fr.matrix_multiply_rgb(
+                res += matrix_multiply_rgb(
                     self.view_window_matrices[view].array[widx],
                     self.window_bsdfs[_name],
                     self.daylight_matrices[_name].array,
@@ -1164,7 +1183,7 @@ class ThreePhaseMethod(PhaseMethod):
         )
         res = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
         for idx, _name in enumerate(self.config.model.windows):
-            res += fr.matrix_multiply_rgb(
+            res += matrix_multiply_rgb(
                 self.sensor_window_matrices[sensor].array[idx],
                 self.window_bsdfs[_name],
                 self.daylight_matrices[_name].array,
@@ -1193,7 +1212,7 @@ class ThreePhaseMethod(PhaseMethod):
         res = np.zeros((self.surface_senders[surface].yres, sky_matrix.shape[1]))
         for idx, _name in enumerate(self.config.model.windows):
             _bsdf = self.config.model.materials.matrices[bsdf[_name]].matrix_data
-            res += fr.matrix_multiply_rgb(
+            res += matrix_multiply_rgb(
                 self.surface_window_matrices[surface].array[idx],
                 _bsdf,
                 self.daylight_matrices[_name].array,
@@ -1228,7 +1247,7 @@ class ThreePhaseMethod(PhaseMethod):
         # generate octree with bsdf
         stdins = []
         stdins.append(
-            fr.sky.gen_perez_sky(
+            gen_perez_sky(
                 time,
                 self.wea_metadata.latitude,
                 self.wea_metadata.longitude,
@@ -1247,7 +1266,7 @@ class ThreePhaseMethod(PhaseMethod):
                 for prim in _pgs[sname]:
                     stdins.append(prim.bytes)
 
-        octree = f"{fr.utils.random_string(5)}.oct"
+        octree = f"{random_string(5)}.oct"
         with open(octree, "wb") as f:
             f.write(pr.oconv(stdin=b"".join(stdins), octree=self.octree))
 
@@ -1335,21 +1354,21 @@ class FivePhaseMethod(PhaseMethod):
                     stdin=(config.model.materials.bytes + config.model.scene.bytes),
                 )
             )
-        self.blacked_out_octree: Path = self.octdir / f"{fr.utilsrandom_string(5)}.oct"
-        self.vmap_oct: Path = self.octdir / f"vmap_{fr.utilsrandom_string(5)}.oct"
-        self.cdmap_oct: Path = self.octdir / f"cdmap_{fr.utilsrandom_string(5)}.oct"
-        self.window_senders: dict[str, fr.SurfaceSender] = {}
-        self.window_receivers: dict[str, fr.SurfaceReceiver] = {}
+        self.blacked_out_octree: Path = self.octdir / f"{random_string(5)}.oct"
+        self.vmap_oct: Path = self.octdir / f"vmap_{random_string(5)}.oct"
+        self.cdmap_oct: Path = self.octdir / f"cdmap_{random_string(5)}.oct"
+        self.window_senders: dict[str, SurfaceSender] = {}
+        self.window_receivers: dict[str, SurfaceReceiver] = {}
         self.window_bsdfs: dict[str, np.ndarray] = {}
-        self.view_window_matrices: dict[str, fr.Matrix] = {}
-        self.sensor_window_matrices: dict[str, fr.Matrix] = {}
-        self.daylight_matrices: dict[str, fr.Matrix] = {}
-        self.view_window_direct_matrices: dict[str, fr.Matrix] = {}
-        self.sensor_window_direct_matrices: dict[str, fr.Matrix] = {}
-        self.daylight_direct_matrices: dict[str, fr.Matrix] = {}
-        self.sensor_sun_direct_matrices: dict[str, fr.SunMatrix] = {}
-        self.view_sun_direct_matrices: dict[str, fr.SunMatrix] = {}
-        self.view_sun_direct_illuminance_matrices: dict[str, fr.SunMatrix] = {}
+        self.view_window_matrices: dict[str, Matrix] = {}
+        self.sensor_window_matrices: dict[str, Matrix] = {}
+        self.daylight_matrices: dict[str, Matrix] = {}
+        self.view_window_direct_matrices: dict[str, Matrix] = {}
+        self.sensor_window_direct_matrices: dict[str, Matrix] = {}
+        self.daylight_direct_matrices: dict[str, Matrix] = {}
+        self.sensor_sun_direct_matrices: dict[str, SunMatrix] = {}
+        self.view_sun_direct_matrices: dict[str, SunMatrix] = {}
+        self.view_sun_direct_illuminance_matrices: dict[str, SunMatrix] = {}
         self.vmap: dict[str, np.ndarray] = {}
         self.cdmap: dict[str, np.ndarray] = {}
         self.direct_sun_matrix: np.ndarray = self.get_sky_matrix_from_wea(
@@ -1359,7 +1378,7 @@ class FivePhaseMethod(PhaseMethod):
         )
         self._prepare_window_objects()
         self._prepare_sun_receivers()
-        self.direct_sun_matrix = fr.matrix.to_sparse_matrix3(self.direct_sun_matrix)
+        self.direct_sun_matrix = to_sparse_matrix3(self.direct_sun_matrix)
         self._gen_blacked_out_octree()
         self._prepare_mapping_octrees()
         self._prepare_view_sender_objects()
@@ -1388,10 +1407,10 @@ class FivePhaseMethod(PhaseMethod):
     def _prepare_window_objects(self):
         for _name, window in self.config.model.windows.items():
             _prims = pr.parse_primitive(window.bytes)
-            self.window_receivers[_name] = fr.SurfaceReceiver(
+            self.window_receivers[_name] = SurfaceReceiver(
                 _prims, self.config.settings.window_basis
             )
-            self.window_senders[_name] = fr.SurfaceSender(
+            self.window_senders[_name] = SurfaceSender(
                 _prims, self.config.settings.window_basis
             )
             if window.matrix_name != "":
@@ -1402,12 +1421,12 @@ class FivePhaseMethod(PhaseMethod):
                 self.window_bsdfs[_name] = np.array(window.matrix_data)
             else:
                 raise ValueError("No matrix data or file available", _name)
-            self.daylight_matrices[_name] = fr.Matrix(
+            self.daylight_matrices[_name] = Matrix(
                 self.window_senders[_name],
                 [self.sky_receiver],
                 self.octree,
             )
-            self.daylight_direct_matrices[_name] = fr.Matrix(
+            self.daylight_direct_matrices[_name] = Matrix(
                 self.window_senders[_name],
                 [self.sky_receiver],
                 self.blacked_out_octree,
@@ -1415,7 +1434,7 @@ class FivePhaseMethod(PhaseMethod):
 
     def _prepare_view_sender_objects(self):
         for _v, sender in self.view_senders.items():
-            self.vmap[_v] = fr.matrix.load_binary_matrix(
+            self.vmap[_v] = load_binary_matrix(
                 pr.rtrace(
                     sender.content,
                     params=["-ffd", "-av", ".31831", ".31831", ".31831"],
@@ -1427,7 +1446,7 @@ class FivePhaseMethod(PhaseMethod):
                 dtype="d",
                 header=True,
             )
-            self.cdmap[_v] = fr.matrix.load_binary_matrix(
+            self.cdmap[_v] = load_binary_matrix(
                 pr.rtrace(
                     sender.content,
                     params=["-ffd", "-av", ".31831", ".31831", ".31831"],
@@ -1439,58 +1458,58 @@ class FivePhaseMethod(PhaseMethod):
                 dtype="d",
                 header=True,
             )
-            self.view_window_matrices[_v] = fr.Matrix(
+            self.view_window_matrices[_v] = Matrix(
                 sender, list(self.window_receivers.values()), self.octree
             )
-            self.view_window_direct_matrices[_v] = fr.Matrix(
+            self.view_window_direct_matrices[_v] = Matrix(
                 sender,
                 list(self.window_receivers.values()),
                 self.blacked_out_octree,
             )
-            self.view_sun_direct_matrices[_v] = fr.SunMatrix(
+            self.view_sun_direct_matrices[_v] = SunMatrix(
                 sender, self.view_sun_receiver, self.blacked_out_octree
             )
-            self.view_sun_direct_illuminance_matrices[_v] = fr.SunMatrix(
+            self.view_sun_direct_illuminance_matrices[_v] = SunMatrix(
                 sender, self.view_sun_receiver, self.blacked_out_octree
             )
 
     def _prepare_sensor_sender_objects(self):
         for _s, sender in self.sensor_senders.items():
-            self.sensor_window_matrices[_s] = fr.Matrix(
+            self.sensor_window_matrices[_s] = Matrix(
                 sender, list(self.window_receivers.values()), self.octree
             )
-            self.sensor_window_direct_matrices[_s] = fr.Matrix(
+            self.sensor_window_direct_matrices[_s] = Matrix(
                 sender,
                 list(self.window_receivers.values()),
                 self.blacked_out_octree,
             )
-            self.sensor_sun_direct_matrices[_s] = fr.SunMatrix(
+            self.sensor_sun_direct_matrices[_s] = SunMatrix(
                 sender, self.sensor_sun_receiver, self.blacked_out_octree
             )
 
     def _prepare_sun_receivers(self):
         if self.config.settings.sun_culling:
             window_normals = [
-                fr.utils.parse_polygon(r.surfaces[0]).normal.tobytes()
+                parse_polygon(r.surfaces[0]).normal.tobytes()
                 for r in self.window_receivers.values()
             ]
             unique_window_normals = [np.frombuffer(arr) for arr in set(window_normals)]
-            self.sensor_sun_receiver = fr.SunReceiver(
+            self.sensor_sun_receiver = SunReceiver(
                 self.config.settings.sun_basis,
                 sun_matrix=self.direct_sun_matrix,
                 full_mod=True,
             )
-            self.view_sun_receiver = fr.SunReceiver(
+            self.view_sun_receiver = SunReceiver(
                 self.config.settings.sun_basis,
                 sun_matrix=self.direct_sun_matrix,
                 window_normals=unique_window_normals,
                 full_mod=False,
             )
         else:
-            self.sensor_sun_receiver = fr.SunReceiver(
+            self.sensor_sun_receiver = SunReceiver(
                 self.config.settings.sun_basis, full_mod=True
             )
-            self.view_sun_receiver = fr.SunReceiver(
+            self.view_sun_receiver = SunReceiver(
                 self.config.settings.sun_basis, full_mod=False
             )
 
@@ -1605,7 +1624,7 @@ class FivePhaseMethod(PhaseMethod):
         direct_sky_matrix = self.get_sky_matrix_from_wea(
             int(self.config.settings.sky_basis[-1]), sun_only=True
         )
-        direct_sky_matrix = fr.matrix.to_sparse_matrix3(direct_sky_matrix)
+        direct_sky_matrix = to_sparse_matrix3(direct_sky_matrix)
         logger.info("Step 2/2: Multiplying matrices...")
         chunksize = 300
         shape = (
@@ -1666,18 +1685,18 @@ class FivePhaseMethod(PhaseMethod):
         direct_sky_matrix = self.get_sky_matrix_from_wea(
             int(self.config.settings.sky_basis[-1]), sun_only=True
         )
-        direct_sky_matrix = fr.matrix.to_sparse_matrix3(direct_sky_matrix)
+        direct_sky_matrix = to_sparse_matrix3(direct_sky_matrix)
         res3 = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
         res3d = np.zeros((self.sensor_senders[sensor].yres, sky_matrix.shape[1]))
         for idx, _name in enumerate(self.config.model.windows):
-            res3 += fr.matrix_multiply_rgb(
+            res3 += matrix_multiply_rgb(
                 self.sensor_window_matrices[sensor].array[idx],
                 self.window_bsdfs[_name],
                 self.daylight_matrices[_name].array,
                 sky_matrix,
                 weights=[47.4, 119.9, 11.6],
             )
-            res3d += fr.matrix.sparse_matrix_multiply_rgb_vtds(
+            res3d += sparse_matrix_multiply_rgb_vtds(
                 self.sensor_window_direct_matrices[sensor].array[idx],
                 self.window_bsdfs[_name],
                 self.daylight_direct_matrices[_name].array,

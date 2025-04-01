@@ -19,7 +19,6 @@ import numpy as np
 from pyenergyplus.api import EnergyPlusAPI
 
 
-
 def ep_datetime_parser(inp: str):
     """Parse date and time from EnergyPlus output.
 
@@ -86,7 +85,9 @@ class EnergyPlusSetup:
                 k: fr.WorkflowConfig.from_dict(v) for k, v in self.rmodels.items()
             }
             # Default to Three-Phase Method
-            self.rworkflows = {k: fr.ThreePhaseMethod(v) for k, v in self.rconfigs.items()}
+            self.rworkflows = {
+                k: fr.ThreePhaseMethod(v) for k, v in self.rconfigs.items()
+            }
             for v in self.rworkflows.values():
                 v.config.settings.save_matrices = True
                 v.config.settings.num_processors = nproc
@@ -672,10 +673,8 @@ class EnergyPlusSetup:
     def add_proxy_geometry(self, gs: GlazingSystem):
         for zone_name, zone in self.rworkflows.items():
             for window_name, window in zone.config.model.windows.items():
-                geom = fr.window.get_proxy_geometry(window.polygon, self.glazing_blinds_system)
-                window.proxy_geometry[self.glazing_blinds_system.name] = b"\n".join(geom)
-
-
+                geom = fr.window.get_proxy_geometry(window.polygon, gs)
+                window.proxy_geometry[gs.name] = b"\n".join(geom)
 
 
 def load_idf(fpath: str | Path) -> dict:
@@ -747,5 +746,3 @@ def load_energyplus_model(fpath: str | Path) -> EnergyPlusModel:
     else:
         raise ValueError(f"File {fpath} is not an IDF or epJSON file.")
     return EnergyPlusModel.model_validate(json_data)
-
-

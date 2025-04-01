@@ -10,8 +10,9 @@ from frads.geom import (
     angle_between,
     Polygon,
     polygon_center,
+    polygon_primitive,
+    gen_grid,
 )
-from frads.utils import polygon_primitive, gen_grid
 from frads.eplus_model import EnergyPlusModel
 from epmodel.epmodel import (
     BuildingSurfaceDetailed,
@@ -891,7 +892,7 @@ def epmodel_to_radmodel(
     ep_model: EnergyPlusModel,
     epw_file: None | str = None,
     add_views: bool = True,
-    views: None | dict[str, dict[str, pr.View]] = None
+    views: None | dict[str, dict[str, pr.View]] = None,
 ) -> dict:
     """Convert EnergyPlus model to Radiance models where each zone is a separate model.
 

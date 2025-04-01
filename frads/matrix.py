@@ -7,10 +7,11 @@ import gc
 import logging
 import os
 from pathlib import Path
+import re
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Optional, Union
 
-import frads as fr
+from frads.geom import parse_polygon, polygon_primitive, Polygon
+from frads.utils import random_string
 import numpy as np
 import pyradiance as pr
 from scipy.sparse import csr_matrix, lil_matrix
@@ -45,7 +46,7 @@ class SensorSender:
         yres: Number of sensors
     """
 
-    def __init__(self, sensors: List[List[float]], ray_count: int = 1):
+    def __init__(self, sensors: list[list[float]], ray_count: int = 1):
         """Initialize a sender object with a list of sensors:
 
         Args:
@@ -126,7 +127,7 @@ class SurfaceSender:
 
     def __init__(
         self,
-        surfaces: List[pr.Primitive],
+        surfaces: list[pr.Primitive],
         basis: str,
         left_hand: bool = False,
         offset: bool = None,
@@ -184,7 +185,7 @@ class SurfaceReceiver(Receiver):
 
     def __init__(
         self,
-        surfaces: List[pr.Primitive],
+        surfaces: list[pr.Primitive],
         basis: str,
         left_hand=False,
         offset=None,
@@ -244,8 +245,8 @@ class SunReceiver(Receiver):
     def __init__(
         self,
         basis: str,
-        sun_matrix: Optional[np.ndarray] = None,
-        window_normals: Optional[List[np.ndarray]] = None,
+        sun_matrix: None | np.ndarray = None,
+        window_normals: None | list[np.ndarray] = None,
         full_mod: bool = False,
     ):
         """Initialize a sun receiver.
@@ -300,10 +301,10 @@ class Matrix:
 
     def __init__(
         self,
-        sender: Union[SensorSender, ViewSender, SurfaceSender],
-        receivers: Union[List[SkyReceiver], List[SurfaceReceiver], List[SunReceiver]],
-        octree: Optional[str] = None,
-        surfaces: Optional[List[pr.Primitive]] = None,
+        sender: SensorSender | ViewSender | SurfaceSender,
+        receivers: list[SkyReceiver] | list[SurfaceReceiver] | list[SunReceiver],
+        octree: None | str = None,
+        surfaces: None | list[pr.Primitive] = None,
     ):
         """Initialize a matrix.
 
@@ -346,7 +347,7 @@ class Matrix:
 
     def generate(
         self,
-        params: List[str],
+        params: list[str],
         nproc: int = 1,
         sparse: bool = False,
         to_file: bool = False,
@@ -421,7 +422,7 @@ class Matrix:
             if memmap:
                 _dtype = np.float64 if self.dtype.startswith("d") else np.float32
                 self.array = np.memmap(
-                    f"{fr.utils.random_string(5)}.dat",
+                    f"{random_string(5)}.dat",
                     dtype=_dtype,
                     shape=(self.nrows, _ncols, self.ncomp),
                     order="F",
@@ -476,10 +477,10 @@ class SunMatrix(Matrix):
 
     def __init__(
         self,
-        sender: Union[SensorSender, ViewSender],
+        sender: SensorSender | ViewSender,
         receiver: SunReceiver,
-        octree: Optional[str],
-        surfaces: Optional[List[str]] = None,
+        octree: None | str,
+        surfaces: None | list[str] = None,
     ):
         if isinstance(sender, SurfaceSender):
             raise TypeError("SurfaceSender cannot be used with SunMatrix")
@@ -490,11 +491,11 @@ class SunMatrix(Matrix):
 
     def generate(
         self,
-        parameters: List[str],
+        parameters: list[str],
         nproc: int = 1,
         radmtx: bool = False,
         sparse: bool = False,
-    ) -> Optional[bytes]:
+    ) -> None | bytes:
         """Call rcontrib to generate a matrix and store it in memory
         as a numpy array.
 
@@ -582,7 +583,30 @@ class SunMatrix(Matrix):
             )
 
 
-def load_matrix(file: Union[bytes, str, Path], dtype: str = "float") -> np.ndarray:
+def parse_rad_header(header_str: str) -> tuple:
+    """Parse a Radiance matrix file header.
+
+    Args:
+        header_str: header as string
+    Returns:
+        A tuple contain nrow, ncol, ncomp, datatype
+    Raises:
+        ValueError: if any of NROWS NCOLS NCOMP FORMAT is not found.
+    """
+    compiled = re.compile(
+        r" NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ", flags=re.X
+    )
+    matches = compiled.findall(header_str)
+    if len(matches) != 4:
+        raise ValueError("Can't find one of the header entries.")
+    nrow = int([mat[0] for mat in matches if mat[0] != ""][0])
+    ncol = int([mat[1] for mat in matches if mat[1] != ""][0])
+    ncomp = int([mat[2] for mat in matches if mat[2] != ""][0])
+    dtype = [mat[3] for mat in matches if mat[3] != ""][0].strip()
+    return nrow, ncol, ncomp, dtype
+
+
+def load_matrix(file: bytes | str | Path, dtype: str = "float") -> np.ndarray:
     """Load a Radiance matrix file into numpy array.
 
     Args:
@@ -594,7 +618,7 @@ def load_matrix(file: Union[bytes, str, Path], dtype: str = "float") -> np.ndarr
     """
     npdtype = np.double if dtype.startswith("d") else np.single
     mtx = pr.rmtxop(file, outform=dtype[0].lower())
-    nrows, ncols, ncomp, _ = fr.utils.parse_rad_header(pr.getinfo(mtx).decode())
+    nrows, ncols, ncomp, _ = parse_rad_header(pr.getinfo(mtx).decode())
     return np.frombuffer(pr.getinfo(mtx, strip_header=True), dtype=npdtype).reshape(
         nrows, ncols, ncomp
     )
@@ -623,7 +647,7 @@ def load_binary_matrix(
 
 
 def matrix_multiply_rgb(
-    *mtx: np.ndarray, weights: Optional[List[float]] = None
+    *mtx: np.ndarray, weights: None | list[float] = None
 ) -> np.ndarray:
     """Multiply matrices as numpy ndarray.
     linalg.multi_dot figures out the multiplication order
@@ -651,7 +675,7 @@ def sparse_matrix_multiply_rgb_vtds(
     tmx: np.ndarray,
     dmx: np.ndarray,
     smx: np.ndarray,
-    weights: Optional[List[float]] = None,
+    weights: None | list[float] = None,
 ) -> np.ndarray:
     """Multiply sparse view, transmission, daylight,
     and sky matrices. (ThreePhaseMethod)
@@ -710,12 +734,12 @@ def to_sparse_matrix3(mtx: np.ndarray, mtype: str = "csr") -> np.ndarray:
 
 
 def rfluxmtx_markup(
-    surfaces: List[pr.Primitive],
+    surfaces: list[pr.Primitive],
     basis: str,
     left_hand: bool = False,
-    offset: Optional[float] = None,
+    offset: None | float = None,
     source: str = "glow",
-    out: Optional[str] = None,
+    out: None | str = None,
 ) -> str:
     """Mark up surfaces for rfluxmtx.
 
@@ -731,7 +755,7 @@ def rfluxmtx_markup(
         Marked up primitives as strings (to be written to a file for rfluxmtx)
     """
     modifier_set = {p.modifier for p in surfaces}
-    source_modifier = f"rflx{surfaces[0].modifier}{fr.utils.random_string(10)}"
+    source_modifier = f"rflx{surfaces[0].modifier}{random_string(10)}"
     if left_hand:
         basis = "-" + basis
     if source not in ("glow", "light"):
@@ -739,7 +763,7 @@ def rfluxmtx_markup(
     primitives = [p for p in surfaces if p.ptype in ("polygon", "ring")]
     surface_normal = np.zeros(3)
     for primitive in primitives:
-        polygon = fr.utils.parse_polygon(primitive)
+        polygon = parse_polygon(primitive)
         surface_normal += polygon.area
     sampling_direction = surface_normal * (1 / len(primitives))
     sampling_direction = sampling_direction / np.linalg.norm(sampling_direction)
@@ -774,10 +798,10 @@ def rfluxmtx_markup(
             _identifier = prim.identifier
         _modifier = source_modifier
         if offset is not None:
-            poly = fr.utils.parse_polygon(prim)
+            poly = parse_polygon(prim)
             offset_vec = poly.normal * offset
             moved_pts = [pt + offset_vec for pt in poly.vertices]
-            _real_args = fr.geom.Polygon(moved_pts).vertices.flatten().tolist()
+            _real_args = Polygon(moved_pts).vertices.flatten().tolist()
         else:
             _real_args = prim.fargs
         new_prim = pr.Primitive(
@@ -789,10 +813,10 @@ def rfluxmtx_markup(
 
 
 def surfaces_view_factor(
-    surfaces: List[pr.Primitive],
-    env: List[pr.Primitive],
+    surfaces: list[pr.Primitive],
+    env: list[pr.Primitive],
     ray_count: int = 10000,
-) -> Dict[str, Dict[str, List[float]]]:
+) -> dict[str, dict[str, list[float]]]:
     """Calculate surface to surface view factor using rfluxmtx.
 
     Args:
@@ -810,9 +834,9 @@ def surfaces_view_factor(
     for idx, surface in enumerate(surfaces):
         sender = SurfaceSender([surface], basis="u")
         rest_of_surfaces = surfaces[:idx] + surfaces[idx + 1 :]
-        rest_of_surface_polygons = [fr.utils.parse_polygon(s) for s in rest_of_surfaces]
+        rest_of_surface_polygons = [parse_polygon(s) for s in rest_of_surfaces]
         rest_of_surfaces_flipped = [
-            fr.utils.polygon_primitive(p.flip(), s.modifier, s.identifier)
+            polygon_primitive(p.flip(), s.modifier, s.identifier)
             for s, p in zip(rest_of_surfaces, rest_of_surface_polygons)
         ]
         receivers = [

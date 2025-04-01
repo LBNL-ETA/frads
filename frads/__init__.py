@@ -81,7 +81,7 @@ from .methods import (
     WorkflowConfig,
 )
 from .sky import WeaData, WeaMetaData, gen_perez_sky, genskymtx, parse_epw, parse_wea
-from .utils import gen_grid, parse_polygon, unpack_primitives
+from .utils import unpack_primitives
 from .window import (
     AIR,
     ARGON,
@@ -91,7 +91,9 @@ from .window import (
     Gas,
     GlazingSystem,
     create_glazing_system,
+    LayerInput,
 )
+from .geom import gen_grid, parse_polygon
 
 __version__ = "1.2.11"
 
@@ -107,6 +109,7 @@ __all__ = [
     "Gap",
     "Gas",
     "GlazingSystem",
+    "LayerInput",
     "KRYPTON",
     "Matrix",
     "SensorSender",
