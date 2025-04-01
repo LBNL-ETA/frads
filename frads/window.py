@@ -5,7 +5,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import math
-
+import numpy as np
+import frads as fr
 import pyradiance as pr
 import pywincalc as pwc
 
@@ -68,6 +69,7 @@ class Layer:
     slat_angle: float = 90.0
     slat_conductivity: float = 160.00
     slat_curve: float = 0.0
+    nslats: int = 1
     flipped: bool = False
 
 
@@ -215,7 +217,10 @@ class GlazingSystem:
         layer_instances = []
         for layer in layers:
             rgb = layer.pop("rgb")
-            layer_instances.append(Layer(rgb=PaneRGB(**rgb), **layer))
+            smat = layer.pop("shading_material")
+            pane_rgb = PaneRGB(**rgb) if rgb is not None else None
+            shading_material = pr.ShadingMaterial(**smat) if smat is not None else None
+            layer_instances.append(Layer(rgb=pane_rgb, shading_material=shading_material, **layer))
         gaps = data.pop("gaps")
         gap_instances = []
         for gap in gaps:
@@ -317,9 +322,9 @@ def generate_blinds_xml(
         angle=angle,
         rcurv=curvature,
     )
-    sol_blinds = pr.generate_blinds(material_solar, geom)
-    vis_blinds = pr.generate_blinds(material_visible, geom)
-    ir_blinds = pr.generate_blinds(material_ir, geom)
+    sol_blinds = pr.generate_blinds_for_bsdf(material_solar, geom)
+    vis_blinds = pr.generate_blinds_for_bsdf(material_visible, geom)
+    ir_blinds = pr.generate_blinds_for_bsdf(material_ir, geom)
     sol_results = pr.generate_bsdf(sol_blinds, nproc=nproc, nsamp=nsamp)
     vis_results = pr.generate_bsdf(vis_blinds, nproc=nproc, nsamp=nsamp)
     ir_results = pr.generate_bsdf(ir_blinds, basis="u")
@@ -382,7 +387,7 @@ def create_glazing_system(
         gaps = [Gap([Gas("air", 1)], 0.0127) for _ in range(len(layer_inputs) - 1)]
     product_data_list: list[pwc.ProductData] = []
     layer_data: list[Layer] = []
-    thickness = 0
+    thickness = 0.
     fabric_xml: None | bytes
     for idx, layer_inp in enumerate(layer_inputs):
         product_data = None
@@ -461,6 +466,7 @@ def create_glazing_system(
                 layer.flipped = layer_inp.flipped
                 layer.product_type = "blinds"
                 layer.shading_material = pr.ShadingMaterial(rf_vis_diff, rf_vis_spec, 0)
+                layer.nslats = nslats
 
                 layer.slat_angle = layer_inp.slat_angle
                 layer_data.append(layer)
@@ -649,9 +655,9 @@ def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> None | pr.Primitiv
             "glass3.cal",
         ]
         if panes[2].coated_side == "back":
-            rfspc, gfspc, bfspc = panes[2].coated_rgb
+            rbspc, gbspc, bbspc = panes[2].coated_rgb
         else:
-            rfspc, gfspc, bfspc = panes[2].glass_rgb
+            rbspc, gbspc, bbspc = panes[2].glass_rgb
         if panes[0].coated_side == "back":
             rfspc, gfspc, bfspc = panes[0].glass_rgb
         else:
@@ -685,3 +691,127 @@ def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> None | pr.Primitiv
         return None
 
     return pr.Primitive("void", "BRTDfunc", name, str_arg, real_arg)
+
+
+def get_glazing_layer_groups(layers: list[Layer]) -> list:
+    if not layers or not isinstance(layers[0], Layer):
+        return {
+            "error": "Invalid input. Please provide a string of layer types (g, f, b)."
+        }
+
+    # Group consecutive glazing layers
+    grouped_system: list[tuple[str, int]] = []
+    current_group = 0
+    current_type = None
+
+    for layer in layers:
+        if layer.product_type == "glazing":
+            if current_type == "glazing":
+                current_group += 1
+            else:
+                if current_group:
+                    grouped_system.append((current_type, current_group))
+                current_group = 1
+                current_type = "glazing"
+        else:
+            if current_group:
+                grouped_system.append((current_type, current_group))
+            grouped_system.append((layer.product_type, 1))
+            current_group = 0
+            current_type = None
+
+    # Add the last group if it exists
+    if current_group:
+        grouped_system.append((current_type, current_group))
+
+    # Create a simplified representation
+    return grouped_system
+
+
+def get_proxy_geometry(window: fr.geom.Polygon, gs: GlazingSystem) -> list[pr.Primitive]:
+    FEPS = 1e-5
+    layer_groups = get_glazing_layer_groups(gs.layers)
+    window_vertices = window.vertices
+    primitives: list[pr.Primitive] = []
+    current_index = 0
+    for group in layer_groups:
+        if group[0] == "glazing":
+            glazing_layer_count = group[1]
+            # Get BRTDFunc
+            mat_name = f"mat_{gs.name}_glazing_{current_index}"
+            geom_name = f"{gs.name}_glazing_{current_index}"
+            rgb = [layer.rgb for layer in gs.layers[current_index:current_index + glazing_layer_count]]
+            mat: bytes = get_glazing_primitive(mat_name, rgb)
+            geom = fr.utils.polygon_primitive(window, mat_name, geom_name)
+            primitives.append(mat.bytes)
+            primitives.append(geom.bytes)
+            current_index += glazing_layer_count
+        elif group[0] == "fabric":
+            mat_name = f"mat_{gs.name}_fabric_{current_index}"
+            geom_name = f"{gs.name}_fabric_{current_index}"
+            xml_name = f"{gs.name}_fabric_{current_index}.xml"
+            # Get aBSDF primitive
+            with open(xml_name, "wb") as f:
+                f.write(gs.layers[current_index].fabric_xml)
+            mat: pr.Primitive = pr.Primitive(
+                "void", "aBSDF", mat_name, [xml_name, "0", "0", "1", "."], []
+            )
+            geom = fr.utils.polygon_primitive(window, mat_name, geom_name)
+            primitives.append(mat.bytes)
+            primitives.append(geom.bytes)
+            current_index += 1
+        elif group[0] == "blinds":
+            # NOTE: For blinds only
+            zdiff1 = abs(window_vertices[1][2] - window_vertices[0][2])
+            zdiff2 = abs(window_vertices[2][2] - window_vertices[1][2])
+            dim1 = np.linalg.norm(window_vertices[1] - window_vertices[0])
+            dim2 = np.linalg.norm(window_vertices[2] - window_vertices[1])
+            if (dim1 <= FEPS) | (dim2 <= FEPS):
+                print("One of the sides of the window polygon is zero")
+            width = height = 0
+            if zdiff1 <= FEPS:
+                width = dim1
+                height = dim2
+            elif zdiff2 <= FEPS:
+                width = dim2
+                height = dim1
+            else:
+                print("Error: Skewed window not supported: ")
+                print(window_vertices)
+            blinds_layer = gs.layers[current_index]
+            geom = pr.BlindsGeometry(
+                depth=blinds_layer.slat_width,
+                width=width,
+                height=height,
+                nslats=blinds_layer.nslats,
+                angle=blinds_layer.slat_angle,
+                rcurv=blinds_layer.slat_curve,
+            )
+            print("depth", blinds_layer.slat_width)
+            print("width", width)
+            print("height", height)
+            print("nslats", blinds_layer.nslats)
+            print("angle", blinds_layer.slat_angle)
+            print("rcurv", blinds_layer.slat_curve)
+            blinds: bytes = pr.generate_blinds(blinds_layer.shading_material, geom)
+            xmin, xmax, ymin, ymax, zmin, zmax = pr.ot.getbbox(blinds)
+            print("before", f"{xmin=} {xmax=} {ymin=} {ymax=} {zmin=} {zmax=}")
+            blinds_normal = np.array((1, 0, 0))
+            rotatez_angle = fr.geom.angle_between(blinds_normal, window.normal, degree=True)
+            print(f"{window.normal=}")
+            print(f"{rotatez_angle=}")
+            rotated_blinds: bytes = pr.Xform(blinds).rotatez(rotatez_angle)()
+            xmin, xmax, ymin, ymax, zmin, zmax = pr.ot.getbbox(rotated_blinds)
+            print("after", f"{xmin=} {xmax=} {ymin=} {ymax=} {zmin=} {zmax=}")
+            rotated_blinds_centroid = np.array(
+                ((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
+            )
+            print(f"{rotated_blinds_centroid=}")
+            blinds_at_window = pr.Xform(rotated_blinds).translate(
+                *(window.centroid - rotated_blinds_centroid)
+            )()
+            primitives.append(pr.Xform(blinds_at_window).translate(
+                *(window.normal * gs.layers[current_index].thickness)
+            )())
+            current_index += 1
+    return primitives

@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 import logging
-from typing import Optional
 import math
 
 import pyradiance as pr
@@ -352,7 +351,7 @@ class EPlusOpaqueSurface:
     fenestrations: list
 
 
-def get_dict_only_value(d: Optional[dict]):
+def get_dict_only_value(d: None | dict):
     """Get the only value in a dictionary."""
     if d is None:
         raise ValueError("Object is None.")
@@ -862,7 +861,7 @@ class EnergyPlusToRadianceModelConverter:
         return valid
 
 
-def create_settings(ep_model: EnergyPlusModel, epw_file: Optional[str]) -> dict:
+def create_settings(ep_model: EnergyPlusModel, epw_file: None | str) -> dict:
     """Create settings dictionary for Radiance model.
 
     Args:
@@ -890,8 +889,9 @@ def create_settings(ep_model: EnergyPlusModel, epw_file: Optional[str]) -> dict:
 
 def epmodel_to_radmodel(
     ep_model: EnergyPlusModel,
-    epw_file: Optional[str] = None,
+    epw_file: None | str = None,
     add_views: bool = True,
+    views: None | dict[str, dict[str, pr.View]] = None
 ) -> dict:
     """Convert EnergyPlus model to Radiance models where each zone is a separate model.
 

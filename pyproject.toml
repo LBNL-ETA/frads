@@ -13,17 +13,13 @@ description = "Framework for lighting and energy simulations"
 dependencies = [
     "epmodel==0.8.0",
     "numpy>=1.24.4",
-    "pyradiance == 1.0.1",
+    "pyradiance == 1.0.2",
     "pywincalc>=3.1.0",
     "pyenergyplus_lbnl>=23.2.0",
     "scipy>=1.10.1",
 ]
 license = {"file"= "license.txt"}
-requires-python = ">= 3.8"
-
-[project.scripts]
-gen = "frads.cli:gen"
-mrad = "frads.cli:mrad"
+requires-python = ">= 3.10"
 
 [tool.setuptools.dynamic]
 version = {attr = "frads.__version__"}

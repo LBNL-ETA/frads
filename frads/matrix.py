@@ -10,17 +10,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Dict, List, Optional, Union
 
+import frads as fr
 import numpy as np
 import pyradiance as pr
 from scipy.sparse import csr_matrix, lil_matrix
 
-from frads.geom import Polygon
-from frads.utils import (
-    parse_polygon,
-    parse_rad_header,
-    polygon_primitive,
-    random_string,
-)
 
 logger: logging.Logger = logging.getLogger("frads.matrix")
 
@@ -427,7 +421,7 @@ class Matrix:
             if memmap:
                 _dtype = np.float64 if self.dtype.startswith("d") else np.float32
                 self.array = np.memmap(
-                    f"{random_string(5)}.dat",
+                    f"{fr.utils.random_string(5)}.dat",
                     dtype=_dtype,
                     shape=(self.nrows, _ncols, self.ncomp),
                     order="F",
@@ -600,7 +594,7 @@ def load_matrix(file: Union[bytes, str, Path], dtype: str = "float") -> np.ndarr
     """
     npdtype = np.double if dtype.startswith("d") else np.single
     mtx = pr.rmtxop(file, outform=dtype[0].lower())
-    nrows, ncols, ncomp, _ = parse_rad_header(pr.getinfo(mtx).decode())
+    nrows, ncols, ncomp, _ = fr.utils.parse_rad_header(pr.getinfo(mtx).decode())
     return np.frombuffer(pr.getinfo(mtx, strip_header=True), dtype=npdtype).reshape(
         nrows, ncols, ncomp
     )
@@ -737,7 +731,7 @@ def rfluxmtx_markup(
         Marked up primitives as strings (to be written to a file for rfluxmtx)
     """
     modifier_set = {p.modifier for p in surfaces}
-    source_modifier = f"rflx{surfaces[0].modifier}{random_string(10)}"
+    source_modifier = f"rflx{surfaces[0].modifier}{fr.utils.random_string(10)}"
     if left_hand:
         basis = "-" + basis
     if source not in ("glow", "light"):
@@ -745,7 +739,7 @@ def rfluxmtx_markup(
     primitives = [p for p in surfaces if p.ptype in ("polygon", "ring")]
     surface_normal = np.zeros(3)
     for primitive in primitives:
-        polygon = parse_polygon(primitive)
+        polygon = fr.utils.parse_polygon(primitive)
         surface_normal += polygon.area
     sampling_direction = surface_normal * (1 / len(primitives))
     sampling_direction = sampling_direction / np.linalg.norm(sampling_direction)
@@ -780,10 +774,10 @@ def rfluxmtx_markup(
             _identifier = prim.identifier
         _modifier = source_modifier
         if offset is not None:
-            poly = parse_polygon(prim)
+            poly = fr.utils.parse_polygon(prim)
             offset_vec = poly.normal * offset
             moved_pts = [pt + offset_vec for pt in poly.vertices]
-            _real_args = Polygon(moved_pts).vertices.flatten().tolist()
+            _real_args = fr.geom.Polygon(moved_pts).vertices.flatten().tolist()
         else:
             _real_args = prim.fargs
         new_prim = pr.Primitive(
@@ -816,9 +810,9 @@ def surfaces_view_factor(
     for idx, surface in enumerate(surfaces):
         sender = SurfaceSender([surface], basis="u")
         rest_of_surfaces = surfaces[:idx] + surfaces[idx + 1 :]
-        rest_of_surface_polygons = [parse_polygon(s) for s in rest_of_surfaces]
+        rest_of_surface_polygons = [fr.utils.parse_polygon(s) for s in rest_of_surfaces]
         rest_of_surfaces_flipped = [
-            polygon_primitive(p.flip(), s.modifier, s.identifier)
+            fr.utils.polygon_primitive(p.flip(), s.modifier, s.identifier)
             for s, p in zip(rest_of_surfaces, rest_of_surface_polygons)
         ]
         receivers = [

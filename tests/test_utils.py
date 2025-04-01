@@ -53,20 +53,6 @@ class TestUtils(unittest.TestCase):
     def test_angle_basis_coeff(self):
         pass
 
-    def test_opt2list(self):
-        opt1 = {"ab": 2, "ad": 1024, "I": True}
-        res1 = utils.opt2list(opt1)
-        answer1 = ["-ab", "2", "-ad", "1024", "-I+"]
-        assert res1 == answer1
-        opt2 = {"vt": "a", "vf": "test/v1a.vf", "vp":[0, 0, 0]}
-        res2 = utils.opt2list(opt2)
-        answer2 = ["-vta", "-vf", "test/v1a.vf", "-vp", "0", "0", "0"]
-        assert res2 == answer2
-        opt3 = {"ab": 3, "ad": 64, "av": [.38, .38, .38], "u": True, "vt": "a"}
-        res3 = utils.opt2list(opt3)
-        answer3 = ["-ab", "3", "-ad", "64", "-av", "0.38", "0.38", "0.38", "-u+", "-vta"]
-        assert res3 == answer3
-
     def test_varays(self):
         pass
 

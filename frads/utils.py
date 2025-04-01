@@ -2,17 +2,14 @@
 This module contains all utility functions used throughout frads.
 """
 
-from datetime import datetime, timedelta
 from io import TextIOWrapper
 import logging
 import re
 from pathlib import Path
 from random import choices
 import string
-import subprocess as sp
-from typing import Any, Dict, Optional, List, Union
 
-from frads import geom
+import frads as fr
 import numpy as np
 from pyradiance import Primitive, parse_primitive, pvaluer
 
@@ -44,7 +41,7 @@ def parse_rad_header(header_str: str) -> tuple:
 
 
 def polygon_primitive(
-    polygon: geom.Polygon, modifier: str, identifier: str
+    polygon: fr.geom.Polygon, modifier: str, identifier: str
 ) -> Primitive:
     """
     Generate a primitive from a polygon.
@@ -58,7 +55,7 @@ def polygon_primitive(
     return Primitive(modifier, "polygon", identifier, [], polygon.coordinates)
 
 
-def parse_polygon(primitive: Primitive) -> geom.Polygon:
+def parse_polygon(primitive: Primitive) -> fr.geom.Polygon:
     """
     Parse a primitive into a polygon.
 
@@ -72,7 +69,7 @@ def parse_polygon(primitive: Primitive) -> geom.Polygon:
     vertices = [
         np.array(primitive.fargs[i : i + 3]) for i in range(0, len(primitive.fargs), 3)
     ]
-    return geom.Polygon(vertices)
+    return fr.geom.Polygon(vertices)
 
 
 def array_hdr(array: np.ndarray, xres: int, yres: int, dtype: str = "d") -> bytes:
@@ -144,7 +141,7 @@ def write_ep_rad_model(outpath: str, model: dict) -> None:
             f.write(window.bytes)
 
 
-def unpack_primitives(file: Union[str, Path, TextIOWrapper]) -> List[Primitive]:
+def unpack_primitives(file: str | Path | TextIOWrapper) -> list[Primitive]:
     """Open a file a to parse primitive."""
     if isinstance(file, TextIOWrapper):
         lines = file.read()
@@ -152,22 +149,6 @@ def unpack_primitives(file: Union[str, Path, TextIOWrapper]) -> List[Primitive]:
         with open(file, "r", encoding="ascii") as rdr:
             lines = rdr.read()
     return parse_primitive(lines)
-
-
-def primitive_normal(primitive_paths: List[str]) -> List[np.ndarray]:
-    """Return a set of normal vectors given a list of primitive paths."""
-    _primitives: List[Primitive] = []
-    for path in primitive_paths:
-        _primitives.extend(unpack_primitives(path))
-    seen = {}
-    unique = []
-    _normals = [parse_polygon(prim).normal for prim in _primitives]
-    for n in _normals:
-        nstr = n.tobytes()
-        if nstr not in seen:
-            seen[nstr] = True
-            unique.append(n)
-    return unique
 
 
 def neutral_plastic_prim(
@@ -256,7 +237,7 @@ def add_manikin(
     manikin_file: str,
     manikin_name: str,
     zone: dict,
-    position: List[float],
+    position: list[float],
     rotation: float = 0,
 ) -> None:
     """Add a manikin to the scene.i
@@ -275,7 +256,7 @@ def add_manikin(
     zone["model"]["scene"]["bytes"] += b" "
     zone_primitives = parse_primitive(zone["model"]["scene"]["bytes"].decode())
     zone_polygons = [parse_polygon(p) for p in zone_primitives if p.ptype == "polygon"]
-    xmin, xmax, ymin, ymax, zmin, _ = geom.get_polygon_limits(zone_polygons)
+    xmin, xmax, ymin, ymax, zmin, _ = fr.geom.get_polygon_limits(zone_polygons)
     target = np.array(
         [xmin + (xmax - xmin) * position[0], ymin + (ymax - ymin) * position[1], zmin]
     )
@@ -287,7 +268,7 @@ def add_manikin(
     manikin_polygons = [
         parse_polygon(p) for p in manikin_primitives if p.ptype == "polygon"
     ]
-    xminm, xmaxm, yminm, ymaxm, zminm, _ = geom.get_polygon_limits(manikin_polygons)
+    xminm, xmaxm, yminm, ymaxm, zminm, _ = fr.geom.get_polygon_limits(manikin_polygons)
     manikin_base_center = np.array([(xmaxm - xminm) / 2, (ymaxm - yminm) / 2, zminm])
     if rotation != 0:
         manikin_polygons = [
@@ -297,7 +278,7 @@ def add_manikin(
     move_vector = manikin_base_center - target
     moved_manikin_polygons = [polygon.move(move_vector) for polygon in manikin_polygons]
     moved_manikin = [
-        polygon2prim(polygon, primitive.modifier, primitive.identifier)
+        polygon_primitive(polygon, primitive.modifier, primitive.identifier)
         for polygon, primitive in zip(moved_manikin_polygons, manikin_primitives)
     ]
     for primitive in moved_manikin:
@@ -331,64 +312,7 @@ def glass_prim(
     return Primitive(mod, "glass", ident, [], real_args)
 
 
-def bsdf_prim(
-    mod: str,
-    ident: str,
-    xmlpath: str,
-    upvec: List[float],
-    pe: bool = False,
-    thickness: float = 0.0,
-    xform=None,
-    real_args: list = [""],
-) -> Primitive:
-    """Create a BSDF primtive."""
-    str_args = [xmlpath, str(upvec)]
-    str_args_count = 5
-    if pe:
-        _type = "aBSDF"
-    else:
-        str_args_count += 1
-        str_args = [str(thickness), *str_args]
-        _type = "BSDF"
-    if xform is not None:
-        str_args_count += len(xform.split())
-        str_args.extend(*xform.split())
-    else:
-        str_args.append(".")
-    return Primitive(mod, _type, ident, str_args, real_args)
-
-
-def opt2list(opt: dict) -> List[str]:
-    """Convert option dictionary to list.
-
-    Key: str
-    Value: str | float | int | bool | list
-
-    Args:
-        opt: option dictionary
-    Returns:
-        A list of strings
-    """
-    out = []
-    for key, value in opt.items():
-        if isinstance(value, str):
-            if key == "vf":
-                out.extend(["-" + key, value])
-            else:
-                out.append(f"-{key}{value}")
-        elif isinstance(value, bool):
-            if value:
-                out.append(f"-{key}+")
-            else:
-                out.append(f"-{key}-")
-        elif isinstance(value, (int, float)):
-            out.extend(["-" + key, str(value)])
-        elif isinstance(value, list):
-            out.extend(["-" + key, *map(str, value)])
-    return out
-
-
-def pt_inclusion(pt: np.ndarray, polygon_pts: List[np.ndarray]) -> int:
+def pt_inclusion(pt: np.ndarray, polygon_pts: list[np.ndarray]) -> int:
     """Test whether a point is inside a polygon
     using winding number algorithm."""
 
@@ -414,7 +338,7 @@ def pt_inclusion(pt: np.ndarray, polygon_pts: List[np.ndarray]) -> int:
     return wn
 
 
-def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> List[List[float]]:
+def gen_grid(polygon: fr.geom.Polygon, height: float, spacing: float) -> list[list[float]]:
     """Generate a grid of points for orthogonal planar surfaces.
 
     Args:
@@ -448,7 +372,7 @@ def gen_grid(polygon: geom.Polygon, height: float, spacing: float) -> List[List[
     return grid
 
 
-def material_lib() -> Dict[str, Primitive]:
+def material_lib() -> dict[str, Primitive]:
     """Generate a list of generic material primitives."""
     tmis = 0.6 * 1.08981
     return {
@@ -465,73 +389,7 @@ def material_lib() -> Dict[str, Primitive]:
     }
 
 
-def gen_blinds(depth, width, height, spacing, angle, curve, movedown) -> str:
-    """Generate genblinds command for genBSDF."""
-    nslats = int(round(height / spacing, 0))
-    slat_cmd = "!genblinds blindmaterial blinds "
-    slat_cmd += f"{depth} {width} {height} {nslats} {angle} {curve}"
-    slat_cmd += "| xform -rz -90 -rx -90 -t "
-    slat_cmd += f"{-width / 2} {-height / 2} {-movedown}\n"
-    return slat_cmd
-
-
-def batch_process(
-    commands: List[List[str]],
-    inputs: Optional[List[bytes]] = None,
-    opaths: Optional[List[Path]] = None,
-    nproc: Optional[int] = None,
-) -> None:
-    """Run commands in batches.
-
-    Use subprocess.Popen to run commands.
-
-    Args:
-        commands: commands as a list of strings.
-        inputs: list of standard input to the commands.
-        opaths: list of paths to write standard output to.
-        nproc: number of commands to run in parallel at a time.
-    Returns:
-        None
-    """
-    nproc = 1 if nproc is None else nproc
-    command_groups = [commands[i : i + nproc] for i in range(0, len(commands), nproc)]
-    stdin_groups: List[List[Any]] = [[None] * len(ele) for ele in command_groups]
-    if inputs:
-        if len(inputs) != len(commands):
-            raise ValueError("Number of stdins not equal number of commands.")
-        stdin_groups = [inputs[i : i + nproc] for i in range(0, len(inputs), nproc)]
-    if opaths:
-        if len(opaths) != len(commands):
-            raise ValueError("Number of opaths not equal number of commands.")
-        opath_groups = [opaths[i : i + nproc] for i in range(0, len(opaths), nproc)]
-        for igrp, cgrp, ogrp in zip(stdin_groups, command_groups, opath_groups):
-            processes = []
-            fds = []
-            for command, opath in zip(cgrp, ogrp):
-                fd = open(opath, "wb")
-                processes.append(sp.Popen(command, stdin=sp.PIPE, stdout=fd))
-                fds.append(fd)
-            for proc, sin in zip(processes, igrp):
-                if (proc.stdin is not None) and (sin is not None):
-                    proc.stdin.write(sin)
-            for p, f in zip(processes, fds):
-                p.wait()
-                f.close()
-    else:
-        for igrp, cgrp in zip(stdin_groups, command_groups):
-            processes = [sp.Popen(command, stdin=sp.PIPE) for command in cgrp]
-            for proc, sin in zip(processes, igrp):
-                if (proc.stdin is not None) and (sin is not None):
-                    proc.stdin.write(sin)
-            for proc in processes:
-                proc.wait()
-
-
 def random_string(size: int) -> str:
     """Generate random characters."""
     chars = string.ascii_uppercase + string.digits
     return "".join(choices(chars, k=size))
-
-
-def minutes_to_datetime(year: int, minutes: int):
-    return datetime(year, 1, 1) + timedelta(minutes=minutes)

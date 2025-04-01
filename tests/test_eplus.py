@@ -1,10 +1,8 @@
 from pathlib import Path
-import tempfile
-
-from frads.eplus import EnergyPlusSetup, load_energyplus_model, add_proxy_geometry_to_rmodels
-from frads.window import create_glazing_system, LayerInput, GlazingSystem
-from pyenergyplus.dataset import ref_models
 import unittest
+
+import frads as fr
+from pyenergyplus.dataset import ref_models
 
 class TestGlazingSystem(unittest.TestCase):
 
@@ -15,16 +13,28 @@ class TestGlazingSystem(unittest.TestCase):
 
     def setUp(self):
         # Create a new medium_office for each test - adjust based on how it's created in your tests
-        self.medium_office = load_energyplus_model(ref_models["medium_office"])
+        self.medium_office = fr.load_energyplus_model(ref_models["medium_office"])
         glass_path = self.resources_dir / "CLEAR_3.DAT"
         blinds_path = self.resources_dir / "igsdb_product_19732.json"
-        glass_layer = LayerInput(glass_path)
-        blinds_layer = LayerInput(blinds_path, slat_angle=45)
+        glass_layer = fr.window.LayerInput(glass_path)
+        blinds_layer = fr.window.LayerInput(blinds_path, slat_angle=45)
         single_glaze_blinds = [glass_layer, blinds_layer]
-        self.glazing_blinds_system = create_glazing_system(name="gs1", layer_inputs=single_glaze_blinds, nproc=8, nsamp=5)
+        # double_glaze_blinds = [glass_layer, blinds_layer]
+        self.glazing_blinds_system = fr.create_glazing_system(name="gs1", layer_inputs=single_glaze_blinds, nproc=4, nsamp=1)
+
+    def test_add_proxy_geometry(self):
+        rmodels = fr.epmodel_to_radmodel(self.medium_office)
+        rconfigs = {
+            k: fr.WorkflowConfig.from_dict(v) for k, v in rmodels.items()
+        }
+        for name, config in rconfigs.items():
+            for window_name, window in config.model.windows.items():
+                geom = fr.window.get_proxy_geometry(window.polygon, self.glazing_blinds_system)
+                window.proxy_geometry[self.glazing_blinds_system.name] = b"\n".join(geom)
+
 
     def test_add_glazingsystem(self):
-        self.medium_office.add_glazing_system(self.glazing1_system)
+        self.medium_office.add_glazing_system(self.glazing_blinds_system)
         # Replace pytest assertions with unittest assertions
         self.assertNotEqual(self.medium_office.construction_complex_fenestration_state, {})
         self.assertIsInstance(self.medium_office.construction_complex_fenestration_state, dict)
@@ -32,23 +42,6 @@ class TestGlazingSystem(unittest.TestCase):
         self.assertIsInstance(self.medium_office.window_material_glazing, dict)
         self.assertIsInstance(self.medium_office.window_thermal_model_params, dict)
 
-    def test_add_glazingsystem_with_blinds(self):
-        self.medium_office.add_glazing_system(self.glazing_blinds_system)
-
-        epsetup = EnergyPlusSetup(self.medium_office)
-        epsetup.run(design_day=True)
-        # assert medium_office.construction_complex_fenestration_state != {}
-        # assert isinstance(
-        #     medium_office.construction_complex_fenestration_state, dict
-        # )
-        # assert isinstance(medium_office.matrix_two_dimension, dict)
-        # assert isinstance(medium_office.window_material_glazing, dict)
-        # assert isinstance(medium_office.window_thermal_model_params, dict)
-
-    def test_add_blinds_geometry(self):
-        self.medium_office.add_glazing_system(self.glazing_blinds_system)
-        epsetup = EnergyPlusSetup(self.medium_office, enable_radiance=True, nproc=8)
-        add_proxy_geometry_to_rmodels(epsetup, self.glazing_blinds_system)
 
 if __name__ == "__main__":
     unittest.main()

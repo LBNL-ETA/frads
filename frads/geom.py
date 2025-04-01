@@ -3,7 +3,7 @@ This module contains definitions of Vector and Polygon objects
 and other geometry related routines.
 """
 
-from typing import List, Tuple, Sequence
+from typing import Sequence
 
 import numpy as np
 
@@ -11,7 +11,7 @@ import numpy as np
 class Polygon:
     """Polygon class."""
 
-    def __init__(self, vertices: List[np.ndarray]):
+    def __init__(self, vertices: list[np.ndarray]):
         """
         Initialize a polygon.
         Args:
@@ -27,7 +27,7 @@ class Polygon:
         return self._vertices
 
     @vertices.setter
-    def vertices(self, new_vertices: List[np.ndarray]):
+    def vertices(self, new_vertices: list[np.ndarray]):
         self._vertices = np.array(new_vertices)
         self._normal = self._calculate_normal()
         self._area = self._calculate_area()
@@ -122,7 +122,7 @@ class Polygon:
         return Polygon(new_vertices)
 
     @property
-    def extreme(self) -> Tuple[float, ...]:
+    def extreme(self) -> tuple[float, ...]:
         """
         Return the extreme values of the polygon.
         """
@@ -164,7 +164,7 @@ class Polygon:
             Polygon (list): a list of polygons;
 
         """
-        polygons: List[Polygon] = [self]
+        polygons: list[Polygon] = [self]
         polygon2 = Polygon(([i + vector for i in self._vertices]))
         polygons.append(polygon2)
         for i in range(len(self._vertices) - 1):
@@ -206,10 +206,12 @@ class Polygon:
         return cls([pt1, pt2, pt3, pt4])
 
 
-def angle_between(vec1: np.ndarray, vec2: np.ndarray) -> float:
+def angle_between(vec1: np.ndarray, vec2: np.ndarray, degree=False) -> float:
     """Return angle between two vectors in radians."""
     dot_prod = np.dot(vec1, vec2)
     angle = np.arccos(dot_prod / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
+    if degree:
+        angle = np.degrees(angle)
     return angle
 
 
@@ -253,7 +255,7 @@ def rotate_3d(
     return rotated + center
 
 
-def convexhull(points: List[np.ndarray], normal: np.ndarray) -> Polygon:
+def convexhull(points: list[np.ndarray], normal: np.ndarray) -> Polygon:
     """Convex hull on coplanar points.
 
     Args:
@@ -328,7 +330,7 @@ def get_polygon_limits(polygon_list: Sequence[Polygon], offset: float = 0.0):
     return xmin, xmax, ymin, ymax, zmin, zmax
 
 
-def getbbox(polygons: Sequence[Polygon], offset: float = 0.0) -> List[Polygon]:
+def getbbox(polygons: Sequence[Polygon], offset: float = 0.0) -> list[Polygon]:
     """Get a bounding box for a list of polygons.
 
     Return a list of polygon that is the

@@ -3,25 +3,8 @@ from pathlib import Path
 import unittest
 
 import pyradiance as pr
-
 from pyenergyplus.dataset import ref_models, weather_files
-
-from frads.ep2rad import epmodel_to_radmodel
-from frads.eplus import load_energyplus_model
-from frads.methods import (
-    MaterialConfig,
-    Model,
-    SceneConfig,
-    SensorConfig,
-    Settings,
-    SurfaceConfig,
-    ThreePhaseMethod,
-    TwoPhaseMethod,
-    ViewConfig,
-    WindowConfig,
-    WorkflowConfig,
-)
-from frads.window import Gap, Gas, create_glazing_system
+import frads as fr
 
 
 class TestMethods(unittest.TestCase):
@@ -85,7 +68,7 @@ class TestMethods(unittest.TestCase):
             },
         }
 
-        self.scene = SceneConfig(
+        self.scene = fr.SceneConfig(
                 files=[
                     self.objects_dir / "walls.rad",
                     self.objects_dir / "ceiling.rad",
@@ -95,149 +78,144 @@ class TestMethods(unittest.TestCase):
             )
 
 
-        self.window_1 = WindowConfig(
+        self.window_1 = fr.WindowConfig(
                 file=self.objects_dir / "upper_glass.rad",
                 matrix_name="blinds30",
             )
 
 
-        self.window_2 = WindowConfig(
+        self.window_2 = fr.WindowConfig(
                 file=self.objects_dir / "upper_glass.rad",
                 # matrix_name="blinds30",
             )
 
 
-        self.materials = MaterialConfig(
+        self.materials = fr.MaterialConfig(
                 files=[self.objects_dir / "materials.mat"],
                 matrices={"blinds30": {"matrix_file": self.resources_dir / "blinds30.xml"}},
             )
 
 
-        self.wpi = SensorConfig( file=self.resources_dir / "grid.txt")
+        self.wpi = fr.SensorConfig(file=self.resources_dir / "grid.txt")
 
 
-        self.sensor_view_1 = SensorConfig( data=[[17, 5, 4, 1, 0, 0]],)
+        self.sensor_view_1 = fr.SensorConfig( data=[[17, 5, 4, 1, 0, 0]],)
 
 
-        self.view_1 = ViewConfig( file=self.resources_dir / "v1a.vf", xres=16, yres=16,)
+        self.view_1 = fr.ViewConfig( file=self.resources_dir / "v1a.vf", xres=16, yres=16,)
 
 
     def test_model1(self):
-        model = Model(
+        model = fr.Model(
             scene=self.scene,
             windows={"window_1": self.window_1},
             materials=self.materials,
             sensors={"wpi": self.wpi, "view1": self.sensor_view_1},
             views={"view_1": self.view_1},
         )
-        assert model.scene.files == self.scene.files
-        assert model.windows["window_1"].file == self.window_1.file
-        assert model.windows["window_1"].matrix_name == self.window_1.matrix_name
-        assert model.materials.files == self.materials.files
-        assert (
-            model.materials.matrices["blinds30"].matrix_file
-            == self.materials.matrices["blinds30"].matrix_file
-        )
-        assert model.windows["window_1"].matrix_name in model.materials.matrices
-        assert model.sensors["wpi"].file == self.wpi.file
-        assert model.sensors["view_1"].data == self.sensor_view_1.data
-        assert model.views["view_1"].file == self.view_1.file
-        assert model.views["view_1"].xres == self.view_1.xres
-        assert model.views["view_1"].yres == self.view_1.yres
+        self.assertEqual(model.scene.files, self.scene.files)
+        self.assertEqual(model.windows["window_1"].file, self.window_1.file)
+        self.assertEqual(model.windows["window_1"].matrix_name, self.window_1.matrix_name)
+        self.assertEqual(model.materials.files, self.materials.files)
+        self.assertIn(model.windows["window_1"].matrix_name, model.materials.matrices)
+        self.assertEqual(model.sensors["wpi"].file, self.wpi.file)
+        self.assertEqual(model.sensors["view_1"].data[0][0], self.sensor_view_1.data[0][0])
+        self.assertEqual(model.views["view_1"].file, self.view_1.file)
+        self.assertEqual(model.views["view_1"].xres, self.view_1.xres)
+        self.assertEqual(model.views["view_1"].yres, self.view_1.yres)
 
 
     def test_model2(self):
         # auto-generate view_1 in sensors from view_1 in views
-        model = Model(
+        model = fr.Model(
             materials=self.materials,
             sensors={"wpi": self.wpi},
             views={"view_1": self.view_1},
         )
-        assert "view_1" in model.sensors
-        assert model.sensors["view_1"].data == [
-            model.views["view_1"].view.position + model.views["view_1"].view.direction
-        ]
-        assert isinstance(model.scene, SceneConfig)
-        assert isinstance(model.windows, dict)
-        assert model.scene.files == []
-        assert model.scene.bytes == b""
-        assert model.windows == {}
+        self.assertIn("view_1", model.sensors)
+        self.assertEqual(model.sensors["view_1"].data[0][0], model.views["view_1"].view.vp[0])
+        self.assertTrue(isinstance(model.scene, fr.SceneConfig))
+        self.assertTrue(isinstance(model.windows, dict))
+        self.assertEqual(model.scene.files, [])
+        self.assertEqual(model.scene.bytes, b"")
+        self.assertEqual(model.windows, {})
 
 
     def test_model3(self):
         # same name view and sensor but different position and direction
-        sensor_view_2 = SensorConfig(
+        sensor_view_2 = fr.SensorConfig(
             data=[[1, 5, 4, 1, 0, 0]],
         )
 
-        with pytest.raises(ValueError):
-            Model(
+        with self.assertRaises(ValueError):
+            fr.Model(
                 scene=self.scene,
                 windows={"window_1": self.window_1},
                 materials=self.materials,
-                sensors={"wpi": self.wpi, "view_1": self.sensor_view_2},
+                sensors={"wpi": self.wpi, "view_1": sensor_view_2},
                 views={"view_1": self.view_1},
             )
 
 
     def test_model4(self):
         # window matrix name not in materials
-        materials = MaterialConfig(files=[self.objects_dir / "materials.mat"])
-
-        with pytest.raises(ValueError):
-            Model(
+        materials = fr.MaterialConfig(files=[self.objects_dir / "materials.mat"])
+        with self.assertRaises(ValueError):
+            fr.Model(
                 scene=self.scene,
                 windows={"window_1": self.window_1},
-                materials=self.materials,
+                materials=materials,
                 sensors={"wpi": self.wpi, "view_1": self.sensor_view_1},
                 views={"view_1": self.view_1},
             )
 
 
     def test_no_sensors_views_surfaces_specified(self):
-        settings = Settings()
-        model = Model(
+        settings = fr.Settings()
+        model = fr.Model(
             scene=self.scene,
             windows={"window_1": self.window_1},
             materials=self.materials,
         )
-        with pytest.raises(ValueError):
-            WorkflowConfig(settings, model)
+        with self.assertRaises(ValueError):
+            fr.WorkflowConfig(settings, model)
 
 
     def test_windows_not_specified_for_3phase_or_5phase_method(self):
-        settings = Settings()
-        model = Model(
+        settings = fr.Settings()
+        model = fr.Model(
             scene=self.scene,
             # windows={"window_1": window_1},
             materials=self.materials,
             sensors={"wpi": self.wpi},
             views={"view_1": self.view_1},
         )
-        with pytest.raises(ValueError):
-            WorkflowConfig(settings, model)
+        with self.assertRaises(ValueError):
+            fr.WorkflowConfig(settings, model)
 
 
     def test_three_phase2(self):
-        model = Model(
+        model = fr.Model(
             scene=self.scene,
             windows={"window_1": self.window_2},  # window_2 has no matrix_name
             materials=self.materials,
             sensors={"wpi": self.wpi, "view_1": self.sensor_view_1},
             views={"view_1": self.view_1},
         )
-        settings = Settings()
+        settings = fr.Settings()
+        settings.sensor_window_matrix = ['-ab', '1']
+        settings.daylight_matrix = ['-ab', '1']
 
-        cfg = WorkflowConfig(settings, model)
-        workflow = ThreePhaseMethod(cfg)
-        workflow.generate_matrices(view_matrices=False)
-        a = workflow.calculate_sensor(
-            "view_1",
-            {"window_1": "blinds30"},  # blinds30 is the matrix_name
-            datetime(2023, 1, 1, 12),
-            800,
-            100,
-        )
+        cfg = fr.WorkflowConfig(settings, model)
+        with fr.ThreePhaseMethod(cfg) as workflow:
+            workflow.generate_matrices(view_matrices=False)
+            a = workflow.calculate_sensor(
+                "view_1",
+                {"window_1": "blinds30"},  # blinds30 is the matrix_name
+                datetime(2023, 1, 1, 12),
+                800,
+                100,
+            )
         self.assertEqual(a.shape , (1, 1))
 
 
@@ -245,8 +223,8 @@ class TestMethods(unittest.TestCase):
         time = datetime(2023, 1, 1, 12)
         dni = 800
         dhi = 100
-        config = WorkflowConfig.from_dict(cfg)
-        with TwoPhaseMethod(config) as workflow:
+        config = fr.WorkflowConfig.from_dict(self.cfg)
+        with fr.TwoPhaseMethod(config) as workflow:
             workflow.generate_matrices()
             res = workflow.calculate_sensor("wpi", time, dni, dhi)
         self.assertEqual(res.shape , (195, 1))
@@ -256,7 +234,7 @@ class TestMethods(unittest.TestCase):
         time = datetime(2023, 1, 1, 12)
         dni = 800
         dhi = 100
-        config = WorkflowConfig.from_dict(self.cfg)
+        config = fr.WorkflowConfig.from_dict(self.cfg)
         blind_prim = pr.Primitive(
             "void",
             "aBSDF",
@@ -265,7 +243,7 @@ class TestMethods(unittest.TestCase):
             [],
         )
         config.model.materials.glazing_materials = {"blinds30": blind_prim}
-        with ThreePhaseMethod(config) as workflow:
+        with fr.ThreePhaseMethod(config) as workflow:
             workflow.generate_matrices(view_matrices=False)
             workflow.calculate_sensor(
                 "wpi",
@@ -292,15 +270,15 @@ class TestMethods(unittest.TestCase):
         clear_glass_path = self.resources_dir / "CLEAR_3.DAT"
         product_7406_path = self.resources_dir / "igsdb_product_7406.json"
         shade_bsdf_path = self.resources_dir / "ec60.xml"
-
-        epmodel = load_energyplus_model(ref_models["medium_office"])
-        gs_ec60 = create_glazing_system(
+        layers = [fr.window.LayerInput(product_7406_path), fr.window.LayerInput(clear_glass_path)]
+        epmodel = fr.load_energyplus_model(ref_models["medium_office"])
+        gs_ec60 = fr.create_glazing_system(
             name="ec60",
-            layers=[product_7406_path, clear_glass_path],
-            gaps=[Gap([Gas("air", 0.1), Gas("argon", 0.9)], 0.0127)],
+            layer_inputs=layers,
+            gaps=[fr.Gap([fr.Gas("air", 0.1), fr.Gas("argon", 0.9)], 0.0127)],
         )
         epmodel.add_glazing_system(gs_ec60)
-        rad_models = epmodel_to_radmodel(
+        rad_models = fr.epmodel_to_radmodel(
             epmodel, epw_file=weather_files["usa_ca_san_francisco"]
         )
         zone = "Perimeter_bot_ZN_1"
@@ -317,11 +295,11 @@ class TestMethods(unittest.TestCase):
             "ec60": {"matrix_file": shade_bsdf_path}
         }
         zone_dict["model"]["surfaces"] = {}
-        rad_cfg = WorkflowConfig.from_dict(zone_dict)
+        rad_cfg = fr.WorkflowConfig.from_dict(zone_dict)
         rad_cfg.settings.sensor_window_matrix = ["-ab", "0"]
         rad_cfg.settings.view_window_matrix = ["-ab", "0"]
         rad_cfg.settings.daylight_matrix = ["-ab", "0"]
-        with ThreePhaseMethod(rad_cfg) as rad_workflow:
+        with fr.ThreePhaseMethod(rad_cfg) as rad_workflow:
             rad_workflow.generate_matrices(view_matrices=False)
             dni = 800
             dhi = 100
@@ -336,9 +314,9 @@ class TestMethods(unittest.TestCase):
             )
 
         self.assertTrue("view1" in rad_workflow.view_senders)
-        self.assertEqual(rad_workflow.view_senders["view1"].view.vtype, "a")
-        self.assertEqual(rad_workflow.view_senders["view1"].view.position, [6.0, 7.0, 0.76])
-        self.assertEqual(rad_workflow.view_senders["view1"].view.direction, [0.0, -1.0, 0.0])
+        self.assertEqual(rad_workflow.view_senders["view1"].view.type, "a")
+        self.assertEqual(rad_workflow.view_senders["view1"].view.vp, (6.0, 7.0, 0.76))
+        self.assertEqual(rad_workflow.view_senders["view1"].view.vdir, (0.0, -1.0, 0.0))
         self.assertEqual(rad_workflow.view_senders["view1"].view.horiz, 180)
         self.assertEqual(rad_workflow.view_senders["view1"].view.vert, 180)
         self.assertEqual(rad_workflow.view_senders["view1"].xres, 16)
@@ -353,3 +331,6 @@ class TestMethods(unittest.TestCase):
             and list(rad_workflow.sensor_window_matrices.values())[0].ncomp == 3
         )
         self.assertTrue( edgps >= 0 and edgps <= 1)
+
+if __name__=="__main__":
+    unittest.main()

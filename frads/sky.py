@@ -7,7 +7,7 @@ import logging
 import math
 import os
 from pathlib import Path
-from typing import List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import NamedTuple, Sequence
 
 import pyradiance as pr
 
@@ -117,13 +117,13 @@ def parse_epw(epw_str: str) -> tuple:
     return meta_data, data
 
 
-def parse_wea(wea_str: str) -> Tuple[WeaMetaData, List[WeaData]]:
+def parse_wea(wea_str: str) -> tuple[WeaMetaData, list[WeaData]]:
     """
     Parse a wea file in its entirety.
     Args:
         wea_str: String containing wea file.
     Returns:
-        Tuple of meta data and wea data.
+        tuple of meta data and wea data.
     """
     lines = wea_str.splitlines()
     place = lines[0].split(" ", 1)[1]
@@ -160,7 +160,7 @@ def parse_epw_file(file: os.PathLike) -> tuple:
         file: Path to epw file.
 
     Returns:
-        Tuple of meta data and epw data.
+        tuple of meta data and epw data.
     """
     with open(file, "r") as f:
         epw_str = f.read()
@@ -174,7 +174,7 @@ def parse_wea_file(file: os.PathLike) -> tuple:
         file: Path to wea file.
 
     Returns:
-        Tuple of meta data and wea data.
+        tuple of meta data and wea data.
     """
     with open(file, "r") as f:
         wea_str = f.read()
@@ -182,21 +182,21 @@ def parse_wea_file(file: os.PathLike) -> tuple:
 
 
 def genskymtx(
-    data: Optional[Sequence[WeaData]] = None,
-    meta: Optional[WeaMetaData] = None,
-    wpath: Optional[Union[str, Path]] = None,
+    data: None | Sequence[WeaData] = None,
+    meta: None | WeaMetaData = None,
+    wpath: None | str | Path = None,
     onesun: bool = False,
     header: bool = True,
     average: bool = False,
     sun_only: bool = False,
     sky_only: bool = False,
-    sun_file: Optional[str] = None,
-    sun_mods: Optional[str] = None,
+    sun_file: None | str = None,
+    sun_mods: None | str = None,
     daylight_hours_only: bool = False,
-    sky_color: Optional[List[float]] = None,
-    ground_color: Optional[List[float]] = None,
-    rotate: Optional[float] = None,
-    outform: Optional[str] = None,
+    sky_color: None | list[float] = None,
+    ground_color: None | list[float] = None,
+    rotate: None | float = None,
+    outform: None | str = None,
     solar_radiance: bool = False,
     mfactor: int = 1,
 ) -> bytes:
@@ -271,15 +271,15 @@ def gen_perez_sky(
     latitude: float,
     longitude: float,
     timezone: int,
-    year: Optional[int] = None,
-    dirnorm: Optional[float] = None,
-    diffhor: Optional[float] = None,
-    dirhor: Optional[float] = None,
-    dirnorm_illum: Optional[float] = None,
-    diffhor_illum: Optional[float] = None,
+    year: None | int = None,
+    dirnorm: None | float = None,
+    diffhor: None | float = None,
+    dirhor: None | float = None,
+    dirnorm_illum: None | float = None,
+    diffhor_illum: None | float = None,
     solar: bool = False,
-    grefl: Optional[float] = None,
-    rotate: Optional[float] = None,
+    grefl: None | float = None,
+    rotate: None | float = None,
 ) -> bytes:
     """Generate a perez sky using gendaylit.
 
@@ -330,8 +330,8 @@ def gen_wea(
     latitude: float,
     longitude: float,
     timezone: int,
-    elevation: Optional[float] = None,
-    location: Optional[str] = None,
+    elevation: None | float = None,
+    location: None | str = None,
 ) -> str:
     """Generate wea file from datetime, location, and sky."""
     if len(datetimes) != len(dirnorm) != len(diffhor):
@@ -363,7 +363,7 @@ def solar_angle(
     month,
     day: int,
     hour,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     Simplified translation from the Radiance sun.c and gensky.c code.
     """

@@ -8,7 +8,7 @@ import pyradiance as pr
 class TestMatrix(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        self.window_polygon = [
+        window_polygon = [
             geom.Polygon([np.array((0, 0.6667, 0)),
                           np.array((0, 0.6667, 3)),
                           np.array((2, 0.6667, 3)),
@@ -21,9 +21,9 @@ class TestMatrix(unittest.TestCase):
                           ])
         ]
 
-        self.window_primitives = [
-            pr.Primitive("void", "polygon", "window1", ("0"), self.window_polygon[0].coordinates),
-            pr.Primitive("void", "polygon", "window2", ("0"), self.window_polygon[1].coordinates)
+        cls.window_primitives = [
+            pr.Primitive("void", "polygon", "window1", ("0"), window_polygon[0].coordinates),
+            pr.Primitive("void", "polygon", "window2", ("0"), window_polygon[1].coordinates)
         ]
 
     def test_surface_as_sender(self):
@@ -36,13 +36,12 @@ class TestMatrix(unittest.TestCase):
         assert sender.content is not None
 
     def test_view_as_sender(self):
-        view = pr.View(
-            position=(0,  0, 0),
-            direction=(0, -1, 0),
-            horiz=180,
-            vert=180,
-            vtype='a',
-        )
+        view = pr.create_default_view()
+        view.vp=(0,  0, 0)
+        view.vdir=(0, -1, 0)
+        view.horiz=180
+        view.vert=180
+        view.type='a'
         ray_cnt = 5
         sender = matrix.ViewSender(view, ray_cnt, 4, 4)
         assert sender.xres == 4
@@ -94,7 +93,8 @@ class TestMatrix(unittest.TestCase):
             "mat", "polygon", "ceiling", [], [0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1]
         )
         res = matrix.surfaces_view_factor([floor], [mat] + walls + [ceiling], ray_count=1000)
-        assert sum(res["floor"].values()) == pytest.approx(1.0)
+        all = sum(res["floor"].values()) 
+        self.assertAlmostEqual(all[0][0][0], 1.0)
 
 if __name__ == "__main__":
     unittest.main()

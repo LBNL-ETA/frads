@@ -8,20 +8,16 @@ import inspect
 import json
 import tempfile
 import os
-import math
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable
 
-import numpy as np
 from epmodel import epmodel as epm
-import pyradiance as pr
+import frads as fr
+from frads.eplus_model import EnergyPlusModel
+from .window import GlazingSystem
+import numpy as np
 from pyenergyplus.api import EnergyPlusAPI
 
-from frads.ep2rad import epmodel_to_radmodel
-from frads.eplus_model import EnergyPlusModel
-from frads.methods import ThreePhaseMethod, WorkflowConfig
-from frads.window import GlazingSystem, Layer
-from frads.utils import polygon_primitive
 
 
 def ep_datetime_parser(inp: str):
@@ -63,7 +59,7 @@ class EnergyPlusSetup:
     def __init__(
         self,
         epmodel: EnergyPlusModel,
-        weather_file: Optional[str] = None,
+        weather_file: None | str = None,
         enable_radiance: bool = False,
         nproc: int = 1,
     ):
@@ -83,14 +79,14 @@ class EnergyPlusSetup:
             raise ValueError("Site location not found in EnergyPlus model.")
 
         if enable_radiance:
-            self.rmodels = epmodel_to_radmodel(
+            self.rmodels = fr.epmodel_to_radmodel(
                 epmodel, epw_file=weather_file, add_views=True
             )
             self.rconfigs = {
-                k: WorkflowConfig.from_dict(v) for k, v in self.rmodels.items()
+                k: fr.WorkflowConfig.from_dict(v) for k, v in self.rmodels.items()
             }
             # Default to Three-Phase Method
-            self.rworkflows = {k: ThreePhaseMethod(v) for k, v in self.rconfigs.items()}
+            self.rworkflows = {k: fr.ThreePhaseMethod(v) for k, v in self.rconfigs.items()}
             for v in self.rworkflows.values():
                 v.config.settings.save_matrices = True
                 v.config.settings.num_processors = nproc
@@ -119,7 +115,7 @@ class EnergyPlusSetup:
 
     def _actuator_func(self, state):
         if len(self.actuators) == 0:
-            api_data: List[str] = (
+            api_data: list[str] = (
                 self.api.api.listAllAPIDataCSV(state).decode("utf-8").splitlines()
             )
             for line in api_data:
@@ -387,9 +383,9 @@ class EnergyPlusSetup:
 
     def run(
         self,
-        output_directory: Optional[str] = "./",
-        output_prefix: Optional[str] = "eplus",
-        output_suffix: Optional[str] = "L",
+        output_directory: None | str = "./",
+        output_prefix: None | str = "eplus",
+        output_suffix: None | str = "L",
         silent: bool = False,
         annual: bool = False,
         design_day: bool = False,
@@ -485,7 +481,7 @@ class EnergyPlusSetup:
         # method(self.state, partial(func, self))
         method(self.state, func)
 
-    def _request_variables_from_callback(self, callable_nodes: List[ast.Call]) -> None:
+    def _request_variables_from_callback(self, callable_nodes: list[ast.Call]) -> None:
         for node in callable_nodes:
             key_value_dict = {}
             if node.func.attr == "get_variable_value":
@@ -522,7 +518,7 @@ class EnergyPlusSetup:
                     key="Environment",
                 )
 
-    def _check_actuators_from_callback(self, callable_nodes: List[ast.Call]) -> None:
+    def _check_actuators_from_callback(self, callable_nodes: list[ast.Call]) -> None:
         def get_zone_from_pair_arg(node: ast.Call) -> str:
             if len(node.args) == 2:
                 zone = ast.literal_eval(node.args[0])
@@ -619,7 +615,7 @@ class EnergyPlusSetup:
             "Site Diffuse Solar Radiation Rate per Area", "Environment"
         )
 
-    def calculate_wpi(self, zone: str, cfs_name: Dict[str, str]) -> np.ndarray:
+    def calculate_wpi(self, zone: str, cfs_name: dict[str, str]) -> np.ndarray:
         """Calculate workplane illuminance in a zone.
 
         Args:
@@ -646,7 +642,7 @@ class EnergyPlusSetup:
         )
 
     def calculate_edgps(
-        self, zone: str, cfs_name: Dict[str, str]
+        self, zone: str, cfs_name: dict[str, str]
     ) -> tuple[float, float]:
         """Calculate enhanced simplified daylight glare probability in a zone.
         The view is positioned at the center of the zone with direction facing
@@ -673,9 +669,16 @@ class EnergyPlusSetup:
             view_name, cfs_name, date_time, dni, dhi
         )
 
+    def add_proxy_geometry(self, gs: GlazingSystem):
+        for zone_name, zone in self.rworkflows.items():
+            for window_name, window in zone.config.model.windows.items():
+                geom = fr.window.get_proxy_geometry(window.polygon, self.glazing_blinds_system)
+                window.proxy_geometry[self.glazing_blinds_system.name] = b"\n".join(geom)
 
 
-def load_idf(fpath: Union[str, Path]) -> dict:
+
+
+def load_idf(fpath: str | Path) -> dict:
     """Load IDF file as JSON object.
 
     Use EnergyPlus --convert-only option to convert IDF file to epJSON file.
@@ -720,7 +723,7 @@ def load_idf(fpath: Union[str, Path]) -> dict:
     return json_data
 
 
-def load_energyplus_model(fpath: Union[str, Path]) -> EnergyPlusModel:
+def load_energyplus_model(fpath: str | Path) -> EnergyPlusModel:
     """Load EnergyPlus model from JSON file.
 
     Args:
@@ -746,128 +749,3 @@ def load_energyplus_model(fpath: Union[str, Path]) -> EnergyPlusModel:
     return EnergyPlusModel.model_validate(json_data)
 
 
-def analyze_glazing_system(layers: list[Layer]) -> list:
-    if not layers or not isinstance(layers[0], Layer):
-        return {
-            "error": "Invalid input. Please provide a string of layer types (g, f, b)."
-        }
-
-    # Group consecutive glazing layers
-    grouped_system = []
-    current_group = ""
-    current_type = None
-
-    for layer in layers:
-        if layer.product_type == "glazing":
-            if current_type == "glazing":
-                current_group += "glazing"
-            else:
-                if current_group:
-                    grouped_system.append((current_type, current_group))
-                current_group = "glazing"
-                current_type = "glazing"
-        else:
-            if current_group:
-                grouped_system.append((current_type, current_group))
-            grouped_system.append((layer, layer))
-            current_group = ""
-            current_type = None
-
-    # Add the last group if it exists
-    if current_group:
-        grouped_system.append((current_type, current_group))
-
-    # Create a simplified representation
-    return [(layer_type, len(group)) for layer_type, group in grouped_system]
-
-
-def add_proxy_geometry_to_rmodels(epsetup: EnergyPlusSetup, gs: GlazingSystem):
-    FEPS = 1e-5
-    layer_groups = analyze_glazing_system(gs.layers)
-    for zone_name, zone in epsetup.rmodels.items():
-        windows = zone["model"]["windows"]
-        for window_name, window in windows.items():
-            # add blinds to window
-            window_vertices = window.polygon.vertices
-
-            primitives: list[pr.Primitive] = []
-            current_index = 0
-            for group in layer_groups:
-                if group[0] == "glazing":
-                    glazing_layer_count = group[1]
-                    # Get BRTDFunc
-                    mat_name = f"mat_{gs.name}_glazing_{current_index}"
-                    geom_name = f"{gs.name}_glazing_{current_index}"
-                    mat: bytes = gs.get_brtdfunc(name=mat_name)
-                    geom = polygon_primitive(window.polygon, mat_name, geom_name)
-                    primitives.append(mat.bytes)
-                    primitives.append(geom.bytes)
-                    current_index += glazing_layer_count
-                elif group[0] == "fabric":
-                    mat_name = f"mat_{gs.name}_fabric_{current_index}"
-                    geom_name = f"{gs.name}_fabric_{current_index}"
-                    xml_name = f"{gs.name}_fabric_{current_index}.xml"
-                    # Get aBSDF primitive
-                    with open(xml_name, "wb") as f:
-                        f.write(gs.layers[current_index].fabric_xml)
-                    mat: pr.Primitive = pr.Primitive(
-                        "void", "aBSDF", mat_name, [xml_name, "0", "0", "1", "."], []
-                    )
-                    geom = polygon_primitive(window.polygon, mat_name, geom_name)
-                    primitives.append(mat.bytes)
-                    primitives.append(geom.bytes)
-                    current_index += 1
-                elif group[0] == "blinds":
-                    # NOTE: For blinds only
-                    zdiff1 = abs(window_vertices[1][2] - window_vertices[0][2])
-                    zdiff2 = abs(window_vertices[2][2] - window_vertices[1][2])
-                    dim1 = math.sqrt(
-                        sum(
-                            (window_vertices[1][i] - window_vertices[0][i]) ** 2
-                            for i in range(3)
-                        )
-                    )
-                    dim2 = math.sqrt(
-                        sum(
-                            (window_vertices[2][i] - window_vertices[1][i]) ** 2
-                            for i in range(3)
-                        )
-                    )
-                    if dim1 <= FEPS | dim2 <= FEPS:
-                        print("One of the sides of the window polygon is zero")
-                    width = height = 0
-                    if zdiff1 <= FEPS:
-                        width = dim1
-                        height = dim2
-                    elif zdiff2 <= FEPS:
-                        width = dim2
-                        height = dim1
-                    else:
-                        print("Error: Skewed window not supported: ")
-                        print(window_vertices)
-                    blinds_layer = gs.layers[current_index]
-                    geom = pr.BlindsGeometry(
-                        depth=blinds_layer.slat_depth,
-                        width=width,
-                        height=height,
-                        nslats=gs.nslats,
-                        angle=blinds_layer.slat_angle,
-                        rcurv=blinds_layer.slat_curvature,
-                    )
-                    blinds: bytes = pr.generate_blinds(blinds_layer.shading_material, geom)
-                    blinds_normal = np.array((1, 0, 0))
-                    rotated_blinds: bytes = pr.Xform(blinds).rotatez(
-                        pr.angle_between(blinds_normal, window.normal)
-                    )()
-                    xmin, xmax, ymin, ymax, zmin, zmax = pr.getbbox(rotated_blinds)
-                    rotated_blinds_centroid = np.array(
-                        ((xmax - xmin) / 2, (ymax - ymin) / 2, (zmax - zmin) / 2)
-                    )
-                    blinds_at_window = pr.Xform(rotated_blinds).translate(
-                        window.centroid - rotated_blinds_centroid
-                    )()
-                    primitives.append(pr.Xform(blinds_at_window).translate(
-                        *(window.normal * gs.layer[current_index].thickness)
-                    )())
-                    current_index += 1
-            window["proxy_geometry"][gs.name] = b"\n".join(primitives)
