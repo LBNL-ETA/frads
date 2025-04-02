@@ -68,8 +68,8 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                     "number_of_gases_in_mixture": len(gap.gas),
                 }
                 for idx, gas in enumerate(gap.gas):
-                    gas_dict[f"gas_{idx+1}_type"] = gas.gas.capitalize()
-                    gas_dict[f"gas_{idx+1}_fraction"] = gas.ratio
+                    gas_dict[f"gas_{idx + 1}_type"] = gas.gas.capitalize()
+                    gas_dict[f"gas_{idx + 1}_fraction"] = gas.ratio
                 gap_inputs.append(epm.WindowMaterialGasMixture.model_validate(gas_dict))
 
         layer_inputs: list[epmodel.ConstructionComplexFenestrationStateLayerInput] = []
@@ -85,6 +85,17 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                     infrared_transmittance=layer.ir_transmittance,
                     directional_absorptance_front=glzsys.solar_front_absorptance[i],
                     directional_absorptance_back=glzsys.solar_back_absorptance[i],
+                    top_opening_multiplier=layer.top_opening_multiplier,
+                    bottom_opening_multiplier=layer.bottom_opening_multiplier,
+                    left_side_opening_multiplier=layer.left_side_opening_multiplier,
+                    right_side_opening_multiplier=layer.right_side_opening_multiplier,
+                    front_opening_multiplier=layer.front_opening_multiplier,
+                    slat_width=layer.slat_width,
+                    slat_spacing=layer.slat_spacing,
+                    slat_thickness=layer.slat_thickness,
+                    slat_angle=layer.slat_angle,
+                    slat_conductivity=layer.slat_conductivity,
+                    slat_curve=layer.slat_curve,
                 )
             )
         input = epmodel.ConstructionComplexFenestrationStateInput(

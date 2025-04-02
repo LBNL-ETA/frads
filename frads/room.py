@@ -1,11 +1,8 @@
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import numpy as np
 import pyradiance as pr
-from frads import utils
-from frads.geom import Polygon
-from pyradiance.lib import Primitive
+from frads.geom import Polygon, polygon_primitive
 
 
 @dataclass
@@ -18,11 +15,11 @@ class WindowSurface:
 class Surface:
     base: Polygon
     base_primitive: pr.Primitive
-    polygons: List[Polygon]
-    windows: List[WindowSurface]
+    polygons: list[Polygon]
+    windows: list[WindowSurface]
     modifier: str
     identifier: str
-    primitives: List[pr.Primitive]
+    primitives: list[pr.Primitive]
 
     def move_window(self, distance: float) -> None:
         """Move windows in its normal direction."""
@@ -30,7 +27,7 @@ class Surface:
         new_windows = []
         for window in self.windows:
             new_polygon = window.polygon.move(direction)
-            new_primitive = utils.polygon_primitive(
+            new_primitive = polygon_primitive(
                 polygon=new_polygon,
                 modifier=window.primitive.modifier,
                 identifier=window.primitive.identifier,
@@ -43,7 +40,7 @@ class Surface:
         center = np.zeros(3)
         zaxis = np.array((0, 0, 1))
         new_base = self.base.rotate(center, zaxis, radians)
-        new_base_primitive = utils.polygon_primitive(
+        new_base_primitive = polygon_primitive(
             polygon=new_base,
             modifier=self.base_primitive.modifier,
             identifier=self.base_primitive.identifier,
@@ -52,7 +49,7 @@ class Surface:
         new_primitives = []
         for idx, polygon in enumerate(new_polygons):
             new_primitives.append(
-                utils.polygon_primitive(
+                polygon_primitive(
                     polygon=polygon,
                     modifier=self.primitives[idx].modifier,
                     identifier=self.primitives[idx].identifier,
@@ -61,7 +58,7 @@ class Surface:
         new_windows = []
         for window in self.windows:
             new_polygon = window.polygon.rotate(center, zaxis, radians)
-            new_primitive = utils.polygon_primitive(
+            new_primitive = polygon_primitive(
                 polygon=new_polygon,
                 modifier=window.primitive.modifier,
                 identifier=window.primitive.identifier,
@@ -83,9 +80,9 @@ class Room:
     ewall: Surface
     nwall: Surface
     wwall: Surface
-    materials: List[Primitive]
+    materials: list[pr.Primitive]
 
-    def primitives(self) -> List[pr.Primitive]:
+    def primitives(self) -> list[pr.Primitive]:
         return [
             *self.floor.primitives,
             *self.ceiling.primitives,
@@ -95,7 +92,7 @@ class Room:
             *self.wwall.primitives,
         ]
 
-    def window_primitives(self) -> List[pr.Primitive]:
+    def window_primitives(self) -> list[pr.Primitive]:
         return [
             *[srf.primitive for srf in self.ceiling.windows],
             *[srf.primitive for srf in self.swall.windows],
@@ -140,7 +137,69 @@ class Room:
                 )
 
 
-def thicken(base, thickness) -> List[Polygon]:
+def neutral_plastic_prim(
+    mod: str, ident: str, refl: float, spec: float, rough: float
+) -> pr.Primitive:
+    """
+    Generate a neutral color plastic material.
+
+    Args:
+        mod: modifier to the primitive
+        ident: identifier to the primitive
+        refl: measured reflectance (0.0 - 1.0)
+        spec: material specularity (0.0 - 1.0)
+        rough: material roughness (0.0 - 1.0)
+
+    Returns:
+        A material primtive
+    """
+    err_msg = "reflectance, speculariy, and roughness have to be 0-1"
+    assert all(0 <= i <= 1 for i in [spec, refl, rough]), err_msg
+    real_args = [refl, refl, refl, spec, rough]
+    return pr.Primitive(mod, "plastic", ident, [], real_args)
+
+
+def glass_prim(
+    mod: str, ident: str, tr: float, tg: float, tb: float, refrac: float = 1.52
+) -> pr.Primitive:
+    """Generate a glass material.
+
+    Args:
+        mod: modifier to the primitive
+        ident: identifier to the primtive
+        tr: Transmissivity in red channel (0.0 - 1.0)
+        tg: Transmissivity in green channel (0.0 - 1.0)
+        tb: Transmissivity in blue channel (0.0 - 1.0)
+        refrac: refraction index (default=1.52)
+    Returns:
+        material primtive (dict)
+
+    """
+    tmsv_red = tr * 1.08981
+    tmsv_green = tg * 1.08981
+    tmsv_blue = tb * 1.08981
+    real_args = [tmsv_red, tmsv_green, tmsv_blue, refrac]
+    return pr.Primitive(mod, "glass", ident, [], real_args)
+
+
+def material_lib() -> dict[str, pr.Primitive]:
+    """Generate a list of generic material primitives."""
+    tmis = 0.6 * 1.08981
+    return {
+        "neutral_lambertian_0.2": neutral_plastic_prim(
+            "void", "neutral_lambertian_0.2", 0.2, 0, 0
+        ),
+        "neutral_lambertian_0.5": neutral_plastic_prim(
+            "void", "neutral_lambertian_0.5", 0.5, 0, 0
+        ),
+        "neutral_lambertian_0.7": neutral_plastic_prim(
+            "void", "neutral_lambertian_0.7", 0.7, 0, 0
+        ),
+        "glass_60": glass_prim("void", "glass_60", tmis, tmis, tmis),
+    }
+
+
+def thicken(base, thickness) -> list[Polygon]:
     """Thicken the surface."""
     direction = base.normal * thickness
     polygons = base.extrude(direction)
@@ -160,7 +219,7 @@ def make_window(
     dist_bot: float,
     width: float,
     height: float,
-) -> Tuple[Polygon, WindowSurface]:
+) -> tuple[Polygon, WindowSurface]:
     """Make one or more window and punch a hole.
 
     -----------------
@@ -191,7 +250,7 @@ def make_window(
     new_base = base - window_polygon
     return new_base, WindowSurface(
         polygon=window_polygon,
-        primitive=utils.polygon_primitive(
+        primitive=polygon_primitive(
             polygon=window_polygon,
             modifier="glass_60",
             identifier=name,
@@ -199,7 +258,7 @@ def make_window(
     )
 
 
-def make_window_wwr(base: Polygon, wwr: float) -> Tuple[Polygon, WindowSurface]:
+def make_window_wwr(base: Polygon, wwr: float) -> tuple[Polygon, WindowSurface]:
     """
     Make a single window and punch a hole based on window-to-wall ratio.
 
@@ -208,7 +267,7 @@ def make_window_wwr(base: Polygon, wwr: float) -> Tuple[Polygon, WindowSurface]:
     base = base - window_polygon
     return base, WindowSurface(
         polygon=window_polygon,
-        primitive=utils.polygon_primitive(
+        primitive=polygon_primitive(
             polygon=window_polygon,
             modifier="glass_60",
             identifier="void",
@@ -221,8 +280,8 @@ def create_surface(
     thickness: float = 0,
     modifier: str = "void",
     identifier: str = "void",
-    wpd: Optional[List[List[float]]] = None,
-    wwr: Optional[float] = None,
+    wpd: None | list[list[float]] = None,
+    wwr: None | float = None,
 ) -> Surface:
     """Create a surface with windows.
 
@@ -240,13 +299,13 @@ def create_surface(
     vertices = base.vertices
     polygons = [base]
     windows = []
-    base_primitive = utils.polygon_primitive(
+    base_primitive = polygon_primitive(
         polygon=base,
         modifier=modifier,
         identifier=identifier,
     )
     primitives = [
-        utils.polygon_primitive(
+        polygon_primitive(
             polygon=base,
             modifier=modifier,
             identifier=identifier,
@@ -269,7 +328,7 @@ def create_surface(
     if thickness > 0:
         polygons = thicken(base, thickness)
         primitives = [
-            utils.polygon_primitive(
+            polygon_primitive(
                 polygon=polygon,
                 modifier=modifier,
                 identifier=f"{identifier}_{i}",
@@ -293,10 +352,10 @@ def create_south_facing_room(
     floor_floor: float,
     floor_ceiling: float,
     swall_thickness: float = 0,
-    wpd: Optional[List[List[float]]] = None,
-    wwr: Optional[float] = None,
+    wpd: None | list[list[float]] = None,
+    wwr: None | float = None,
 ) -> Room:
-    materials = list(utils.material_lib().values())
+    materials = list(material_lib().values())
     pt1 = np.array((0, 0, 0))
     pt2 = pt1 + np.array((0, depth, 0))
     pt3 = pt2 + np.array((width, 0, 0))

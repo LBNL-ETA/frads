@@ -1,7 +1,0 @@
-include frads/data/WC.DAT
-include frads/data/mrad_default.cfg
-include frads/data/optical_standards/*.*
-include test/data/*.dat
-include test/Resources/*.epw 
-include test/Resources/*.xml
-include test/Resources/*.wea

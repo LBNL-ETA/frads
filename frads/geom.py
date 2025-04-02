@@ -3,15 +3,16 @@ This module contains definitions of Vector and Polygon objects
 and other geometry related routines.
 """
 
-from typing import List, Tuple, Sequence
+from typing import Sequence
 
 import numpy as np
+from pyradiance import Primitive
 
 
 class Polygon:
     """Polygon class."""
 
-    def __init__(self, vertices: List[np.ndarray]):
+    def __init__(self, vertices: list[np.ndarray]):
         """
         Initialize a polygon.
         Args:
@@ -27,7 +28,7 @@ class Polygon:
         return self._vertices
 
     @vertices.setter
-    def vertices(self, new_vertices: List[np.ndarray]):
+    def vertices(self, new_vertices: list[np.ndarray]):
         self._vertices = np.array(new_vertices)
         self._normal = self._calculate_normal()
         self._area = self._calculate_area()
@@ -98,7 +99,7 @@ class Polygon:
                 (self._vertices[idx] - self._vertices[0]),
                 (self._vertices[idx + 1] - self._vertices[0]),
             )
-        return abs(total * np.array((0.5, 0.5, 0.5)))
+        return total * np.array((0.5, 0.5, 0.5))
 
     def _calculate_centroid(self):
         return np.mean(self._vertices, axis=0)
@@ -122,7 +123,7 @@ class Polygon:
         return Polygon(new_vertices)
 
     @property
-    def extreme(self) -> Tuple[float, ...]:
+    def extreme(self) -> tuple[float, ...]:
         """
         Return the extreme values of the polygon.
         """
@@ -164,7 +165,7 @@ class Polygon:
             Polygon (list): a list of polygons;
 
         """
-        polygons: List[Polygon] = [self]
+        polygons: list[Polygon] = [self]
         polygon2 = Polygon(([i + vector for i in self._vertices]))
         polygons.append(polygon2)
         for i in range(len(self._vertices) - 1):
@@ -206,10 +207,12 @@ class Polygon:
         return cls([pt1, pt2, pt3, pt4])
 
 
-def angle_between(vec1: np.ndarray, vec2: np.ndarray) -> float:
+def angle_between(vec1: np.ndarray, vec2: np.ndarray, degree=False) -> float:
     """Return angle between two vectors in radians."""
     dot_prod = np.dot(vec1, vec2)
     angle = np.arccos(dot_prod / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
+    if degree:
+        angle = np.degrees(angle)
     return angle
 
 
@@ -253,7 +256,7 @@ def rotate_3d(
     return rotated + center
 
 
-def convexhull(points: List[np.ndarray], normal: np.ndarray) -> Polygon:
+def convexhull(points: list[np.ndarray], normal: np.ndarray) -> Polygon:
     """Convex hull on coplanar points.
 
     Args:
@@ -328,7 +331,7 @@ def get_polygon_limits(polygon_list: Sequence[Polygon], offset: float = 0.0):
     return xmin, xmax, ymin, ymax, zmin, zmax
 
 
-def getbbox(polygons: Sequence[Polygon], offset: float = 0.0) -> List[Polygon]:
+def getbbox(polygons: Sequence[Polygon], offset: float = 0.0) -> list[Polygon]:
     """Get a bounding box for a list of polygons.
 
     Return a list of polygon that is the
@@ -375,3 +378,93 @@ def merge_polygon(polygons: Sequence[Polygon]) -> Polygon:
         raise ValueError("Windows not co-planar")
     points = [i for p in polygons for i in p.vertices]
     return convexhull(points, normals[0])
+
+
+def polygon_primitive(polygon: Polygon, modifier: str, identifier: str) -> Primitive:
+    """
+    Generate a primitive from a polygon.
+    Args:
+        polygon: a Polygon object
+        modifier: a Radiance primitive modifier
+        identifier: a Radiance primitive identifier
+    Returns:
+        A Primitive object
+    """
+    return Primitive(modifier, "polygon", identifier, [], polygon.coordinates)
+
+
+def parse_polygon(primitive: Primitive) -> Polygon:
+    """
+    Parse a primitive into a polygon.
+
+    Args:
+        primitive: a dictionary object containing a primitive
+    Returns:
+        A Polygon object
+    """
+    if primitive.ptype != "polygon":
+        raise ValueError("Not a polygon: ", primitive.identifier)
+    vertices = [
+        np.array(primitive.fargs[i : i + 3]) for i in range(0, len(primitive.fargs), 3)
+    ]
+    return Polygon(vertices)
+
+
+def pt_inclusion(pt: np.ndarray, polygon_pts: list[np.ndarray]) -> int:
+    """Test whether a point is inside a polygon
+    using winding number algorithm."""
+
+    def isLeft(pt0, pt1, pt2):
+        """Test whether a point is left to a line."""
+        return (pt1[0] - pt0[0]) * (pt2[1] - pt0[1]) - (pt2[0] - pt0[0]) * (
+            pt1[1] - pt0[1]
+        )
+
+    # Close the polygon for looping
+    # polygon_pts.append(polygon_pts[0])
+    polygon_pts = [*polygon_pts, polygon_pts[0]]
+    wn = 0
+    for i in range(len(polygon_pts) - 1):
+        if polygon_pts[i][1] <= pt[1]:
+            if polygon_pts[i + 1][1] > pt[1]:
+                if isLeft(polygon_pts[i], polygon_pts[i + 1], pt) > 0:
+                    wn += 1
+        else:
+            if polygon_pts[i + 1][1] <= pt[1]:
+                if isLeft(polygon_pts[i], polygon_pts[i + 1], pt) < 0:
+                    wn -= 1
+    return wn
+
+
+def gen_grid(polygon: Polygon, height: float, spacing: float) -> list[list[float]]:
+    """Generate a grid of points for orthogonal planar surfaces.
+
+    Args:
+        polygon: a polygon object
+        height: points' distance from the surface in its normal direction
+        spacing: distance between the grid points
+    Returns:
+        List of the points as list
+    """
+    vertices = polygon.vertices
+    plane_height = sum(i[2] for i in vertices) / len(vertices)
+    imin, imax, jmin, jmax, _, _ = polygon.extreme
+    xlen_spc = (imax - imin) / spacing
+    ylen_spc = (jmax - jmin) / spacing
+    xstart = (xlen_spc - int(xlen_spc) + 1) * spacing / 2
+    ystart = (ylen_spc - int(ylen_spc) + 1) * spacing / 2
+    x0 = np.arange(imin, imax, spacing) + xstart
+    y0 = np.arange(jmin, jmax, spacing) + ystart
+    grid_dir = polygon.normal * -1
+    grid_hgt = np.array((0, 0, plane_height)) + grid_dir * height
+    raw_pts = [
+        np.array((round(i, 3), round(j, 3), round(grid_hgt[2], 3)))
+        for i in x0
+        for j in y0
+    ]
+    if np.array_equal(polygon.normal, np.array((0, 0, 1))):
+        _grid = [p for p in raw_pts if pt_inclusion(p, vertices) > 0]
+    else:
+        _grid = [p for p in raw_pts if pt_inclusion(p, vertices[::-1]) > 0]
+    grid = [p.tolist() + grid_dir.tolist() for p in _grid]
+    return grid

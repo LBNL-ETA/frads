@@ -9,15 +9,14 @@ import json
 import tempfile
 import os
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable
 
-import numpy as np
 from epmodel import epmodel as epm
-from pyenergyplus.api import EnergyPlusAPI
-
-from frads.ep2rad import epmodel_to_radmodel
+import frads as fr
 from frads.eplus_model import EnergyPlusModel
-from frads.methods import ThreePhaseMethod, WorkflowConfig
+from .window import GlazingSystem
+import numpy as np
+from pyenergyplus.api import EnergyPlusAPI
 
 
 def ep_datetime_parser(inp: str):
@@ -59,8 +58,9 @@ class EnergyPlusSetup:
     def __init__(
         self,
         epmodel: EnergyPlusModel,
-        weather_file: Optional[str] = None,
+        weather_file: None | str = None,
         enable_radiance: bool = False,
+        nproc: int = 1,
     ):
         """Class for setting up and running EnergyPlus simulations.
 
@@ -78,16 +78,19 @@ class EnergyPlusSetup:
             raise ValueError("Site location not found in EnergyPlus model.")
 
         if enable_radiance:
-            self.rmodels = epmodel_to_radmodel(
+            self.rmodels = fr.epmodel_to_radmodel(
                 epmodel, epw_file=weather_file, add_views=True
             )
             self.rconfigs = {
-                k: WorkflowConfig.from_dict(v) for k, v in self.rmodels.items()
+                k: fr.WorkflowConfig.from_dict(v) for k, v in self.rmodels.items()
             }
             # Default to Three-Phase Method
-            self.rworkflows = {k: ThreePhaseMethod(v) for k, v in self.rconfigs.items()}
+            self.rworkflows = {
+                k: fr.ThreePhaseMethod(v) for k, v in self.rconfigs.items()
+            }
             for v in self.rworkflows.values():
                 v.config.settings.save_matrices = True
+                v.config.settings.num_processors = nproc
                 v.generate_matrices(view_matrices=False)
         self.api = EnergyPlusAPI()
         self.epw = weather_file
@@ -113,7 +116,7 @@ class EnergyPlusSetup:
 
     def _actuator_func(self, state):
         if len(self.actuators) == 0:
-            api_data: List[str] = (
+            api_data: list[str] = (
                 self.api.api.listAllAPIDataCSV(state).decode("utf-8").splitlines()
             )
             for line in api_data:
@@ -325,8 +328,7 @@ class EnergyPlusSetup:
                         handle = self.api.exchange.get_variable_handle(state, name, key)
                         if handle == -1:
                             raise ValueError(
-                                "Variable handle not found: "
-                                f"name = {name}, key = {key}"
+                                f"Variable handle not found: name = {name}, key = {key}"
                             )
                         self.variable_handles[key][name] = handle
                 except TypeError:
@@ -337,7 +339,7 @@ class EnergyPlusSetup:
                     handle = self.api.api.getConstructionHandle(state, cfs.encode())
                     if handle == -1:
                         raise ValueError(
-                            "Construction handle not found: " f"Construction = {cfs}"
+                            f"Construction handle not found: Construction = {cfs}"
                         )
                     self.construction_handles[cfs] = handle
                     self.construction_names[handle] = cfs
@@ -382,9 +384,9 @@ class EnergyPlusSetup:
 
     def run(
         self,
-        output_directory: Optional[str] = "./",
-        output_prefix: Optional[str] = "eplus",
-        output_suffix: Optional[str] = "L",
+        output_directory: None | str = "./",
+        output_prefix: None | str = "eplus",
+        output_suffix: None | str = "L",
         silent: bool = False,
         annual: bool = False,
         design_day: bool = False,
@@ -480,8 +482,7 @@ class EnergyPlusSetup:
         # method(self.state, partial(func, self))
         method(self.state, func)
 
-    def _request_variables_from_callback(self, callable_nodes: List[ast.Call]) -> None:
-        key_value_pairs = set()
+    def _request_variables_from_callback(self, callable_nodes: list[ast.Call]) -> None:
         for node in callable_nodes:
             key_value_dict = {}
             if node.func.attr == "get_variable_value":
@@ -496,7 +497,7 @@ class EnergyPlusSetup:
                         node.keywords[1].arg: node.keywords[1].value.value,
                     }
                 else:
-                    raise ValueError(f"Invalid number of arguments in {func}.")
+                    raise ValueError(f"Invalid number of arguments in {node.func}.")
                 self.request_variable(**key_value_dict)
             elif node.func.attr == "get_diffuse_horizontal_irradiance":
                 self.request_variable(
@@ -518,7 +519,7 @@ class EnergyPlusSetup:
                     key="Environment",
                 )
 
-    def _check_actuators_from_callback(self, callable_nodes: List[ast.Call]) -> None:
+    def _check_actuators_from_callback(self, callable_nodes: list[ast.Call]) -> None:
         def get_zone_from_pair_arg(node: ast.Call) -> str:
             if len(node.args) == 2:
                 zone = ast.literal_eval(node.args[0])
@@ -615,7 +616,7 @@ class EnergyPlusSetup:
             "Site Diffuse Solar Radiation Rate per Area", "Environment"
         )
 
-    def calculate_wpi(self, zone: str, cfs_name: Dict[str, str]) -> np.ndarray:
+    def calculate_wpi(self, zone: str, cfs_name: dict[str, str]) -> np.ndarray:
         """Calculate workplane illuminance in a zone.
 
         Args:
@@ -641,7 +642,9 @@ class EnergyPlusSetup:
             sensor_name, cfs_name, date_time, dni, dhi
         )
 
-    def calculate_edgps(self, zone: str, cfs_name: Dict[str, str]) -> tuple[float,float]:
+    def calculate_edgps(
+        self, zone: str, cfs_name: dict[str, str]
+    ) -> tuple[float, float]:
         """Calculate enhanced simplified daylight glare probability in a zone.
         The view is positioned at the center of the zone with direction facing
         the windows, weighted by the window area.
@@ -667,8 +670,14 @@ class EnergyPlusSetup:
             view_name, cfs_name, date_time, dni, dhi
         )
 
+    def add_proxy_geometry(self, gs: GlazingSystem):
+        for zone_name, zone in self.rworkflows.items():
+            for window_name, window in zone.config.model.windows.items():
+                geom = fr.window.get_proxy_geometry(window.polygon, gs)
+                window.proxy_geometry[gs.name] = b"\n".join(geom)
 
-def load_idf(fpath: Union[str, Path]) -> dict:
+
+def load_idf(fpath: str | Path) -> dict:
     """Load IDF file as JSON object.
 
     Use EnergyPlus --convert-only option to convert IDF file to epJSON file.
@@ -713,7 +722,7 @@ def load_idf(fpath: Union[str, Path]) -> dict:
     return json_data
 
 
-def load_energyplus_model(fpath: Union[str, Path]) -> EnergyPlusModel:
+def load_energyplus_model(fpath: str | Path) -> EnergyPlusModel:
     """Load EnergyPlus model from JSON file.
 
     Args:
