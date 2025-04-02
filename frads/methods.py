@@ -1257,11 +1257,6 @@ class ThreePhaseMethod(PhaseMethod):
             )
         )
         for wname, sname in bsdf.items():
-            if (_gms := self.config.model.materials.glazing_materials) != {}:
-                gmaterial = _gms[sname]
-                stdins.append(gmaterial.bytes)
-                for prim in self.window_senders[wname].surfaces:
-                    stdins.append(replace(prim, modifier=gmaterial.identifier).bytes)
             if (_pgs := self.config.model.windows[wname].proxy_geometry) != {}:
                 for prim in _pgs[sname]:
                     stdins.append(prim.bytes)
