@@ -1,16 +1,42 @@
-PYTHON = python
+# Determine the operating system
+ifeq ($(OS),Windows_NT)
+    # Windows
+    PYTHON = py
+    RM = del /Q
+else
+    # macOS and Linux
+    PYTHON = python3
+    RM = rm -f
+endif
 
-.PHONY: all
-all: install test
+# Create virtual environment (only if it doesn't exist)
+venv:
+	$(PYTHON) -m venv .venv
 
-.PHONY: install
 install:
-	pip install .
+	pip install -e .
 
-.PHONY: test
+docs:
+	pip install mkdocs "mkdocstrings[python]" mkdocs-material
+	mkdocs gh-deploy
+
+build:
+	pip install build
+	python -m build
+
+# Run tests
 test:
-	$(PYTHON) -m unittest discover -s tests -v --failfast
+	python -m unittest discover -s tests
 
-.PHONY: clean
+# Clean up
 clean:
-	rm -f *.csv *.end *.mtr *.mdd *.bnd *.dxf *.audit *.err *.eso *.json *.rdd *.shd *.sql *.htm *.eio *.mtd
+	$(RM) *.pyc
+	$(RM) -r __pycache__
+	$(RM) -r build
+	$(RM) -r dist
+	$(RM) -r *.egg-info
+
+deep-clean: clean
+	$(RM) -r .venv
+
+.PHONY: venv install build test clean docs
