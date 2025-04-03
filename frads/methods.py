@@ -1258,8 +1258,7 @@ class ThreePhaseMethod(PhaseMethod):
         )
         for wname, sname in bsdf.items():
             if (_pgs := self.config.model.windows[wname].proxy_geometry) != {}:
-                for prim in _pgs[sname]:
-                    stdins.append(prim.bytes)
+                stdins.append(_pgs[sname])
 
         octree = f"{random_string(5)}.oct"
         with open(octree, "wb") as f:
