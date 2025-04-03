@@ -185,18 +185,15 @@ class GlazingSystem:
                 f.write(self._matrix_to_str(self.solar_front_reflectance))
             with open(_rsb := _tmpdir / "rbs", "w") as f:
                 f.write(self._matrix_to_str(self.solar_back_reflectance))
-            _vi = pr.WrapBSDFInput("Visible", _tvf, _tvb, _rvf, _rvb)
-            _si = pr.WrapBSDFInput("Solar", _tsf, _tsb, _rsf, _rsb)
             with open(out, "wb") as f:
                 f.write(
-                    pr.wrapbsdf(
+                    pr.WrapBSDF(
                         enforce_window=True,
                         basis="kf",
-                        inp=[_vi, _si],
                         n=self.name,
                         m="",
                         t=str(self.thickness),
-                    )
+                    ).add_visible(_tvb, _tvf, _rvb, _rvf).add_solar(_tsb, _tsf, _rsb, _rsf)()
                 )
 
     def save(self, out: str | Path):
