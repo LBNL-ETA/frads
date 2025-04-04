@@ -23,6 +23,15 @@ class Polygon:
         self._area = self._calculate_area()
         self._centroid = self._calculate_centroid()
 
+    def __repr__(self):
+        """Create a stable string representation of the polygon."""
+        precision = 8
+        vertices_repr = [
+            tuple(round(float(coord), precision) for coord in vertex)
+            for vertex in self._vertices
+        ]
+        return f"Polygon(vertices={vertices_repr})"
+
     @property
     def vertices(self):
         return self._vertices
