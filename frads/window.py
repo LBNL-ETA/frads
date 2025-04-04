@@ -529,8 +529,6 @@ def create_glazing_system(
         solar_front_reflectance=solsys.front.reflectance.matrix,
         solar_back_transmittance=solsys.back.transmittance.matrix,
         solar_front_transmittance=solsys.front.transmittance.matrix,
-        # blinds_index=blinds_index,
-        # fabric_index=fabric_index,
     )
 
 
