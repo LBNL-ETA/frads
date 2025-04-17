@@ -426,6 +426,11 @@ def surface_to_polygon(srf: BuildingSurfaceDetailed) -> Polygon:
     return Polygon(vertices)
 
 
+def exterior_shading_to_polygon(srf: ShadingZoneDetailed) -> Polygon:
+    vertex = [np.array((v.vertex_x_coordinate, v.vertex_y_coordinate, v.vertex_z_coordinate)) for v in src.vertices]
+    return Polygon(vertex)
+
+
 def thicken(
     surface: Polygon,
     windows: list[Polygon],
@@ -766,10 +771,18 @@ class EnergyPlusToRadianceModelConverter:
             ).bytes
         )
 
+        # process exterior shading
+        shading_surfaces: dict = self._collect_shading_surfaces(surface_name)
+        outer_material_name = construction.layers[0].replace(" ", "_")
+        for sname, shade in shading_surfaces:
+            shading_polygon = exterior_shading_to_polygon(shade)
+            scene.append(
+                polygon_primitive(shading_polygon, outer_material_name, sname).bytes
+            )
+
         # extrude the surface by thickness
         if fenestrations != {}:
             facade = thicken(surface_polygon, window_polygons, construction.thickness)
-            outer_material_name = construction.layers[0].replace(" ", "_")
             scene.append(
                 polygon_primitive(
                     facade[1], outer_material_name, f"ext_{opaque_surface_name}"
@@ -806,6 +819,15 @@ class EnergyPlusToRadianceModelConverter:
             fname: fen
             for fname, fen in self.model.fenestration_surface_detailed.items()
             if fen.building_surface_name in zone_surfaces
+        }
+
+    def _collect_shading_surfaces(self, surface_name: str):
+        if self.model.shading_zone_detailed is None:
+            return {}
+        return {
+            sname: shade 
+            for sname, shade in self.model.shading_zone_detailed.items()
+            if shade.base_surface_name == surface_name
         }
 
     def _pair_surfaces_fenestrations(
