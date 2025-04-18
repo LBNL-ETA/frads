@@ -75,11 +75,25 @@ class Layer:
 
 @dataclass
 class LayerInput:
+    """
+    Layer input data object.
+
+    Attributes:
+        input: Input layer data.
+        top_opening_distance: Top opening distance in meters.
+        bottom_opening_distance: Bottom opening distance in meters.
+        left_side_opening_distance: Left side opening distance in meters.
+        right_side_opening_distance: Right side opening distance in meters.
+        front_opening_multiplier: Front opening multiplier (0-1).
+        slat_angle: Slat angle in degrees. 0 degree is horizontal. poitive values: slats angled downward towards exterior.
+        flipped: Flipped the layer.
+    """
+
     input: Path | str | bytes
-    top_opening_multiplier: float = 0
-    bottom_opening_multiplier: float = 0
-    left_side_opening_multiplier: float = 0
-    right_side_opening_multiplier: float = 0
+    top_opening_distance: float = 0
+    bottom_opening_distance: float = 0
+    left_side_opening_distance: float = 0
+    right_side_opening_distance: float = 0
     front_opening_multiplier: float = 0.05
     slat_angle: float = 0
     flipped: bool = False
@@ -193,7 +207,9 @@ class GlazingSystem:
                         n=self.name,
                         m="",
                         t=str(self.thickness),
-                    ).add_visible(_tvb, _tvf, _rvb, _rvf).add_solar(_tsb, _tsf, _rsb, _rsf)()
+                    )
+                    .add_visible(_tvb, _tvf, _rvb, _rvf)
+                    .add_solar(_tsb, _tsf, _rsb, _rsf)()
                 )
 
     def save(self, out: str | Path):
@@ -273,10 +289,16 @@ def get_layer_data(inp: pwc.ProductData, layer_inp: LayerInput) -> Layer:
         emissivity_back=inp.emissivity_back,
         ir_transmittance=inp.ir_transmittance,
         rgb=get_layer_rgb(inp),
-        top_opening_multiplier=layer_inp.top_opening_multiplier,
-        bottom_opening_multiplier=layer_inp.bottom_opening_multiplier,
-        left_side_opening_multiplier=layer_inp.left_side_opening_multiplier,
-        right_side_opening_multiplier=layer_inp.right_side_opening_multiplier,
+        top_opening_multiplier=min(1, layer_inp.top_opening_distance / inp.thickness),
+        bottom_opening_multiplier=min(
+            1, layer_inp.bottom_opening_distance / inp.thickness
+        ),
+        left_side_opening_multiplier=min(
+            1, layer_inp.left_side_opening_distance / inp.thickness
+        ),
+        right_side_opening_multiplier=min(
+            1, layer_inp.right_side_opening_distance / inp.thickness
+        ),
         front_opening_multiplier=layer_inp.front_opening_multiplier,
         slat_angle=layer_inp.slat_angle,
         flipped=layer_inp.flipped,
