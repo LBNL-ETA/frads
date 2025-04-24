@@ -80,11 +80,11 @@ class LayerInput:
 
     Attributes:
         input: Input layer data.
-        top_opening_distance: Top opening distance in meters.
-        bottom_opening_distance: Bottom opening distance in meters.
-        left_side_opening_distance: Left side opening distance in meters.
-        right_side_opening_distance: Right side opening distance in meters.
-        front_opening_multiplier: Front opening multiplier (0-1).
+        top_opening_distance: Top opening distance from the window frame in meters.
+        bottom_opening_distance: Bottom opening distance from the windowframe in meters.
+        left_side_opening_distance: Left side opening distance from the window frame in meters.
+        right_side_opening_distance: Right side opening distance from the window frame in meters.
+        front_opening_multiplier: Front opening multiplier (0-1). The fraction of the shade surface that is open to air flow.
         slat_angle: Slat angle in degrees. 0 degree is horizontal. poitive values: slats angled downward towards exterior.
         flipped: Flipped the layer.
     """
@@ -289,16 +289,6 @@ def get_layer_data(inp: pwc.ProductData, layer_inp: LayerInput) -> Layer:
         emissivity_back=inp.emissivity_back,
         ir_transmittance=inp.ir_transmittance,
         rgb=get_layer_rgb(inp),
-        top_opening_multiplier=min(1, layer_inp.top_opening_distance / inp.thickness),
-        bottom_opening_multiplier=min(
-            1, layer_inp.bottom_opening_distance / inp.thickness
-        ),
-        left_side_opening_multiplier=min(
-            1, layer_inp.left_side_opening_distance / inp.thickness
-        ),
-        right_side_opening_multiplier=min(
-            1, layer_inp.right_side_opening_distance / inp.thickness
-        ),
         front_opening_multiplier=layer_inp.front_opening_multiplier,
         slat_angle=layer_inp.slat_angle,
         flipped=layer_inp.flipped,
@@ -423,7 +413,7 @@ def create_glazing_system(
                 with open(layer_inp.input, "rb") as f:
                     fabric_xml = f.read()
                 product_data = pwc.parse_bsdf_xml_file(layer_inp.input)
-                if product_data.product_type is None:
+                if product_data.product_type is None or product_data.product_type == "":
                     product_data.product_type = "shading"
             else:
                 product_data = pwc.parse_optics_file(layer_inp.input)
@@ -433,7 +423,7 @@ def create_glazing_system(
             except json.JSONDecodeError:
                 product_data = pwc.parse_bsdf_xml_string(layer_inp.input)
                 fabric_xml = layer_inp.input
-                if product_data.product_type is None:
+                if product_data.product_type is None or product_data.product_type == "":
                     product_data.product_type = "shading"
         if product_data is None:
             raise ValueError("Invalid layer type")
@@ -502,6 +492,25 @@ def create_glazing_system(
                 layer_data.append(layer)
                 product_data_list.append(product_data)
                 thickness += layer.thickness
+
+            if idx == 0:
+                gap_thickness = gaps[idx].thickness
+            elif idx == len(layer_inputs) - 1:
+                gap_thickness = gaps[idx - 1].thickness
+            else:
+                gap_thickness = min(gaps[idx - 1].thickness, gaps[idx].thickness)
+            layer.top_opening_multiplier = min(
+                1, layer_inp.top_opening_distance / gap_thickness
+            )
+            layer.bottom_opening_multiplier = min(
+                1, layer_inp.bottom_opening_distance / gap_thickness
+            )
+            layer.left_side_opening_multiplier = min(
+                1, layer_inp.left_side_opening_distance / gap_thickness
+            )
+            layer.right_side_opening_multiplier = min(
+                1, layer_inp.right_side_opening_distance / gap_thickness
+            )
         else:
             layer = get_layer_data(product_data, layer_inp)
             layer.thickness = layer.thickness

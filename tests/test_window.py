@@ -25,26 +25,36 @@ class TestWindow(unittest.TestCase):
         shade_path = self.resources_dir / "2011-SA1.xml"
         blinds_path = self.resources_dir / "igsdb_product_19732.json"
         glass_layer = LayerInput(glass_path)
-        shade_layer = LayerInput(shade_path)
+        shade_layer = LayerInput(
+            shade_path,
+            left_side_opening_distance=0.01,
+            right_side_opening_distance=0.005,
+            top_opening_distance=0.0025,
+            bottom_opening_distance=0.005,
+        )
         blinds_layer = LayerInput(
             blinds_path,
             slat_angle=45,
-            left_side_opening_distance=0.003,
-            right_side_opening_distance=0.003,
         )
         self.double_glaze = [glass_layer, glass_layer]
         self.triple_glaze = [glass_layer, glass_layer, glass_layer]
         self.double_glaze_shade = [glass_layer, glass_layer, shade_layer]
         self.double_glaze_shade = [glass_layer, glass_layer, blinds_layer]
         self.single_glaze_blinds = [glass_layer, blinds_layer]
+        self.double_glaze_inner_shade = [glass_layer, shade_layer, glass_layer]
         self.dgu_glazing_system = create_glazing_system(
             name="dgu", layer_inputs=self.double_glaze
         )
         self.tgu_glazing_system = create_glazing_system(
             name="tgu", layer_inputs=self.triple_glaze
         )
-        # self.dgu_shade_glazing_system = create_glazing_system(name="dgu_shade", layer_inputs=self.double_glaze_shade)
-        # self.dgu_blinds_glazing_system = create_glazing_system(name="dgu_blinds", layer_inputs=self.double_glaze_blinds)
+
+        # self.dgu_shade_glazing_system = create_glazing_system(
+        #     name="dgu_shade", layer_inputs=self.double_glaze_shade
+        # )
+        # self.dgu_blinds_glazing_system = create_glazing_system(
+        #     name="dgu_blinds", layer_inputs=self.double_glaze_blinds
+        # )
 
     def test_save_and_load(self):
         """
@@ -174,13 +184,49 @@ class TestWindow(unittest.TestCase):
 
         self.assertEqual(gs.thickness, 0.026213180361560902)
 
-        self.assertEqual(gs.layers[1].top_opening_multiplier, 0)
-        self.assertEqual(gs.layers[1].bottom_opening_multiplier, 0)
-        self.assertEqual(gs.layers[1].left_side_opening_multiplier, 0.28666491129184357)
-        self.assertEqual(
-            gs.layers[1].right_side_opening_multiplier, 0.28666491129184357
+    def test_inner_shade_gap(self):
+        """
+        Test left, right, top and bottom opening multipliers for inner shade with customized gap.
+
+        Check gaps thickness
+        Check the order of the gaps
+        Check the thickness of the glazing system.
+        Check the opening multipliers of the shading layer
+        """
+
+        gs = create_glazing_system(
+            name="dgu_inner_shade",
+            layer_inputs=self.double_glaze_inner_shade,
+            gaps=[Gap([Gas("air", 1)], 0.01), Gap([Gas("air", 1)], 0.005)],
         )
+
+        self.assertEqual(gs.gaps[0].gas[0].gas, "air")
+        self.assertEqual(gs.gaps[0].gas[0].ratio, 1)
+        self.assertEqual(gs.gaps[0].thickness, 0.01)
+
+        self.assertEqual(gs.gaps[1].gas[0].gas, "air")
+        self.assertEqual(gs.gaps[1].gas[0].ratio, 1)
+        self.assertEqual(gs.gaps[1].thickness, 0.005)
+
+        self.assertEqual(gs.thickness, 0.022096)
+
+        self.assertEqual(gs.layers[0].left_side_opening_multiplier, 0)
+        self.assertEqual(gs.layers[0].right_side_opening_multiplier, 0)
+        self.assertEqual(gs.layers[0].top_opening_multiplier, 0)
+        self.assertEqual(gs.layers[0].bottom_opening_multiplier, 0)
+        self.assertEqual(gs.layers[0].front_opening_multiplier, 0.05)
+
+        self.assertEqual(gs.layers[1].left_side_opening_multiplier, 1)
+        self.assertEqual(gs.layers[1].right_side_opening_multiplier, 1)
+        self.assertEqual(gs.layers[1].top_opening_multiplier, 0.5)
+        self.assertEqual(gs.layers[1].bottom_opening_multiplier, 1)
         self.assertEqual(gs.layers[1].front_opening_multiplier, 0.05)
+
+        self.assertEqual(gs.layers[2].left_side_opening_multiplier, 0)
+        self.assertEqual(gs.layers[2].right_side_opening_multiplier, 0)
+        self.assertEqual(gs.layers[2].top_opening_multiplier, 0)
+        self.assertEqual(gs.layers[2].bottom_opening_multiplier, 0)
+        self.assertEqual(gs.layers[2].front_opening_multiplier, 0.05)
 
 
 if __name__ == "__main__":
