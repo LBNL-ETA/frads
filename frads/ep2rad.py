@@ -19,6 +19,7 @@ from epmodel.epmodel import (
     FenestrationSurfaceDetailed,
     Material,
     MaterialNoMass,
+    ShadingZoneDetailed,
     SurfaceType,
     WindowMaterialGlazing,
     WindowMaterialSimpleGlazingSystem,
@@ -427,7 +428,10 @@ def surface_to_polygon(srf: BuildingSurfaceDetailed) -> Polygon:
 
 
 def exterior_shading_to_polygon(srf: ShadingZoneDetailed) -> Polygon:
-    vertex = [np.array((v.vertex_x_coordinate, v.vertex_y_coordinate, v.vertex_z_coordinate)) for v in src.vertices]
+    vertex = [
+        np.array((v.vertex_x_coordinate, v.vertex_y_coordinate, v.vertex_z_coordinate))
+        for v in srf.vertices
+    ]
     return Polygon(vertex)
 
 
@@ -774,7 +778,7 @@ class EnergyPlusToRadianceModelConverter:
         # process exterior shading
         shading_surfaces: dict = self._collect_shading_surfaces(surface_name)
         outer_material_name = construction.layers[0].replace(" ", "_")
-        for sname, shade in shading_surfaces:
+        for sname, shade in shading_surfaces.items():
             shading_polygon = exterior_shading_to_polygon(shade)
             scene.append(
                 polygon_primitive(shading_polygon, outer_material_name, sname).bytes
@@ -825,7 +829,7 @@ class EnergyPlusToRadianceModelConverter:
         if self.model.shading_zone_detailed is None:
             return {}
         return {
-            sname: shade 
+            sname: shade
             for sname, shade in self.model.shading_zone_detailed.items()
             if shade.base_surface_name == surface_name
         }
