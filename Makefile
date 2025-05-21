@@ -28,6 +28,9 @@ build:
 test:
 	python -m unittest discover -s tests
 
+test_window:
+	python -m unittest tests/test_window.py
+
 # Clean up
 clean:
 	$(RM) *.pyc

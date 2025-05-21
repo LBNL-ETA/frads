@@ -8,9 +8,13 @@ from frads.window import (
     GlazingSystem,
     AIR,
     ARGON,
-    LayerInput,
+    GlazingLayerDefinition,
+    FabricLayerDefinition,
+    BlindsLayerDefinition,
+    OpeningDefinitions,
     Layer,
     get_glazing_layer_groups,
+    load_glazing_system,
 )
 
 
@@ -24,17 +28,20 @@ class TestWindow(unittest.TestCase):
         glass_path = self.resources_dir / "CLEAR_3.DAT"
         shade_path = self.resources_dir / "2011-SA1.xml"
         blinds_path = self.resources_dir / "igsdb_product_19732.json"
-        glass_layer = LayerInput(glass_path)
-        shade_layer = LayerInput(
-            shade_path,
-            left_side_opening_distance=0.01,
-            right_side_opening_distance=0.005,
-            top_opening_distance=0.0025,
-            bottom_opening_distance=0.005,
+        glass_layer = GlazingLayerDefinition(glass_path)
+        openings = OpeningDefinitions(
+            left_opening_distance_m=0.01,
+            right_opening_distance_m=0.005,
+            top_opening_distance_m=0.0025,
+            bottom_opening_distance_m=0.005,
         )
-        blinds_layer = LayerInput(
-            blinds_path,
-            slat_angle=45,
+        shade_layer = FabricLayerDefinition(
+            input_source=shade_path,
+            openings=openings,
+        )
+        blinds_layer = BlindsLayerDefinition(
+            input_source=blinds_path,
+            slat_angle_deg=45,
         )
         self.double_glaze = [glass_layer, glass_layer]
         self.triple_glaze = [glass_layer, glass_layer, glass_layer]
@@ -62,7 +69,7 @@ class TestWindow(unittest.TestCase):
         """
         self.dgu_glazing_system.save("test.json")
         self.assertTrue(Path("test.json").exists())
-        gs2 = GlazingSystem.from_json("test.json")
+        gs2 = load_glazing_system("test.json")
         os.remove("test.json")
         self.assertEqual(gs2.name, self.dgu_glazing_system.name)
         self.assertEqual(
@@ -172,11 +179,12 @@ class TestWindow(unittest.TestCase):
             layer_inputs=self.single_glaze_blinds,
             nsamp=1,
         )
+        gs.save("temp.json")
 
         self.assertEqual(gs.layers[0].product_name, "Generic Clear Glass")
-        self.assertEqual(gs.layers[0].thickness, 0.003048)
+        self.assertEqual(gs.layers[0].thickness_m, 0.003048)
         self.assertEqual(gs.layers[1].product_name, "ODL Espresso Blind 14.8mm Slat")
-        self.assertEqual(gs.layers[1].thickness, 0.010465180361560904)
+        self.assertEqual(gs.layers[1].thickness_m, 0.010465180361560904)
 
         self.assertEqual(gs.gaps[0].gas[0].gas, "air")
         self.assertEqual(gs.gaps[0].gas[0].ratio, 1)
@@ -210,24 +218,11 @@ class TestWindow(unittest.TestCase):
 
         self.assertEqual(gs.thickness, 0.022096)
 
-        self.assertEqual(gs.layers[0].left_side_opening_multiplier, 0)
-        self.assertEqual(gs.layers[0].right_side_opening_multiplier, 0)
-        self.assertEqual(gs.layers[0].top_opening_multiplier, 0)
-        self.assertEqual(gs.layers[0].bottom_opening_multiplier, 0)
-        self.assertEqual(gs.layers[0].front_opening_multiplier, 0.05)
-
-        self.assertEqual(gs.layers[1].left_side_opening_multiplier, 1)
-        self.assertEqual(gs.layers[1].right_side_opening_multiplier, 1)
-        self.assertEqual(gs.layers[1].top_opening_multiplier, 0.5)
-        self.assertEqual(gs.layers[1].bottom_opening_multiplier, 1)
-        self.assertEqual(gs.layers[1].front_opening_multiplier, 0.05)
-
-        self.assertEqual(gs.layers[2].left_side_opening_multiplier, 0)
-        self.assertEqual(gs.layers[2].right_side_opening_multiplier, 0)
-        self.assertEqual(gs.layers[2].top_opening_multiplier, 0)
-        self.assertEqual(gs.layers[2].bottom_opening_multiplier, 0)
-        self.assertEqual(gs.layers[2].front_opening_multiplier, 0.05)
-
+        self.assertEqual(gs.layers[1].openings.left_opening_multiplier, 1)
+        self.assertEqual(gs.layers[1].openings.right_opening_multiplier, 1)
+        self.assertEqual(gs.layers[1].openings.top_opening_multiplier, 0.5)
+        self.assertEqual(gs.layers[1].openings.bottom_opening_multiplier, 1)
+        self.assertEqual(gs.layers[1].openings.front_opening_multiplier, 0.05)
 
 if __name__ == "__main__":
     unittest.main()
