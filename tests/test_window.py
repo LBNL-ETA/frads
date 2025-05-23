@@ -35,7 +35,7 @@ class TestWindow(unittest.TestCase):
             top_m=0.0025,
             bottom_m=0.005,
         )
-        shade_layer = FabricLayerDefinition(
+        fabric_layer = FabricLayerDefinition(
             input_source=shade_path,
             openings=openings,
         )
@@ -44,37 +44,37 @@ class TestWindow(unittest.TestCase):
             slat_angle_deg=45,
         )
         self.double_glaze = [glass_layer, glass_layer]
-        self.triple_glaze = [glass_layer, glass_layer, glass_layer]
-        self.double_glaze_shade = [glass_layer, glass_layer, shade_layer]
-        self.double_glaze_shade = [glass_layer, glass_layer, blinds_layer]
+        triple_glaze = [glass_layer, glass_layer, glass_layer]
+        double_glaze_fabric = [glass_layer, glass_layer, fabric_layer]
+        double_glaze_blinds = [glass_layer, glass_layer, blinds_layer]
         self.single_glaze_blinds = [glass_layer, blinds_layer]
-        self.double_glaze_inner_shade = [glass_layer, shade_layer, glass_layer]
-        self.dgu_glazing_system = create_glazing_system(
+        self.double_glaze_inner_fabric = [glass_layer, fabric_layer, glass_layer]
+        self.double_glaze_system = create_glazing_system(
             name="dgu", layer_inputs=self.double_glaze
         )
-        self.tgu_glazing_system = create_glazing_system(
-            name="tgu", layer_inputs=self.triple_glaze
+        self.triple_glaze_system = create_glazing_system(
+            name="tgu", layer_inputs=triple_glaze
         )
 
-        # self.dgu_shade_glazing_system = create_glazing_system(
-        #     name="dgu_shade", layer_inputs=self.double_glaze_shade
-        # )
-        # self.dgu_blinds_glazing_system = create_glazing_system(
-        #     name="dgu_blinds", layer_inputs=self.double_glaze_blinds
-        # )
+        self.double_glaze_fabric_system = create_glazing_system(
+            name="dgu_shade", layer_inputs=double_glaze_fabric
+        )
+        self.double_glaze_blinds_system = create_glazing_system(
+            name="dgu_blinds", layer_inputs=double_glaze_blinds, nsamp=1,
+        )
 
     def test_save_and_load(self):
         """
         Test the save method of the GlazingSystem class.
         """
-        self.dgu_glazing_system.save("test.json")
+        self.double_glaze_fabric_system.save("test.json")
         self.assertTrue(Path("test.json").exists())
         gs2 = load_glazing_system("test.json")
-        os.remove("test.json")
-        self.assertEqual(gs2.name, self.dgu_glazing_system.name)
+        # os.remove("test.json")
+        self.assertEqual(gs2.name, self.double_glaze_fabric_system.name)
         self.assertEqual(
             gs2.visible_back_reflectance,
-            self.dgu_glazing_system.visible_back_reflectance,
+            self.double_glaze_fabric_system.visible_back_reflectance,
         )
 
     def test_simple_glazingsystem(self):
@@ -88,15 +88,15 @@ class TestWindow(unittest.TestCase):
         """
 
         self.assertEqual(
-            self.dgu_glazing_system.layers[0].product_name, "Generic Clear Glass"
+            self.double_glaze_system.layers[0].product_name, "Generic Clear Glass"
         )
         self.assertEqual(
-            self.dgu_glazing_system.layers[1].product_name, "Generic Clear Glass"
+            self.double_glaze_system.layers[1].product_name, "Generic Clear Glass"
         )
-        self.assertEqual(self.dgu_glazing_system.name, "dgu")
-        self.assertEqual(self.dgu_glazing_system.gaps[0].gas[0].gas, "air")
-        self.assertEqual(self.dgu_glazing_system.gaps[0].gas[0].ratio, 1)
-        self.assertEqual(self.dgu_glazing_system.gaps[0].thickness, 0.0127)
+        self.assertEqual(self.double_glaze_system.name, "dgu")
+        self.assertEqual(self.double_glaze_system.gaps[0].gas[0].gas, "air")
+        self.assertEqual(self.double_glaze_system.gaps[0].gas[0].ratio, 1)
+        self.assertEqual(self.double_glaze_system.gaps[0].thickness, 0.0127)
 
     def test_get_glazing_layer_groups(self):
         glass_layer = Layer(
@@ -204,7 +204,7 @@ class TestWindow(unittest.TestCase):
 
         gs = create_glazing_system(
             name="dgu_inner_shade",
-            layer_inputs=self.double_glaze_inner_shade,
+            layer_inputs=self.double_glaze_inner_fabric,
             gaps=[Gap([Gas("air", 1)], 0.01), Gap([Gas("air", 1)], 0.005)],
         )
 

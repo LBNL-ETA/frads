@@ -961,7 +961,7 @@ def generate_melanopic_bsdf(layer_inputs: Sequence[Layer]):
             geom_name = f"{gs.name}_fabric_{current_index}"
             xml_name = f"{gs.name}_fabric_{current_index}.xml"
             # Get aBSDF primitive
-            with open(xml_name, "wb") as f:
+            with open(xml_name, "w") as f:
                 f.write(gs.layers[current_index].fabric_xml)
             mat: pr.Primitive = pr.Primitive(
                 "void", "aBSDF", mat_name, [xml_name, "0", "0", "1", "."], []
