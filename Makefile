@@ -31,6 +31,9 @@ test:
 test_window:
 	python -m unittest tests/test_window.py
 
+test_eplus:
+	python -m unittest tests/test_eplus.py
+
 # Clean up
 clean:
 	$(RM) *.pyc
@@ -42,4 +45,4 @@ clean:
 deep-clean: clean
 	$(RM) -r .venv
 
-.PHONY: venv install build test clean docs
+.PHONY: venv install build test clean docs test_window test_eplus

@@ -16,10 +16,9 @@ class TestGlazingSystem(unittest.TestCase):
         self.medium_office = fr.load_energyplus_model(ref_models["medium_office"])
         glass_path = self.resources_dir / "CLEAR_3.DAT"
         blinds_path = self.resources_dir / "igsdb_product_19732.json"
-        glass_layer = fr.window.LayerInput(glass_path)
-        blinds_layer = fr.window.LayerInput(blinds_path, slat_angle=45)
+        glass_layer = fr.window.GlazingLayerDefinition(glass_path)
+        blinds_layer = fr.window.BlindsLayerDefinition(input_source=blinds_path, slat_angle_deg=45)
         single_glaze_blinds = [glass_layer, blinds_layer]
-        # double_glaze_blinds = [glass_layer, blinds_layer]
         self.glazing_blinds_system = fr.create_glazing_system(name="gs1", layer_inputs=single_glaze_blinds, nproc=4, nsamp=1)
 
     def test_add_proxy_geometry(self):

@@ -30,10 +30,10 @@ class TestWindow(unittest.TestCase):
         blinds_path = self.resources_dir / "igsdb_product_19732.json"
         glass_layer = GlazingLayerDefinition(glass_path)
         openings = OpeningDefinitions(
-            left_opening_distance_m=0.01,
-            right_opening_distance_m=0.005,
-            top_opening_distance_m=0.0025,
-            bottom_opening_distance_m=0.005,
+            left_m=0.01,
+            right_m=0.005,
+            top_m=0.0025,
+            bottom_m=0.005,
         )
         shade_layer = FabricLayerDefinition(
             input_source=shade_path,
@@ -218,11 +218,11 @@ class TestWindow(unittest.TestCase):
 
         self.assertEqual(gs.thickness, 0.022096)
 
-        self.assertEqual(gs.layers[1].openings.left_opening_multiplier, 1)
-        self.assertEqual(gs.layers[1].openings.right_opening_multiplier, 1)
-        self.assertEqual(gs.layers[1].openings.top_opening_multiplier, 0.5)
-        self.assertEqual(gs.layers[1].openings.bottom_opening_multiplier, 1)
-        self.assertEqual(gs.layers[1].openings.front_opening_multiplier, 0.05)
+        self.assertEqual(gs.layers[1].opening_multipliers.left, 1)
+        self.assertEqual(gs.layers[1].opening_multipliers.right, 1)
+        self.assertEqual(gs.layers[1].opening_multipliers.top, 0.5)
+        self.assertEqual(gs.layers[1].opening_multipliers.bottom, 1)
+        self.assertEqual(gs.layers[1].opening_multipliers.front, 0.05)
 
 if __name__ == "__main__":
     unittest.main()

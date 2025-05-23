@@ -50,20 +50,20 @@ class PaneRGB:
 
 @dataclass(slots=True)
 class OpeningDefinitions:
-    top_opening_distance_m: float = 0.0
-    bottom_opening_distance_m: float = 0.0
-    left_opening_distance_m: float = 0.0
-    right_opening_distance_m: float = 0.0
-    front_opening_multiplier: float = 0.05
+    top_m: float = 0.0
+    bottom_m: float = 0.0
+    left_m: float = 0.0
+    right_m: float = 0.0
+    front_multiplier: float = 0.05
 
 
 @dataclass(slots=True)
 class OpeningMultipliers:
-    top_opening_multiplier: float = 0.0
-    bottom_opening_multiplier: float = 0.0
-    left_opening_multiplier: float = 0.0
-    right_opening_multiplier: float = 0.0
-    front_opening_multiplier: float = 0.0
+    top: float = 0.0
+    bottom: float = 0.0
+    left: float = 0.0
+    right: float = 0.0
+    front: float = 0.0
 
 
 @dataclass(slots=True)
@@ -124,7 +124,7 @@ class Layer:
     slat_angle_deg: float = 90.0
     slat_conductivity: float = 160.00
     nslats: int = 1
-    openings: OpeningMultipliers = field(default_factory=OpeningMultipliers)
+    opening_multipliers: OpeningMultipliers = field(default_factory=OpeningMultipliers)
     shading_xml: None | bytes = None
 
 
@@ -441,11 +441,11 @@ def _apply_opening_properties(
              gap_thickness = min(gaps_list[layer_idx - 1].thickness, gaps_list[layer_idx].thickness) #
 
     if gap_thickness > 0:
-        layer_obj.openings.top_opening_multiplier = min(1., layer_def_openings.top_opening_distance_m / gap_thickness)
-        layer_obj.openings.bottom_opening_multiplier = min(1., layer_def_openings.bottom_opening_distance_m / gap_thickness)
-        layer_obj.openings.left_opening_multiplier = min(1., layer_def_openings.left_opening_distance_m / gap_thickness)
-        layer_obj.openings.right_opening_multiplier = min(1., layer_def_openings.right_opening_distance_m / gap_thickness)
-        layer_obj.openings.front_opening_multiplier = min(1., layer_def_openings.front_opening_multiplier)
+        layer_obj.opening_multipliers.top = min(1., layer_def_openings.top_m / gap_thickness)
+        layer_obj.opening_multipliers.bottom = min(1., layer_def_openings.bottom_m / gap_thickness)
+        layer_obj.opening_multipliers.left = min(1., layer_def_openings.left_m / gap_thickness)
+        layer_obj.opening_multipliers.right = min(1., layer_def_openings.right_m / gap_thickness)
+        layer_obj.opening_multipliers.front = min(1., layer_def_openings.front_multiplier)
 
 
 def _process_blind_definition_to_bsdf(
@@ -505,13 +505,17 @@ def _process_blind_definition_to_bsdf(
     with open("temp.xml", "wb") as f:
         f.write(xml)
     layer.thickness_m = layer_thickness_m
+    layer.conductivity = product_data.composition.material.conductivity
+    layer.emissivity_front = emis_front
+    layer.emissivity_back = emis_back
+    layer.ir_transmittance = tir
+    layer.product_type = "blinds"
     layer.slat_width_m = slat_depth_m
     layer.slat_spacing_m = slat_spacing_m
     layer.slat_thickness_m = product_data.composition.material.thickness * M_PER_MM
     layer.slat_conductivity = product_data.composition.material.conductivity
     layer.slat_curve_m = slat_curvature_m
     layer.flipped = defin.flipped
-    layer.product_type = "blinds"
     layer.shading_material = pr.ShadingMaterial(rf_vis_diff, rf_vis_spec, 0)
     layer.nslats = nslats
     layer.slat_angle_deg = defin.slat_angle_deg
@@ -575,13 +579,13 @@ def create_glazing_system(
                 thickness += layer.thickness_m
             _apply_opening_properties(layer, layer_inp.openings, gaps, idx, len(layer_inputs))
         else:
-            layer = get_layer_data(product_data)
             layer.spectral_data = {
                 int(round(d.wavelength * NM_PER_MM)): (
                     d.direct_component.transmittance_front,
                     d.direct_component.reflectance_front,
                     d.direct_component.reflectance_back,
                 ) for d in product_data.measurements}
+            layer.coated_side = product_data.coated_side
             layer_data.append(layer)
             product_data_list.append(product_data)
             thickness += layer.thickness_m
@@ -863,14 +867,14 @@ def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[pr.Primitive]
             mat_name = f"mat_{gs.name}_glazing_{current_index}"
             geom_name = f"{gs.name}_glazing_{current_index}"
             rgb = [
-                layer.spectral_data
+                get_pane_rgb(layer.spectral_data, layer.coated_side)
                 for layer in gs.layers[
                     current_index : current_index + glazing_layer_count
                 ]
             ]
             mat: bytes = get_glazing_primitive(mat_name, rgb).bytes
             geom = polygon_primitive(window, mat_name, geom_name)
-            primitives.append(mat.bytes)
+            primitives.append(mat)
             primitives.append(geom.bytes)
             current_index += glazing_layer_count
         elif group[0] == "fabric":
@@ -929,7 +933,7 @@ def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[pr.Primitive]
             )()
             primitives.append(
                 pr.Xform(blinds_at_window).translate(
-                    *(window.normal * gs.layers[current_index].thickness)
+                    *(window.normal * gs.layers[current_index].thickness_m)
                 )()
             )
             current_index += 1

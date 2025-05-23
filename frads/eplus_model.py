@@ -53,7 +53,7 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
         """
 
         name = glzsys.name
-        gap_inputs = []
+        gap_inputs: list[epm.WindowMaterialGas | epm.WindowMaterialGasMixture] = []
         for i, gap in enumerate(glzsys.gaps):
             if len(gap.gas) == 1:
                 gap_inputs.append(
@@ -78,24 +78,24 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                 epmodel.ConstructionComplexFenestrationStateLayerInput(
                     name=f"{glzsys.name}_layer_{i}",
                     product_type=layer.product_type,
-                    thickness=layer.thickness,
+                    thickness=layer.thickness_m,
                     conductivity=layer.conductivity,
                     emissivity_front=layer.emissivity_front,
                     emissivity_back=layer.emissivity_back,
                     infrared_transmittance=layer.ir_transmittance,
                     directional_absorptance_front=glzsys.solar_front_absorptance[i],
                     directional_absorptance_back=glzsys.solar_back_absorptance[i],
-                    top_opening_multiplier=layer.top_opening_multiplier,
-                    bottom_opening_multiplier=layer.bottom_opening_multiplier,
-                    left_side_opening_multiplier=layer.left_side_opening_multiplier,
-                    right_side_opening_multiplier=layer.right_side_opening_multiplier,
-                    front_opening_multiplier=layer.front_opening_multiplier,
-                    slat_width=layer.slat_width,
-                    slat_spacing=layer.slat_spacing,
-                    slat_thickness=layer.slat_thickness,
-                    slat_angle=layer.slat_angle,
+                    top_opening_multiplier=layer.opening_multipliers.top,
+                    bottom_opening_multiplier=layer.opening_multipliers.bottom,
+                    left_side_opening_multiplier=layer.opening_multipliers.left,
+                    right_side_opening_multiplier=layer.opening_multipliers.right,
+                    front_opening_multiplier=layer.opening_multipliers.front,
+                    slat_width=layer.slat_width_m,
+                    slat_spacing=layer.slat_spacing_m,
+                    slat_thickness=layer.slat_thickness_m,
+                    slat_angle=layer.slat_angle_deg,
                     slat_conductivity=layer.slat_conductivity,
-                    slat_curve=layer.slat_curve,
+                    slat_curve=layer.slat_curve_m,
                 )
             )
         input = epmodel.ConstructionComplexFenestrationStateInput(
