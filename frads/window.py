@@ -114,9 +114,9 @@ class Layer:
     emissivity_back: float
     ir_transmittance: float
     flipped: bool = False
-    spectral_data: None | dict = None
+    spectral_data: dict = field(default_factory=dict)
     coated_side: str = ""
-    shading_material: None | pr.ShadingMaterial = None
+    shading_material: pr.ShadingMaterial = field(default_factory=pr.ShadingMaterial)
     slat_width_m: float = 0.0160
     slat_spacing_m: float = 0.0120
     slat_thickness_m: float = 0.0006
@@ -259,9 +259,7 @@ class GlazingSystem:
         layer_instances = []
         for layer in layers:
             smat = layer.pop("shading_material")
-            shading_material = None
-            if smat is not None:
-                shading_material = pr.ShadingMaterial(**smat)
+            shading_material = pr.ShadingMaterial(**smat)
             layer_instances.append(Layer(
                 product_name=layer["product_name"],
                 thickness_m=layer["thickness_m"],
@@ -357,7 +355,7 @@ def load_glazing_system(path: str | Path) -> GlazingSystem:
     layer_instances = []
     for layer in layers:
         smat = layer.pop("shading_material")
-        shading_material = pr.ShadingMaterial(**smat) if smat is not None else None
+        shading_material = pr.ShadingMaterial(**smat)
         layer_instances.append(Layer(
             product_name=layer["product_name"],
             thickness_m=layer["thickness_m"],
@@ -604,7 +602,7 @@ def create_glazing_system(
     )
 
     if mbsdf:
-        generate_melanopic_bsdf(layer_inp)
+        generate_melanopic_bsdf(layer_data)
 
     for index, data in enumerate(layer_data):
         if data.flipped:
@@ -822,7 +820,8 @@ def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> pr.Primitive:
     return pr.Primitive("void", "BRTDfunc", name, str_arg, real_arg)
 
 
-def get_glazing_layer_groups(layers: list[Layer]) -> list:
+def get_glazing_layer_groups(layers: Sequence[Layer]) -> list:
+    breakpoint()
     if not layers or not isinstance(layers[0], Layer):
         raise ValueError()
 
@@ -941,78 +940,72 @@ def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[pr.Primitive]
 
 
 def get_spectral_multi_layer_optics(glazings: Sequence[Layer]):
+    breakpoint()
     primitives: bytes = pr.genglaze_db([g for g in glazings], prefix=name)
 
 
 def generate_melanopic_bsdf(layer_inputs: Sequence[Layer]):
-    layer_groups = get_glazing_layer_groups(layers)
-    for group in layer_groups:
+    layer_groups = get_glazing_layer_groups(layer_inputs)
+    breakpoint()
+    primitives = []
+    width = 1
+    height = 1
+    total_thickness = 0.01 * (len(layer_groups)-1)
+    for index, group in enumerate(layer_groups):
+        polygon = pr.Polygon([
+            np.array([0,        0,      -total_thickness+index*0.01]),
+            np.array([0,        height, -total_thickness+index*0.01]),
+            np.array([width,    height, -total_thickness+index*0.01]),
+            np.array([width,    0,      -total_thickness+index*0.01]),
+        ])
         if group[0] == "glazing":
             glazing_layer_count = group[1]
-            mat_name = f"mat_{gs.name}_glazing_{current_index}"
-            geom_name = f"{gs.name}_glazing_{current_index}"
-            get_spectral_multi_layer_optics(gs.layers[current_index: current_indx+glazing_layer_count])
-            geom = polygon_primitive(window, mat_name, geom_name)
+            mat_name = f"mat_glazing_{index}"
+            geom_name = f"glazing_{index}"
+            mat = get_spectral_multi_layer_optics(layer_inputs[index:index+glazing_layer_count])
+            geom = polygon_primitive(polygon, mat_name, geom_name)
             primitives.append(mat.bytes)
             primitives.append(geom.bytes)
-            current_index += glazing_layer_count
+            index += glazing_layer_count
         elif group[0] == "fabric":
-            mat_name = f"mat_{gs.name}_fabric_{current_index}"
-            geom_name = f"{gs.name}_fabric_{current_index}"
-            xml_name = f"{gs.name}_fabric_{current_index}.xml"
+            mat_name = f"mat_fabric_{index}"
+            geom_name = f"fabric_{index}"
+            xml_name = f"fabric_{index}.xml"
             # Get aBSDF primitive
             with open(xml_name, "w") as f:
-                f.write(gs.layers[current_index].fabric_xml)
+                f.write(layer_inputs[index].shading_xml)
             mat: pr.Primitive = pr.Primitive(
                 "void", "aBSDF", mat_name, [xml_name, "0", "0", "1", "."], []
             )
-            geom = polygon_primitive(window, mat_name, geom_name)
+            geom = polygon_primitive(polygon, mat_name, geom_name)
             primitives.append(mat.bytes)
             primitives.append(geom.bytes)
-            current_index += 1
+            index += 1
         elif group[0] == "blinds":
-            # NOTE: For blinds only
-            zdiff1 = abs(window_vertices[1][2] - window_vertices[0][2])
-            zdiff2 = abs(window_vertices[2][2] - window_vertices[1][2])
-            dim1 = np.linalg.norm(window_vertices[1] - window_vertices[0])
-            dim2 = np.linalg.norm(window_vertices[2] - window_vertices[1])
-            if (dim1 <= FEPS) | (dim2 <= FEPS):
-                print("One of the sides of the window polygon is zero")
-            width = height = 0
-            if zdiff1 <= FEPS:
-                width = dim1
-                height = dim2
-            elif zdiff2 <= FEPS:
-                width = dim2
-                height = dim1
-            else:
-                print("Error: Skewed window not supported: ")
-                print(window_vertices)
-            blinds_layer = gs.layers[current_index]
+            blinds_layer = layer_inputs[index]
             geom = pr.BlindsGeometry(
-                depth=blinds_layer.slat_width,
+                depth=blinds_layer.slat_width_m,
                 width=width,
                 height=height,
                 nslats=blinds_layer.nslats,
-                angle=blinds_layer.slat_angle,
-                rcurv=blinds_layer.slat_curve,
+                angle=blinds_layer.slat_angle_deg,
+                rcurv=blinds_layer.slat_curve_m,
             )
-            blinds: bytes = pr.generate_blinds(blinds_layer.shading_material, geom)
-            xmin, xmax, ymin, ymax, zmin, zmax = pr.ot.getbbox(blinds)
+            blinds: bytes = pr.generate_blinds_for_bsdf(blinds_layer.shading_material, geom)
             blinds_normal = np.array((1, 0, 0))
-            rotatez_angle = angle_between(blinds_normal, window.normal, degree=True)
+            rotatez_angle = angle_between(blinds_normal, polygon.normal, degree=True)
             rotated_blinds: bytes = pr.Xform(blinds).rotatez(rotatez_angle)()
             xmin, xmax, ymin, ymax, zmin, zmax = pr.ot.getbbox(rotated_blinds)
             rotated_blinds_centroid = np.array(
                 ((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
             )
             blinds_at_window = pr.Xform(rotated_blinds).translate(
-                *(window.centroid - rotated_blinds_centroid)
+                *(polygon.centroid - rotated_blinds_centroid)
             )()
             primitives.append(
                 pr.Xform(blinds_at_window).translate(
-                    *(window.normal * gs.layers[current_index].thickness)
+                    *(polygon.normal * layer_inputs[index].thickness_m)
                 )()
             )
-            current_index += 1
+            index += 1
     return primitives

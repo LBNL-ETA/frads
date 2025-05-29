@@ -45,7 +45,7 @@ class TestWindow(unittest.TestCase):
         )
         self.double_glaze = [glass_layer, glass_layer]
         triple_glaze = [glass_layer, glass_layer, glass_layer]
-        double_glaze_fabric = [glass_layer, glass_layer, fabric_layer]
+        self.double_glaze_fabric = [glass_layer, glass_layer, fabric_layer]
         double_glaze_blinds = [glass_layer, glass_layer, blinds_layer]
         self.single_glaze_blinds = [glass_layer, blinds_layer]
         self.double_glaze_inner_fabric = [glass_layer, fabric_layer, glass_layer]
@@ -57,7 +57,7 @@ class TestWindow(unittest.TestCase):
         )
 
         self.double_glaze_fabric_system = create_glazing_system(
-            name="dgu_shade", layer_inputs=double_glaze_fabric
+            name="dgu_shade", layer_inputs=self.double_glaze_fabric
         )
         self.double_glaze_blinds_system = create_glazing_system(
             name="dgu_blinds", layer_inputs=double_glaze_blinds, nsamp=1,
@@ -223,6 +223,13 @@ class TestWindow(unittest.TestCase):
         self.assertEqual(gs.layers[1].opening_multipliers.top, 0.5)
         self.assertEqual(gs.layers[1].opening_multipliers.bottom, 1)
         self.assertEqual(gs.layers[1].opening_multipliers.front, 0.05)
+
+    def test_melanopic_bsdf(self):
+        gs = create_glazing_system(
+            name="dgu_inner_shade",
+            layer_inputs=self.double_glaze_fabric,
+            mbsdf=True,
+        )
 
 if __name__ == "__main__":
     unittest.main()
