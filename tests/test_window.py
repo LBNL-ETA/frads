@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import unittest
+import pywincalc as pwc
 from frads.window import (
     create_glazing_system,
     Gas,
@@ -13,9 +14,11 @@ from frads.window import (
     BlindsLayerDefinition,
     OpeningDefinitions,
     Layer,
-    get_glazing_layer_groups,
+    get_layer_groups,
     load_glazing_system,
+    generate_melanopic_bsdf,
 )
+import pyradiance as pr
 
 
 class TestWindow(unittest.TestCase):
@@ -98,46 +101,46 @@ class TestWindow(unittest.TestCase):
         self.assertEqual(self.double_glaze_system.gaps[0].gas[0].ratio, 1)
         self.assertEqual(self.double_glaze_system.gaps[0].thickness, 0.0127)
 
-    def test_get_glazing_layer_groups(self):
+    def test_get_layer_groups(self):
         glass_layer = Layer(
-            "glass",
-            0.03,
-            "glazing",
-            1,
-            1,
-            1,
-            0,
-            None,
+            product_name= "glass",
+            thickness_m= 0.03,
+            product_type= "glazing",
+            conductivity= 1,
+            emissivity_front= 1,
+            emissivity_back= 1,
+            ir_transmittance= 0,
+            flipped= False,
         )
         shade_layer = Layer(
-            "shade",
-            0.03,
-            "fabric",
-            1,
-            1,
-            1,
-            0,
-            None,
+            product_name= "shade",
+            thickness_m= 0.03,
+            product_type= "fabric",
+            conductivity= 1,
+            emissivity_front= 1,
+            emissivity_back= 1,
+            ir_transmittance= 0,
+            flipped= False,
         )
         blinds_layer = Layer(
-            "blinds",
-            0.03,
-            "blinds",
-            1,
-            1,
-            1,
-            0,
-            None,
+            product_name= "blinds",
+            thickness_m= 0.03,
+            product_type= "blinds",
+            conductivity= 1,
+            emissivity_front= 1,
+            emissivity_back= 1,
+            ir_transmittance= 0,
+            flipped= False,
         )
-        group1 = get_glazing_layer_groups([glass_layer, glass_layer, shade_layer])
-        group2 = get_glazing_layer_groups([shade_layer, glass_layer])
-        group3 = get_glazing_layer_groups(
+        group1 = get_layer_groups([glass_layer, glass_layer, shade_layer])
+        group2 = get_layer_groups([shade_layer, glass_layer])
+        group3 = get_layer_groups(
             [glass_layer, glass_layer, glass_layer, blinds_layer]
         )
-        group4 = get_glazing_layer_groups(
+        group4 = get_layer_groups(
             [glass_layer, shade_layer, glass_layer, blinds_layer]
         )
-        group5 = get_glazing_layer_groups([glass_layer, glass_layer, glass_layer])
+        group5 = get_layer_groups([glass_layer, glass_layer, glass_layer])
         self.assertEqual(group1, [("glazing", 2), ("fabric", 1)])
         self.assertEqual(group2, [("fabric", 1), ("glazing", 1)])
         self.assertEqual(group3, [("glazing", 3), ("blinds", 1)])
@@ -224,12 +227,53 @@ class TestWindow(unittest.TestCase):
         self.assertEqual(gs.layers[1].opening_multipliers.bottom, 1)
         self.assertEqual(gs.layers[1].opening_multipliers.front, 0.05)
 
+class TestBSDFGeneration(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.resources_dir = Path(__file__).parent / "Resources"
+
     def test_melanopic_bsdf(self):
-        gs = create_glazing_system(
-            name="dgu_inner_shade",
-            layer_inputs=self.double_glaze_fabric,
-            mbsdf=True,
+        product_data = pwc.parse_json_file(str(self.resources_dir / "igsdb_product_7406.json"))
+        NM_PER_MM = 1e3
+        layer = Layer(
+            product_name= "glass",
+            thickness_m= 0.03,
+            product_type= "glazing",
+            conductivity= 1,
+            emissivity_front= 1,
+            emissivity_back= 1,
+            ir_transmittance= 0,
+            flipped= False,
+            spectral_data= {
+                int(round(d.wavelength * NM_PER_MM)): (
+                    d.direct_component.transmittance_front,
+                    d.direct_component.reflectance_front,
+                    d.direct_component.reflectance_back,
+                )
+                for d in product_data.measurements
+            }
         )
+        layer2 = Layer(
+            product_name= "blinds",
+            thickness_m= 0.03,
+            product_type= "blinds",
+            conductivity= 1,
+            emissivity_front= 1,
+            emissivity_back= 1,
+            ir_transmittance= 0,
+            flipped= False,
+            shading_material=pr.ShadingMaterial(0.5, 0, 0),
+            slat_width_m = 0.0160,
+            slat_spacing_m = 0.0120,
+            slat_thickness_m = 0.0006,
+            slat_curve_m = 0.0,
+            slat_angle_deg = 45.0,
+            slat_conductivity = 160.00,
+            nslats = 10,
+        )
+        result = generate_melanopic_bsdf(layers=[layer, layer2], gaps=[Gap([Gas("air", 0.1), Gas("argon", 0.9)], 0.03)],nsamp=1)
+        breakpoint()
 
 if __name__ == "__main__":
     unittest.main()
