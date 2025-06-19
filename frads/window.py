@@ -1,16 +1,18 @@
 import json
 import os
+import math
 import tempfile
 from dataclasses import asdict, dataclass, field
+from enum import Enum
 from pathlib import Path
-from enum import Enum, auto
 from typing import Sequence
 
-import math
 import numpy as np
-from frads.geom import polygon_primitive, Polygon, angle_between
 import pyradiance as pr
 import pywincalc as pwc
+
+from frads.geom import Polygon, angle_between, polygon_primitive
+from frads.utils import parse_primitive
 
 AIR = pwc.PredefinedGasType.AIR
 KRYPTON = pwc.PredefinedGasType.KRYPTON
@@ -88,7 +90,9 @@ class FabricLayerDefinition(BaseLayerDefinition):
     openings: OpeningDefinitions = field(default_factory=OpeningDefinitions)
 
 
-AnyLayerDefinition = GlazingLayerDefinition | BlindsLayerDefinition | FabricLayerDefinition
+AnyLayerDefinition = (
+    GlazingLayerDefinition | BlindsLayerDefinition | FabricLayerDefinition
+)
 
 
 @dataclass(slots=True)
@@ -125,7 +129,7 @@ class Layer:
     slat_conductivity: float = 160.00
     nslats: int = 1
     opening_multipliers: OpeningMultipliers = field(default_factory=OpeningMultipliers)
-    shading_xml: None | bytes = None
+    shading_xml: None | str = None
 
 
 @dataclass(slots=True)
@@ -186,6 +190,7 @@ class GlazingSystem:
         solar_front_absorptance: Solar front absorptance matrix by layer.
         solar_back_absorptance: Solar back absorptance matrix by layer.
     """
+
     name: str
     thickness: float = 0
     layers: list[Layer] = field(default_factory=list)
@@ -236,8 +241,8 @@ class GlazingSystem:
                         m="",
                         t=str(self.thickness),
                     )
-                    .add_visible(_tvb, _tvf, _rvb, _rvf)
-                    .add_solar(_tsb, _tsf, _rsb, _rsf)()
+                    .add_visible(str(_tvb), str(_tvf), str(_rvb), str(_rvf))
+                    .add_solar(str(_tsb), str(_tsf), str(_rsb), str(_rsf))()
                 )
 
     def save(self, out: str | Path):
@@ -260,16 +265,18 @@ class GlazingSystem:
         for layer in layers:
             smat = layer.pop("shading_material")
             shading_material = pr.ShadingMaterial(**smat)
-            layer_instances.append(Layer(
-                product_name=layer["product_name"],
-                thickness_m=layer["thickness_m"],
-                product_type=layer["product_type"],
-                conductivity=layer["conductivity"],
-                emissivity_front=layer["emissivity_front"],
-                emissivity_back=layer["emissivity_back"],
-                ir_transmittance=layer["ir_transmittance"],
-                shading_material=shading_material,
-            ))
+            layer_instances.append(
+                Layer(
+                    product_name=layer["product_name"],
+                    thickness_m=layer["thickness_m"],
+                    product_type=layer["product_type"],
+                    conductivity=layer["conductivity"],
+                    emissivity_front=layer["emissivity_front"],
+                    emissivity_back=layer["emissivity_back"],
+                    ir_transmittance=layer["ir_transmittance"],
+                    shading_material=shading_material,
+                )
+            )
         gaps = data.pop("gaps")
         gap_instances = []
         for gap in gaps:
@@ -277,7 +284,9 @@ class GlazingSystem:
             gases = gap.pop("gas")
             for gs in gases:
                 gas_instances.append(Gas(gas=gs["gas"], ratio=gs["ratio"]))
-            gap_instances.append(Gap(gas=gas_instances, thickness=gap["thickness"], **gap))
+            gap_instances.append(
+                Gap(gas=gas_instances, thickness=gap["thickness"], **gap)
+            )
         return cls(layers=layer_instances, gaps=gap_instances, **data)
 
     def get_brtdfunc(self, name: None | str = None) -> None:
@@ -356,16 +365,18 @@ def load_glazing_system(path: str | Path) -> GlazingSystem:
     for layer in layers:
         smat = layer.pop("shading_material")
         shading_material = pr.ShadingMaterial(**smat)
-        layer_instances.append(Layer(
-            product_name=layer["product_name"],
-            thickness_m=layer["thickness_m"],
-            product_type=layer["product_type"],
-            conductivity=layer["conductivity"],
-            emissivity_front=layer["emissivity_front"],
-            emissivity_back=layer["emissivity_back"],
-            ir_transmittance=layer["ir_transmittance"],
-            shading_material=shading_material,
-        ))
+        layer_instances.append(
+            Layer(
+                product_name=layer["product_name"],
+                thickness_m=layer["thickness_m"],
+                product_type=layer["product_type"],
+                conductivity=layer["conductivity"],
+                emissivity_front=layer["emissivity_front"],
+                emissivity_back=layer["emissivity_back"],
+                ir_transmittance=layer["ir_transmittance"],
+                shading_material=shading_material,
+            )
+        )
     gaps = data.pop("gaps")
     gap_instances = []
     for gap in gaps:
@@ -389,7 +400,6 @@ def create_pwc_gaps(gaps: list[Gap]):
 
 def _parse_input_source(
     input_source: Path | str | bytes,
-    layer_type_hint: str | None = None,
 ) -> pwc.ProductData:
     """Parses various input types to pwc.ProductData."""
     if isinstance(input_source, (str, Path)):
@@ -413,7 +423,6 @@ def _parse_input_source(
             if product_data.product_type == "" or product_data.product_type is None:
                 product_data.product_type = WCProductType.SHADING.value
             return product_data
-    raise ValueError(f"Unsupported input_source type: {type(input_source)}")
 
 
 def _apply_opening_properties(
@@ -421,29 +430,43 @@ def _apply_opening_properties(
     layer_def_openings: OpeningDefinitions | None,
     gaps_list: list[Gap],
     layer_idx: int,
-    total_layers_in_definition: int
+    total_layers_in_definition: int,
 ):
     """Calculates and sets opening multipliers on the layer object."""
     if layer_def_openings is None:
-        return # No opening definitions to apply
+        return  # No opening definitions to apply
 
     gap_thickness = 0.0127
     if total_layers_in_definition <= 1:
         pass
     elif layer_idx == 0:
-        if gaps_list: gap_thickness = gaps_list[0].thickness
-    elif layer_idx == total_layers_in_definition -1:
-        if gaps_list: gap_thickness = gaps_list[layer_idx-1].thickness
-    else: # Middle layer
+        if gaps_list:
+            gap_thickness = gaps_list[0].thickness
+    elif layer_idx == total_layers_in_definition - 1:
+        if gaps_list:
+            gap_thickness = gaps_list[layer_idx - 1].thickness
+    else:  # Middle layer
         if gaps_list and len(gaps_list) > layer_idx:
-             gap_thickness = min(gaps_list[layer_idx - 1].thickness, gaps_list[layer_idx].thickness) #
+            gap_thickness = min(
+                gaps_list[layer_idx - 1].thickness, gaps_list[layer_idx].thickness
+            )  #
 
     if gap_thickness > 0:
-        layer_obj.opening_multipliers.top = min(1., layer_def_openings.top_m / gap_thickness)
-        layer_obj.opening_multipliers.bottom = min(1., layer_def_openings.bottom_m / gap_thickness)
-        layer_obj.opening_multipliers.left = min(1., layer_def_openings.left_m / gap_thickness)
-        layer_obj.opening_multipliers.right = min(1., layer_def_openings.right_m / gap_thickness)
-        layer_obj.opening_multipliers.front = min(1., layer_def_openings.front_multiplier)
+        layer_obj.opening_multipliers.top = min(
+            1.0, layer_def_openings.top_m / gap_thickness
+        )
+        layer_obj.opening_multipliers.bottom = min(
+            1.0, layer_def_openings.bottom_m / gap_thickness
+        )
+        layer_obj.opening_multipliers.left = min(
+            1.0, layer_def_openings.left_m / gap_thickness
+        )
+        layer_obj.opening_multipliers.right = min(
+            1.0, layer_def_openings.right_m / gap_thickness
+        )
+        layer_obj.opening_multipliers.front = min(
+            1.0, layer_def_openings.front_multiplier
+        )
 
 
 def _process_blind_definition_to_bsdf(
@@ -451,7 +474,7 @@ def _process_blind_definition_to_bsdf(
     product_data: pwc.ProductData,
     layer: Layer,
     nproc: int,
-    nsamp: int
+    nsamp: int,
 ) -> tuple[pwc.ProductData, dict]:
     """
     Handles the logic for generating BSDF for blinds if defined by geometry/material.
@@ -460,9 +483,11 @@ def _process_blind_definition_to_bsdf(
     if isinstance(defin.input_source, bytes):
         data = json.loads(defin.input_source.decode())
     else:
-        with open(defin.input_source, 'r') as f:
+        with open(defin.input_source, "r") as f:
             data = json.load(f)
-    dual_band_values = data["composition"][0]["child_product"]["spectral_data"]["dual_band_values"]
+    dual_band_values = data["composition"][0]["child_product"]["spectral_data"][
+        "dual_band_values"
+    ]
     rf_sol_diff = dual_band_values["Rf_sol_diffuse"]
     rf_sol_spec = dual_band_values["Rf_sol_specular"]
     rf_vis_diff = dual_band_values["Rf_vis_diffuse"]
@@ -472,12 +497,10 @@ def _process_blind_definition_to_bsdf(
     nslats = int(1 / slat_spacing_m) if slat_spacing_m > 0 else 1
     slat_depth_m = product_data.composition.geometry.slat_width * M_PER_MM
     slat_curvature_m = product_data.composition.geometry.slat_curvature * M_PER_MM
-    emis_front = product_data.composition.material.emissivity_front #
-    emis_back = product_data.composition.material.emissivity_back #
+    emis_front = product_data.composition.material.emissivity_front  #
+    emis_back = product_data.composition.material.emissivity_back  #
     layer_name = product_data.product_name
-    layer_thickness_m = slat_depth_m * math.cos(
-        math.radians(defin.slat_angle_deg)
-    )
+    layer_thickness_m = slat_depth_m * math.cos(math.radians(defin.slat_angle_deg))
     if tir != 0:
         raise ValueError("tir not zero")
     if emis_front != emis_back:
@@ -556,38 +579,48 @@ def create_glazing_system(
     product_data_list: list[pwc.ProductData] = []
     layer_data: list[Layer] = []
     thickness = 0.0
-    fabric_xml: None | bytes
     for idx, layer_inp in enumerate(layer_inputs):
         product_data = _parse_input_source(layer_inp.input_source)
         if product_data is None:
             raise ValueError("Invalid layer type")
         layer = get_layer_data(product_data)
-        if product_data.product_type == WCProductType.SHADING.value:
-            if product_data.product_subtype == WCProductSubType.VENETIAN.value:
-                actual_product_data = _process_blind_definition_to_bsdf(layer_inp, product_data, layer, nproc=nproc, nsamp=nsamp)
+        if product_data.product_type == WCProductType.SHADING.value and (
+            isinstance(layer_inp, FabricLayerDefinition)
+            or isinstance(layer_inp, BlindsLayerDefinition)
+        ):
+            if (
+                product_data.product_subtype == WCProductSubType.VENETIAN.value
+                and isinstance(layer_inp, BlindsLayerDefinition)
+            ):
+                actual_product_data = _process_blind_definition_to_bsdf(
+                    layer_inp, product_data, layer, nproc=nproc, nsamp=nsamp
+                )
                 layer_data.append(layer)
                 product_data_list.append(actual_product_data)
                 thickness += layer.thickness_m
             else:
                 layer.product_type = "fabric"
-                with open(layer_inp.input_source, 'r') as f:
+                with open(layer_inp.input_source, "r") as f:
                     layer.shading_xml = f.read()
                 layer_data.append(layer)
                 product_data_list.append(product_data)
                 thickness += layer.thickness_m
-            _apply_opening_properties(layer, layer_inp.openings, gaps, idx, len(layer_inputs))
+            _apply_opening_properties(
+                layer, layer_inp.openings, gaps, idx, len(layer_inputs)
+            )
         else:
             layer.spectral_data = {
                 int(round(d.wavelength * NM_PER_MM)): (
                     d.direct_component.transmittance_front,
                     d.direct_component.reflectance_front,
                     d.direct_component.reflectance_back,
-                ) for d in product_data.measurements}
+                )
+                for d in product_data.measurements
+            }
             layer.coated_side = product_data.coated_side
             layer_data.append(layer)
             product_data_list.append(product_data)
             thickness += layer.thickness_m
-
 
     for gap in gaps:
         thickness += gap.thickness
@@ -601,8 +634,12 @@ def create_glazing_system(
         bsdf_hemisphere=pwc.BSDFHemisphere.create(pwc.BSDFBasisType.FULL),
     )
 
+    melanopic_back_transmittace = []
+    melanopic_back_reflectance = []
     if mbsdf:
-        generate_melanopic_bsdf(layer_data)
+        melanopic_back_transmittace, melanopic_back_reflectance = (
+            generate_melanopic_bsdf(layer_data, gaps)
+        )
 
     for index, data in enumerate(layer_data):
         if data.flipped:
@@ -632,7 +669,10 @@ def create_glazing_system(
         solar_front_reflectance=solsys.front.reflectance.matrix,
         solar_back_transmittance=solsys.back.transmittance.matrix,
         solar_front_transmittance=solsys.front.transmittance.matrix,
+        melanopic_back_transmittance=melanopic_back_transmittace,
+        melanopic_back_reflectance=melanopic_back_reflectance,
     )
+
 
 def get_glazing_brtdfunc(name, filenames: list[str | Path]) -> pr.Primitive:
     nlayers = len(filenames)
@@ -670,11 +710,11 @@ def get_pane_rgb(spectral_data: dict, coated_side: str) -> PaneRGB:
     return PaneRGB(coated_rgb, glass_rgb, tf_rgb, coated_side)
 
 
-def get_layer_rgb(layer: pwc.ProductData) -> None | PaneRGB:
+def get_layer_rgb(layer: pwc.ProductData) -> PaneRGB:
     """Get the RGB values for a pane layer."""
     photopic_wvl = range(380, 781, 10)
     if isinstance(layer.measurements, pwc.DualBandBSDF):
-        return None
+        raise ValueError("Dual band measurements not supported.")
     hemi = {
         int(round(d.wavelength * NM_PER_MM)): (
             d.direct_component.transmittance_front,
@@ -820,15 +860,14 @@ def get_glazing_primitive(name: str, panes: list[PaneRGB]) -> pr.Primitive:
     return pr.Primitive("void", "BRTDfunc", name, str_arg, real_arg)
 
 
-def get_glazing_layer_groups(layers: Sequence[Layer]) -> list:
-    breakpoint()
+def get_layer_groups(layers: Sequence[Layer]) -> list:
     if not layers or not isinstance(layers[0], Layer):
         raise ValueError()
 
     # Group consecutive glazing layers
     grouped_system: list[tuple[str, int]] = []
     current_group = 0
-    current_type = None
+    current_type = ""
 
     for layer in layers:
         if layer.product_type == "glazing":
@@ -844,7 +883,7 @@ def get_glazing_layer_groups(layers: Sequence[Layer]) -> list:
                 grouped_system.append((current_type, current_group))
             grouped_system.append((layer.product_type, 1))
             current_group = 0
-            current_type = None
+            current_type = ""
 
     # Add the last group if it exists
     if current_group:
@@ -853,11 +892,11 @@ def get_glazing_layer_groups(layers: Sequence[Layer]) -> list:
     return grouped_system
 
 
-def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[pr.Primitive]:
+def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[bytes]:
     FEPS = 1e-5
-    layer_groups = get_glazing_layer_groups(gs.layers)
+    layer_groups = get_layer_groups(gs.layers)
     window_vertices = window.vertices
-    primitives: list[pr.Primitive] = []
+    primitives: list[bytes] = []
     current_index = 0
     for group in layer_groups:
         if group[0] == "glazing":
@@ -871,9 +910,9 @@ def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[pr.Primitive]
                     current_index : current_index + glazing_layer_count
                 ]
             ]
-            mat: bytes = get_glazing_primitive(mat_name, rgb).bytes
+            mat: pr.Primitive = get_glazing_primitive(mat_name, rgb)
             geom = polygon_primitive(window, mat_name, geom_name)
-            primitives.append(mat)
+            primitives.append(mat.bytes)
             primitives.append(geom.bytes)
             current_index += glazing_layer_count
         elif group[0] == "fabric":
@@ -881,7 +920,7 @@ def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[pr.Primitive]
             geom_name = f"{gs.name}_fabric_{current_index}"
             xml_name = f"{gs.name}_fabric_{current_index}.xml"
             # Get aBSDF primitive
-            with open(xml_name, "wb") as f:
+            with open(xml_name, "w") as f:
                 f.write(gs.layers[current_index].shading_xml)
             mat: pr.Primitive = pr.Primitive(
                 "void", "aBSDF", mat_name, [xml_name, "0", "0", "1", "."], []
@@ -939,73 +978,225 @@ def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[pr.Primitive]
     return primitives
 
 
-def get_spectral_multi_layer_optics(glazings: Sequence[Layer]):
-    breakpoint()
-    primitives: bytes = pr.genglaze_db([g for g in glazings], prefix=name)
+def get_spectral_multi_layer_optics(
+    glazings: Sequence[Layer], name: str = "unnamed"
+) -> bytes:
+    """Generate spectral multi-layer optics data from glazing layers."""
+    # Convert Layer objects to GlazingLayerData objects
+    glazing_layers = []
+    for layer in glazings:
+        # Extract spectral points from layer spectral_data
+        spectral_points = []
+        for wavelength_nm, (t, rf, rb) in layer.spectral_data.items():
+            spectral_points.append(
+                pr.SpectralPoint(wavelength_nm=wavelength_nm, rf=rf, rb=rb, t=t)
+            )
+
+        # Sort by wavelength
+        spectral_points.sort(key=lambda x: x.wavelength_nm)
+
+        # Determine glazing type based on layer properties
+        glazing_type = pr.GlazingType.monolithic
+        if layer.coated_side:
+            glazing_type = pr.GlazingType.coated
+
+        glazing_layer = pr.GlazingLayerData(
+            name=layer.product_name,
+            glazing_type=glazing_type,
+            thickness_m=layer.thickness_m,
+            spectral_points=spectral_points,
+        )
+        glazing_layers.append(glazing_layer)
+
+    # this call also generates .dat files in the current working directory
+    return pr.genglaze_data(glazing_layers, prefix=name)
 
 
-def generate_melanopic_bsdf(layer_inputs: Sequence[Layer]):
-    layer_groups = get_glazing_layer_groups(layer_inputs)
-    breakpoint()
-    primitives = []
-    width = 1
-    height = 1
-    total_thickness = 0.01 * (len(layer_groups)-1)
-    for index, group in enumerate(layer_groups):
-        polygon = pr.Polygon([
-            np.array([0,        0,      -total_thickness+index*0.01]),
-            np.array([0,        height, -total_thickness+index*0.01]),
-            np.array([width,    height, -total_thickness+index*0.01]),
-            np.array([width,    0,      -total_thickness+index*0.01]),
-        ])
-        if group[0] == "glazing":
-            glazing_layer_count = group[1]
-            mat_name = f"mat_glazing_{index}"
-            geom_name = f"glazing_{index}"
-            mat = get_spectral_multi_layer_optics(layer_inputs[index:index+glazing_layer_count])
-            geom = polygon_primitive(polygon, mat_name, geom_name)
-            primitives.append(mat.bytes)
-            primitives.append(geom.bytes)
-            index += glazing_layer_count
-        elif group[0] == "fabric":
-            mat_name = f"mat_fabric_{index}"
-            geom_name = f"fabric_{index}"
-            xml_name = f"fabric_{index}.xml"
-            # Get aBSDF primitive
-            with open(xml_name, "w") as f:
-                f.write(layer_inputs[index].shading_xml)
-            mat: pr.Primitive = pr.Primitive(
-                "void", "aBSDF", mat_name, [xml_name, "0", "0", "1", "."], []
+def generate_coplanar_bsdf(
+    layers: list[Layer],
+    gaps: list[Gap],
+    outspec: pr.genbsdf.OutSpec = "y",
+    nproc: int = 1,
+    nsamp: int = 2000,
+):
+    """Generate coplanar BSDF for the given layers and gaps."""
+    original_dir = os.getcwd()
+    with tempfile.TemporaryDirectory(delete=False) as tmpdir:
+        print(f"Generating BSDF in {tmpdir}")
+        try:
+            os.chdir(tmpdir)
+            tmpdir_path = Path(tmpdir)
+            layer_groups = get_layer_groups(layers)
+            primitives = []
+            width = 1
+            height = 1
+            total_thickness = sum(gap.thickness for gap in gaps)
+
+            # Start from z=0 (innermost) and work outward (negative z)
+            current_z = 0
+            current_layer_idx = len(layers) - 1  # Start from last layer
+
+            # Check if we have blinds for sampling box calculation
+            has_blinds = any(group[0] == "blinds" for group in layer_groups)
+            blinds_spacing = 0.01  # default
+
+            for group_idx, group in enumerate(reversed(layer_groups)):
+                # Create polygon at current z position
+                polygon = Polygon(
+                    [
+                        np.array([0, 0, current_z]),
+                        np.array([0, height, current_z]),
+                        np.array([width, height, current_z]),
+                        np.array([width, 0, current_z]),
+                    ]
+                )
+
+                if group[0] == "glazing":
+                    glazing_layer_count = group[1]
+                    name = f"glazing_{group_idx}"
+
+                    # Generate spectral data for glazing layers
+                    glazing_layers = layers[
+                        current_layer_idx - glazing_layer_count + 1 : current_layer_idx
+                        + 1
+                    ]
+                    glazing_material_bytes = get_spectral_multi_layer_optics(
+                        glazing_layers, name=name
+                    )
+                    glazing_material_primitives = parse_primitive(
+                        glazing_material_bytes
+                    )
+                    glazing_material_name = glazing_material_primitives[-1].identifier
+
+                    # Write spectral data to file in tmpdir
+                    mat_file = tmpdir_path / f"{name}.dat"
+                    with open(mat_file, "wb") as f:
+                        f.write(glazing_material_bytes)
+
+                    # Create geometry primitive
+                    geom = polygon_primitive(polygon, glazing_material_name, name)
+                    primitives.append(glazing_material_bytes)
+                    primitives.append(b"")
+                    primitives.append(geom.bytes)
+
+                    current_layer_idx -= glazing_layer_count
+
+                    # Move outward by gap thickness
+                    gap_idx = (
+                        len(layer_groups) - 1 - group_idx - 1
+                    )  # Corresponding gap index
+                    if gap_idx >= 0 and gap_idx < len(gaps):
+                        current_z -= gaps[gap_idx].thickness
+
+                elif group[0] == "fabric":
+                    fabric_layer = layers[current_layer_idx]
+
+                    mat_name = f"mat_fabric_{group_idx}"
+                    geom_name = f"fabric_{group_idx}"
+                    xml_name = tmpdir_path / f"fabric_{group_idx}.xml"
+
+                    # Write fabric XML to file in tmpdir
+                    with open(xml_name, "w") as f:
+                        f.write(fabric_layer.shading_xml)
+
+                    # Create aBSDF primitive
+                    mat = pr.Primitive(
+                        "void",
+                        "aBSDF",
+                        mat_name,
+                        [str(xml_name), "0", "0", "1", "."],
+                        [],
+                    )
+                    geom = polygon_primitive(polygon, mat_name, geom_name)
+                    primitives.extend([mat.bytes, geom.bytes])
+
+                    current_layer_idx -= 1
+
+                    # Move outward by gap thickness
+                    gap_idx = (
+                        len(layer_groups) - 1 - group_idx - 1
+                    )  # Corresponding gap index
+                    if gap_idx >= 0 and gap_idx < len(gaps):
+                        current_z -= gaps[gap_idx].thickness
+
+                elif group[0] == "blinds":
+                    blinds_layer = layers[current_layer_idx]
+                    blinds_spacing = blinds_layer.slat_spacing_m
+
+                    geom_spec = pr.BlindsGeometry(
+                        depth=blinds_layer.slat_width_m,
+                        width=width,
+                        height=height,
+                        nslats=blinds_layer.nslats,
+                        angle=blinds_layer.slat_angle_deg,
+                        rcurv=blinds_layer.slat_curve_m,
+                    )
+
+                    # Generate blinds geometry
+                    blinds = pr.generate_blinds_for_bsdf(
+                        blinds_layer.shading_material, geom_spec
+                    )
+
+                    # Position blinds at polygon location
+                    xmin, xmax, ymin, ymax, zmin, zmax = pr.ot.getbbox(blinds)
+                    blinds_centroid = np.array(
+                        ((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
+                    )
+                    positioned_blinds = pr.Xform(blinds).translate(
+                        *(polygon.centroid - blinds_centroid)
+                    )()
+                    primitives.append(positioned_blinds)
+
+                    current_layer_idx -= 1
+
+                    # Move outward by gap thickness minus half blinds depth (for blinds space)
+                    gap_idx = (
+                        len(layer_groups) - 1 - group_idx - 1
+                    )  # Corresponding gap index
+                    if gap_idx >= 0 and gap_idx < len(gaps):
+                        gap_thickness = gaps[gap_idx].thickness
+                        blinds_space = blinds_layer.slat_width_m / 2
+                        current_z -= gap_thickness - blinds_space
+
+            device_file = tmpdir_path / "device.rad"
+            with open(device_file, "wb") as f:
+                for primitive in primitives:
+                    f.write(primitive)
+
+            box_height = blinds_spacing if has_blinds else 0.01
+            sampling_box = pr.genbsdf.SamplingBox(
+                xmin=0.5,
+                xmax=0.51,
+                ymin=0.5,
+                ymax=0.5 + box_height,
+                zmin=-total_thickness,
+                zmax=0,
             )
-            geom = polygon_primitive(polygon, mat_name, geom_name)
-            primitives.append(mat.bytes)
-            primitives.append(geom.bytes)
-            index += 1
-        elif group[0] == "blinds":
-            blinds_layer = layer_inputs[index]
-            geom = pr.BlindsGeometry(
-                depth=blinds_layer.slat_width_m,
-                width=width,
-                height=height,
-                nslats=blinds_layer.nslats,
-                angle=blinds_layer.slat_angle_deg,
-                rcurv=blinds_layer.slat_curve_m,
+
+            bsdf_result = pr.generate_bsdf(
+                str(device_file),
+                basis="kf",
+                outspec=outspec,
+                dim=sampling_box,
+                nproc=nproc,
+                nsamp=nsamp,
             )
-            blinds: bytes = pr.generate_blinds_for_bsdf(blinds_layer.shading_material, geom)
-            blinds_normal = np.array((1, 0, 0))
-            rotatez_angle = angle_between(blinds_normal, polygon.normal, degree=True)
-            rotated_blinds: bytes = pr.Xform(blinds).rotatez(rotatez_angle)()
-            xmin, xmax, ymin, ymax, zmin, zmax = pr.ot.getbbox(rotated_blinds)
-            rotated_blinds_centroid = np.array(
-                ((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
-            )
-            blinds_at_window = pr.Xform(rotated_blinds).translate(
-                *(polygon.centroid - rotated_blinds_centroid)
-            )()
-            primitives.append(
-                pr.Xform(blinds_at_window).translate(
-                    *(polygon.normal * layer_inputs[index].thickness_m)
-                )()
-            )
-            index += 1
-    return primitives
+        finally:
+            os.chdir(original_dir)
+    return bsdf_result
+
+
+def generate_melanopic_bsdf(
+    layers: list[Layer], gaps: list[Gap], nproc: int = 1, nsamp: int = 2000
+) -> tuple[list[list], list[list]]:
+    """Generate melanopic BSDF for the glazing system."""
+    data = generate_coplanar_bsdf(layers, gaps, outspec="m", nproc=nproc, nsamp=nsamp)
+    back_transmittance = [
+        list(map(float, row.split()))
+        for row in data.back.transmittance.decode().splitlines()
+    ]
+    back_reflectance = [
+        list(map(float, row.split()))
+        for row in data.back.reflectance.decode().splitlines()
+    ]
+    return back_transmittance, back_reflectance

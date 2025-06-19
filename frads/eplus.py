@@ -15,6 +15,7 @@ from epmodel import epmodel as epm
 import frads as fr
 from frads.eplus_model import EnergyPlusModel
 from .window import GlazingSystem
+from frads.methods import MatrixConfig
 import numpy as np
 from pyenergyplus.api import EnergyPlusAPI
 
@@ -671,10 +672,14 @@ class EnergyPlusSetup:
         )
 
     def add_proxy_geometry(self, gs: GlazingSystem):
-        for zone_name, zone in self.rworkflows.items():
-            for window_name, window in zone.config.model.windows.items():
+        for _, zone in self.rworkflows.items():
+            for _, window in zone.config.model.windows.items():
                 geom = fr.window.get_proxy_geometry(window.polygon, gs)
                 window.proxy_geometry[gs.name] = b"\n".join(geom)
+
+    def add_melanopic_bsdf(self, gs: GlazingSystem):
+        for _, zone in self.rworkflows.items():
+            zone.config.model.materials.matrices_mlnp[gs.name] = MatrixConfig(matrix_data=np.array(gs.melanopic_back_transmittance))
 
 
 def load_idf(fpath: str | Path) -> dict:

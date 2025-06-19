@@ -113,6 +113,7 @@ class MaterialConfig:
     files: list[Path] = field(default_factory=list)
     bytes: bytes = b""
     matrices: dict[str, MatrixConfig] = field(default_factory=dict)
+    matrices_mlnp: dict[str, MatrixConfig] = field(default_factory=dict)
     glazing_materials: dict[str, pr.Primitive] = field(default_factory=dict)
     files_mtime: list[float] = field(init=False, default_factory=list)
 
