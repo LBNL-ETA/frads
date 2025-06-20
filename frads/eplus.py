@@ -62,6 +62,7 @@ class EnergyPlusSetup:
         weather_file: None | str = None,
         enable_radiance: bool = False,
         nproc: int = 1,
+        initialize_radiance: bool = True,
     ):
         """Class for setting up and running EnergyPlus simulations.
 
@@ -78,6 +79,9 @@ class EnergyPlusSetup:
         if self.model.site_location is None:
             raise ValueError("Site location not found in EnergyPlus model.")
 
+        self.rmodels = {}
+        self.rconfigs = {}
+        self.rworkflows = {}
         if enable_radiance:
             self.rmodels = fr.epmodel_to_radmodel(
                 epmodel, epw_file=weather_file, add_views=True
@@ -89,10 +93,8 @@ class EnergyPlusSetup:
             self.rworkflows = {
                 k: fr.ThreePhaseMethod(v) for k, v in self.rconfigs.items()
             }
-            for v in self.rworkflows.values():
-                v.config.settings.save_matrices = True
-                v.config.settings.num_processors = nproc
-                v.generate_matrices(view_matrices=False)
+            if initialize_radiance:
+                self.initialize_radiance(nproc=nproc)
         self.api = EnergyPlusAPI()
         self.epw = weather_file
         self.state = self.api.state_manager.new_state()
@@ -106,13 +108,20 @@ class EnergyPlusSetup:
         self.actuators = []
         self._get_list_of_actuators()
 
+    def initialize_radiance(self, nproc: int = 1):
+        for v in self.rworkflows.values():
+            v.config.settings.save_matrices = True
+            v.config.settings.num_processors = nproc
+            v.generate_matrices(view_matrices=False)
+
+
     def close(self):
         self.api.state_manager.delete_state(self.state)
 
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_value, exc_tb):
+    def __exit__(self):
         self.close()
 
     def _actuator_func(self, state):
@@ -604,6 +613,17 @@ class EnergyPlusSetup:
             "Site Direct Solar Radiation Rate per Area", "Environment"
         )
 
+    def get_direct_normal_illuminance(self) -> float:
+        """Get direct normal illuminance.
+
+        Returns:
+            Direct normal illuminance in lux.
+
+        Examples:
+            >>> epsetup.get_direct_normal_illuminance()
+        """
+        return self.get_direct_normal_irradiance() * 110
+
     def get_diffuse_horizontal_irradiance(self) -> float:
         """Get diffuse horizontal irradiance.
 
@@ -616,6 +636,17 @@ class EnergyPlusSetup:
         return self.get_variable_value(
             "Site Diffuse Solar Radiation Rate per Area", "Environment"
         )
+
+    def get_diffuse_horizontal_illuminance(self) -> float:
+        """Get diffuse horizontal illuminance.
+
+        Returns:
+            Diffuse horizontal illuminance in lux.
+
+        Example:
+            epsetup.get_diffuse_horizontal_illuminance()
+        """
+        return self.get_diffuse_horizontal_irradiance() * 110
 
     def calculate_wpi(self, zone: str, cfs_name: dict[str, str]) -> np.ndarray:
         """Calculate workplane illuminance in a zone.
@@ -641,6 +672,30 @@ class EnergyPlusSetup:
         sensor_name = next(iter(self.rconfigs[zone].model.sensors.keys()))
         return self.rworkflows[zone].calculate_sensor(
             sensor_name, cfs_name, date_time, dni, dhi
+        )
+
+    def calculate_mev(self, zone: str, cfs_name: dict[str, str]) -> float:
+        """Calculate menalonpic illuminance.
+
+        Args:
+            zone: Name of the zone.
+            cfs_name: Dictionary of windows and their complex fenestration state.
+
+        Returns:
+            Menalonpic vertical illuminance.
+
+        Raises:
+            KeyError: If zone not found in model.
+
+        Examples:
+            >>> epsetup.calculate_mev("Zone1", "CFS1")
+        """
+        date_time = self.get_datetime()
+        dni = self.get_direct_normal_illuminance()
+        dhi = self.get_diffuse_horizontal_illuminance()
+        view_name = next(iter(self.rconfigs[zone].model.views.keys()))
+        return self.rworkflows[zone].calculate_mev(
+            view_name, cfs_name, date_time, dni, dhi
         )
 
     def calculate_edgps(
