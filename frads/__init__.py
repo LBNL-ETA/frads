@@ -91,9 +91,7 @@ from .window import (
     Gas,
     GlazingSystem,
     create_glazing_system,
-    GlazingLayerDefinition,
-    FabricLayerDefinition,
-    BlindsLayerDefinition,
+    LayerInput,
 )
 from .geom import gen_grid, parse_polygon
 
@@ -111,9 +109,7 @@ __all__ = [
     "Gap",
     "Gas",
     "GlazingSystem",
-    "GlazingLayerDefinition",
-    "FabricLayerDefinition",
-    "BlindsLayerDefinition",
+    "LayerInput",
     "KRYPTON",
     "Matrix",
     "SensorSender",

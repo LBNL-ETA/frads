@@ -3,7 +3,7 @@
 import hashlib
 import logging
 import os
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from shutil import rmtree
@@ -597,14 +597,7 @@ class PhaseMethod:
                 raise ValueError(
                     "Latitude and longitude must be specified if no weather file is given"
                 )
-            self.wea_header = (
-                f"place {self.config.settings.latitude}_{self.config.settings.longitude}\n"
-                f"latitude {self.config.settings.latitude}\n"
-                f"longitude {self.config.settings.longitude}\n"
-                f"time_zone {self.config.settings.time_zone}\n"
-                f"site_elevation {self.config.settings.site_elevation}\n"
-                f"weather_data_file_units 1\n"
-            )
+            self.wea_header = self.get_wea_header()
             self.wea_metadata = WeaMetaData(
                 "city",
                 "country",
@@ -644,6 +637,18 @@ class PhaseMethod:
         rmtree("Octrees")
         rmtree("Matrices")
         rmtree("Temp")
+
+    def get_wea_header(self, unit: int = 1):
+        meta_data = WeaMetaData(
+            city = str(self.config.settings.latitude),
+            country = str(self.config.settings.longitude),
+            latitude = self.config.settings.latitude,
+            longitude = self.config.settings.longitude,
+            timezone = self.config.settings.time_zone,
+            elevation = self.config.settings.site_elevation,
+            unit = unit,
+        )
+        return meta_data.wea_header()
 
     def generate_matrices(self):
         raise NotImplementedError
@@ -701,6 +706,51 @@ class PhaseMethod:
             nrows=BASIS_DIMENSION[self.config.settings.sky_basis] + 1,
             ncols=_ncols,
             ncomp=3,
+            dtype="d",
+        )
+
+    def get_melanopic_sky_matrix(
+        self,
+        time: datetime | list[datetime],
+        dni: float | list[float],
+        dhi: float | list[float],
+    ) -> np.ndarray:
+        """Generates a sky matrix based on the time, Direct Normal Irradiance (DNI), and
+        Diffuse Horizontal Irradiance (DHI).
+
+        Args:
+            time: The specific time for the matrix.
+            dni: The Direct Normal Irradiance value.
+            dhi: The Diffuse Horizontal Irradiance value.
+
+        Returns:
+            numpy.ndarray: The generated sky matrix, with dimensions based on the
+                BASIS_DIMENSION setting for the current sky_basis configuration.
+        """
+        _wea = self.get_wea_header(unit=3)
+        _ncols = 1
+        if (
+            isinstance(time, datetime)
+            and isinstance(dni, (float, int))
+            and isinstance(dhi, (float, int))
+        ):
+            _wea += str(WeaData(time, dni, dhi))
+        elif isinstance(time, list) and isinstance(dni, list) and isinstance(dhi, list):
+            rows = [str(WeaData(t, n, d)) for t, n, d in zip(time, dni, dhi)]
+            _wea += "\n".join(rows)
+            _ncols = len(time)
+        smx = pr.gensdaymtx(
+            _wea.encode(),
+            outform="d",
+            mfactor=int(self.config.settings.sky_basis[-1]),
+            header=False,
+        )
+        smx = pr.Rcomb(transform="M").add_input(smx)()
+        return load_binary_matrix(
+            smx,
+            nrows=BASIS_DIMENSION[self.config.settings.sky_basis] + 1,
+            ncols=_ncols,
+            ncomp=1,
             dtype="d",
         )
 
@@ -1221,6 +1271,45 @@ class ThreePhaseMethod(PhaseMethod):
                 weights=weights,
             )
         return res
+
+    def calculate_mev(
+        self,
+        sensor: str,
+        bsdf: dict[str, str],
+        time: datetime,
+        dni: float,
+        dhi: float,
+    ) -> np.ndarray:
+        """Calculate menalonpic vertical illuminance.
+
+        Args:
+            view: view name, must be in config.model.views
+            bsdf: a dictionary of window name as key and bsdf matrix or matrix name as value
+            time: datetime object
+            dni: direct normal irradiance
+            dhi: diffuse horizontal irradiance
+        Returns:
+            Menalonpic vertical illuminance
+        """
+        sky_matrix = self.get_melanopic_sky_matrix(time, dni, dhi)
+        res = []
+        if isinstance(bsdf, list):
+            if len(bsdf) != len(self.config.model.windows):
+                raise ValueError("Number of BSDF should match number of windows.")
+        for idx, _name in enumerate(self.config.model.windows):
+            matrix_name = bsdf[_name]
+            _bsdf = self.config.model.materials.matrices_mlnp[matrix_name].matrix_data
+            res.append(
+                np.linalg.multi_dot(
+                    [
+                        self.sensor_window_matrices[sensor].array[idx],
+                        _bsdf,
+                        self.daylight_matrices[_name].array,
+                        sky_matrix,
+                    ]
+                )
+            )
+        return np.sum(res, axis=0)
 
     def calculate_edgps(
         self,

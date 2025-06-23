@@ -32,6 +32,7 @@ class WeaMetaData(NamedTuple):
     longitude: float
     timezone: int
     elevation: float
+    unit: int = 1
 
     def wea_header(self) -> str:
         """Return a .wea format header."""
@@ -41,7 +42,7 @@ class WeaMetaData(NamedTuple):
             f"longitude {self.longitude}\n"
             f"time_zone {self.timezone}\n"
             f"site_elevation {self.elevation}\n"
-            "weather_data_file_units 1\n"
+            f"weather_data_file_units {self.unit}\n"
         )
 
 
@@ -55,8 +56,8 @@ class WeaData(NamedTuple):
         minute: Minutes.
         second: Seconds.
         hours: Times with minutes as fraction.
-        dni: Direct normal irradiance (W/m2).
-        dhi: Diffuse horizontal irradiance (W/m2).
+        dni: Direct normal irradiance (W/m2) or illuminance (lux).
+        dhi: Diffuse horizontal irradiance (W/m2) or illuminance (lux).
         aod: Aeroal Optical Depth (default = 0).
         cc: Cloud cover (default = 0).
         year: default = 2000.

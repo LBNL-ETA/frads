@@ -69,30 +69,11 @@ class OpeningMultipliers:
 
 
 @dataclass(slots=True)
-class BaseLayerDefinition:
+class LayerInput:
     input_source: Path | str | bytes
     flipped: bool = False
-
-
-@dataclass(slots=True)
-class GlazingLayerDefinition(BaseLayerDefinition):
-    pass
-
-
-@dataclass(slots=True)
-class BlindsLayerDefinition(BaseLayerDefinition):
     slat_angle_deg: float = 0.0
     openings: OpeningDefinitions = field(default_factory=OpeningDefinitions)
-
-
-@dataclass(slots=True)
-class FabricLayerDefinition(BaseLayerDefinition):
-    openings: OpeningDefinitions = field(default_factory=OpeningDefinitions)
-
-
-AnyLayerDefinition = (
-    GlazingLayerDefinition | BlindsLayerDefinition | FabricLayerDefinition
-)
 
 
 @dataclass(slots=True)
@@ -470,7 +451,7 @@ def _apply_opening_properties(
 
 
 def _process_blind_definition_to_bsdf(
-    defin: BlindsLayerDefinition,
+    defin: LayerInput,
     product_data: pwc.ProductData,
     layer: Layer,
     nproc: int,
@@ -546,7 +527,7 @@ def _process_blind_definition_to_bsdf(
 
 def create_glazing_system(
     name: str,
-    layer_inputs: list[AnyLayerDefinition],
+    layer_inputs: list[LayerInput],
     gaps: None | list[Gap] = None,
     nproc: int = 1,
     nsamp: int = 2000,
@@ -584,14 +565,8 @@ def create_glazing_system(
         if product_data is None:
             raise ValueError("Invalid layer type")
         layer = get_layer_data(product_data)
-        if product_data.product_type == WCProductType.SHADING.value and (
-            isinstance(layer_inp, FabricLayerDefinition)
-            or isinstance(layer_inp, BlindsLayerDefinition)
-        ):
-            if (
-                product_data.product_subtype == WCProductSubType.VENETIAN.value
-                and isinstance(layer_inp, BlindsLayerDefinition)
-            ):
+        if product_data.product_type == WCProductType.SHADING.value:
+            if product_data.product_subtype == WCProductSubType.VENETIAN.value:
                 actual_product_data = _process_blind_definition_to_bsdf(
                     layer_inp, product_data, layer, nproc=nproc, nsamp=nsamp
                 )
@@ -958,11 +933,11 @@ def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[bytes]:
                 rcurv=blinds_layer.slat_curve_m,
             )
             blinds: bytes = pr.generate_blinds(blinds_layer.shading_material, geom)
-            xmin, xmax, ymin, ymax, zmin, zmax = pr.ot.getbbox(blinds)
+            xmin, xmax, ymin, ymax, zmin, zmax = pr.getbbox(blinds)
             blinds_normal = np.array((1, 0, 0))
             rotatez_angle = angle_between(blinds_normal, window.normal, degree=True)
             rotated_blinds: bytes = pr.Xform(blinds).rotatez(rotatez_angle)()
-            xmin, xmax, ymin, ymax, zmin, zmax = pr.ot.getbbox(rotated_blinds)
+            xmin, xmax, ymin, ymax, zmin, zmax = pr.getbbox(rotated_blinds)
             rotated_blinds_centroid = np.array(
                 ((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
             )
@@ -1022,7 +997,6 @@ def generate_coplanar_bsdf(
     """Generate coplanar BSDF for the given layers and gaps."""
     original_dir = os.getcwd()
     with tempfile.TemporaryDirectory(delete=False) as tmpdir:
-        print(f"Generating BSDF in {tmpdir}")
         try:
             os.chdir(tmpdir)
             tmpdir_path = Path(tmpdir)
