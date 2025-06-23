@@ -16,8 +16,8 @@ class TestGlazingSystem(unittest.TestCase):
         self.medium_office = fr.load_energyplus_model(ref_models["medium_office"])
         glass_path = self.resources_dir / "CLEAR_3.DAT"
         blinds_path = self.resources_dir / "igsdb_product_19732.json"
-        glass_layer = fr.window.GlazingLayerDefinition(glass_path)
-        blinds_layer = fr.window.BlindsLayerDefinition(input_source=blinds_path, slat_angle_deg=45)
+        glass_layer = fr.LayerInput(glass_path)
+        blinds_layer = fr.LayerInput(input_source=blinds_path, slat_angle_deg=45)
         single_glaze_blinds = [glass_layer, blinds_layer]
         self.glazing_blinds_system = fr.create_glazing_system(name="gs1", layer_inputs=single_glaze_blinds, nproc=4, nsamp=1)
 
@@ -26,8 +26,8 @@ class TestGlazingSystem(unittest.TestCase):
         rconfigs = {
             k: fr.WorkflowConfig.from_dict(v) for k, v in rmodels.items()
         }
-        for name, config in rconfigs.items():
-            for window_name, window in config.model.windows.items():
+        for _, config in rconfigs.items():
+            for _, window in config.model.windows.items():
                 geom = fr.window.get_proxy_geometry(window.polygon, self.glazing_blinds_system)
                 window.proxy_geometry[self.glazing_blinds_system.name] = b"\n".join(geom)
 
@@ -40,6 +40,51 @@ class TestGlazingSystem(unittest.TestCase):
         self.assertIsInstance(self.medium_office.matrix_two_dimension, dict)
         self.assertIsInstance(self.medium_office.window_material_glazing, dict)
         self.assertIsInstance(self.medium_office.window_thermal_model_params, dict)
+
+
+class TestWorkflow(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Setup the resources directory - replace with your actual resources path
+        cls.resources_dir = Path(__file__).parent / "Resources"
+
+    def test_run(self):
+        # Create a new medium_office for each test - adjust based on how it's created in your tests
+
+        self.medium_office = fr.load_energyplus_model(ref_models["medium_office"])
+        glass_path = self.resources_dir / "CLEAR_3.DAT"
+        blinds_path = self.resources_dir / "igsdb_product_19732.json"
+        glass_layer = fr.LayerInput(glass_path)
+        blinds_layer = fr.LayerInput(input_source=blinds_path, slat_angle_deg=45)
+        single_glaze_blinds = [glass_layer, blinds_layer]
+        single_glaze = [glass_layer]
+        self.glazing_blinds_system = fr.create_glazing_system(
+                name="gs1", layer_inputs=single_glaze_blinds, mbsdf=True, nproc=4, nsamp=1)
+        self.glazing_system = fr.create_glazing_system(name="gs1", layer_inputs=single_glaze, mbsdf=True, nproc=4, nsamp=1)
+        epsetup = fr.EnergyPlusSetup(self.medium_office, enable_radiance=True, initialize_radiance=False)
+        wpi_list = []
+        def controller(state):
+            if not epsetup.api.exchange.api_data_fully_ready(state):
+                return
+            # get the current time
+            datetime = epsetup.get_datetime()
+            # only calculate workplane illuminance during daylight hours
+            if  datetime.hour >= 8 and datetime.hour < 18:
+                wpi = epsetup.calculate_wpi(
+                    zone="Perimeter_bot_ZN_1",
+                    cfs_name={
+                        "Perimeter_bot_ZN_1_Wall_South_Window": "ec01",
+                    }, # {window: glazing system}
+                ) # an array of illuminance for all sensors in the zone
+                mev = epsetup.calculate_mev(zone="Perimeter_bot_ZN_1", cfs_name={
+                    "Perimeter_bot_ZN_1_Wall_South_Window": "ec01",
+                })
+                wpi_list.append(wpi)
+                wpi_list.append(mev)
+        epsetup.add_melanopic_bsdf(self.glazing_blinds_system)
+        epsetup.add_melanopic_bsdf(self.glazing_system)
+        epsetup.set_callback("callback_begin_system_timestep_before_predictor", controller)
+        epsetup.run(design_day=True)
 
 
 if __name__ == "__main__":

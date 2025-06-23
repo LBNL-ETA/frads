@@ -270,7 +270,7 @@ class TestMethods(unittest.TestCase):
         clear_glass_path = self.resources_dir / "CLEAR_3.DAT"
         product_7406_path = self.resources_dir / "igsdb_product_7406.json"
         shade_bsdf_path = self.resources_dir / "ec60.xml"
-        layers = [fr.window.GlazingLayerDefinition(product_7406_path), fr.window.GlazingLayerDefinition(clear_glass_path)]
+        layers = [fr.window.LayerInput(product_7406_path), fr.window.LayerInput(clear_glass_path)]
         epmodel = fr.load_energyplus_model(ref_models["medium_office"])
         gs_ec60 = fr.create_glazing_system(
             name="ec60",

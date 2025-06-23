@@ -26,7 +26,7 @@ build:
 
 # Run tests
 test:
-	python -m unittest discover -s tests
+	python -m unittest discover -s tests -f
 
 test_window:
 	python -m unittest tests/test_window.py

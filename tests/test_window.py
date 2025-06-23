@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 import unittest
 import pywincalc as pwc
@@ -6,12 +5,7 @@ from frads.window import (
     create_glazing_system,
     Gas,
     Gap,
-    GlazingSystem,
-    AIR,
-    ARGON,
-    GlazingLayerDefinition,
-    FabricLayerDefinition,
-    BlindsLayerDefinition,
+    LayerInput,
     OpeningDefinitions,
     Layer,
     get_layer_groups,
@@ -31,18 +25,18 @@ class TestWindow(unittest.TestCase):
         glass_path = self.resources_dir / "CLEAR_3.DAT"
         shade_path = self.resources_dir / "2011-SA1.xml"
         blinds_path = self.resources_dir / "igsdb_product_19732.json"
-        glass_layer = GlazingLayerDefinition(glass_path)
+        glass_layer = LayerInput(glass_path)
         openings = OpeningDefinitions(
             left_m=0.01,
             right_m=0.005,
             top_m=0.0025,
             bottom_m=0.005,
         )
-        fabric_layer = FabricLayerDefinition(
+        fabric_layer = LayerInput(
             input_source=shade_path,
             openings=openings,
         )
-        blinds_layer = BlindsLayerDefinition(
+        blinds_layer = LayerInput(
             input_source=blinds_path,
             slat_angle_deg=45,
         )
@@ -273,7 +267,6 @@ class TestBSDFGeneration(unittest.TestCase):
             nslats = 10,
         )
         result = generate_melanopic_bsdf(layers=[layer, layer2], gaps=[Gap([Gas("air", 0.1), Gas("argon", 0.9)], 0.03)],nsamp=1)
-        breakpoint()
 
 if __name__ == "__main__":
     unittest.main()
