@@ -20,11 +20,9 @@ class TestWindow(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.resources_dir = Path(__file__).parent / "Resources"
-
-    def setUp(self):
-        glass_path = self.resources_dir / "CLEAR_3.DAT"
-        shade_path = self.resources_dir / "2011-SA1.xml"
-        blinds_path = self.resources_dir / "igsdb_product_19732.json"
+        glass_path = cls.resources_dir / "CLEAR_3.DAT"
+        shade_path = cls.resources_dir / "2011-SA1.xml"
+        blinds_path = cls.resources_dir / "igsdb_product_19732.json"
         glass_layer = LayerInput(glass_path)
         openings = OpeningDefinitions(
             left_m=0.01,
@@ -40,23 +38,24 @@ class TestWindow(unittest.TestCase):
             input_source=blinds_path,
             slat_angle_deg=45,
         )
-        self.double_glaze = [glass_layer, glass_layer]
+        cls.double_glaze = [glass_layer, glass_layer]
         triple_glaze = [glass_layer, glass_layer, glass_layer]
-        self.double_glaze_fabric = [glass_layer, glass_layer, fabric_layer]
+        cls.double_glaze_fabric = [glass_layer, glass_layer, fabric_layer]
         double_glaze_blinds = [glass_layer, glass_layer, blinds_layer]
-        self.single_glaze_blinds = [glass_layer, blinds_layer]
-        self.double_glaze_inner_fabric = [glass_layer, fabric_layer, glass_layer]
-        self.double_glaze_system = create_glazing_system(
-            name="dgu", layer_inputs=self.double_glaze
+        cls.single_glaze_blinds = [glass_layer, blinds_layer]
+        cls.double_glaze_inner_fabric = [glass_layer, fabric_layer, glass_layer]
+        cls.double_glaze_system = create_glazing_system(
+            name="dgu", layer_inputs=cls.double_glaze,
+            gaps=[Gap([Gas("air", 0.1), Gas("argon", 0.9)], 0.03)],
         )
-        self.triple_glaze_system = create_glazing_system(
+        cls.triple_glaze_system = create_glazing_system(
             name="tgu", layer_inputs=triple_glaze
         )
 
-        self.double_glaze_fabric_system = create_glazing_system(
-            name="dgu_shade", layer_inputs=self.double_glaze_fabric
+        cls.double_glaze_fabric_system = create_glazing_system(
+            name="dgu_shade", layer_inputs=cls.double_glaze_fabric
         )
-        self.double_glaze_blinds_system = create_glazing_system(
+        cls.double_glaze_blinds_system = create_glazing_system(
             name="dgu_blinds", layer_inputs=double_glaze_blinds, nsamp=1,
         )
 
@@ -91,9 +90,6 @@ class TestWindow(unittest.TestCase):
             self.double_glaze_system.layers[1].product_name, "Generic Clear Glass"
         )
         self.assertEqual(self.double_glaze_system.name, "dgu")
-        self.assertEqual(self.double_glaze_system.gaps[0].gas[0].gas, "air")
-        self.assertEqual(self.double_glaze_system.gaps[0].gas[0].ratio, 1)
-        self.assertEqual(self.double_glaze_system.gaps[0].thickness, 0.0127)
 
     def test_get_layer_groups(self):
         glass_layer = Layer(
@@ -151,17 +147,11 @@ class TestWindow(unittest.TestCase):
         Check the thickness of the glazing system.
         Check the order and composition of the gap.
         """
-        gs = create_glazing_system(
-            name="gs2",
-            layer_inputs=self.double_glaze,
-            gaps=[Gap([Gas("air", 0.1), Gas("argon", 0.9)], 0.03)],
-        )
-
-        self.assertEqual(gs.gaps[0].gas[0].gas, "air")
-        self.assertEqual(gs.gaps[0].gas[0].ratio, 0.1)
-        self.assertEqual(gs.gaps[0].gas[1].gas, "argon")
-        self.assertEqual(gs.gaps[0].gas[1].ratio, 0.9)
-        self.assertEqual(gs.gaps[0].thickness, 0.03)
+        self.assertEqual(self.double_glaze_system.gaps[0].gas[0].gas, "air")
+        self.assertEqual(self.double_glaze_system.gaps[0].gas[0].ratio, 0.1)
+        self.assertEqual(self.double_glaze_system.gaps[0].gas[1].gas, "argon")
+        self.assertEqual(self.double_glaze_system.gaps[0].gas[1].ratio, 0.9)
+        self.assertEqual(self.double_glaze_system.gaps[0].thickness, 0.03)
 
     def test_venetian_blinds(self):
         """
@@ -171,23 +161,17 @@ class TestWindow(unittest.TestCase):
         Check the order of the layers.
         Check the order and composition of the gaps.
         """
-        gs = create_glazing_system(
-            name="gs3",
-            layer_inputs=self.single_glaze_blinds,
-            nsamp=1,
-        )
-        gs.save("temp.json")
 
-        self.assertEqual(gs.layers[0].product_name, "Generic Clear Glass")
-        self.assertEqual(gs.layers[0].thickness_m, 0.003048)
-        self.assertEqual(gs.layers[1].product_name, "ODL Espresso Blind 14.8mm Slat")
-        self.assertEqual(gs.layers[1].thickness_m, 0.010465180361560904)
+        self.assertEqual(self.double_glaze_blinds_system.layers[0].product_name, "Generic Clear Glass")
+        self.assertEqual(self.double_glaze_blinds_system.layers[0].thickness_m, 0.003048)
+        self.assertEqual(self.double_glaze_blinds_system.layers[2].product_name, "ODL Espresso Blind 14.8mm Slat")
+        self.assertEqual(self.double_glaze_blinds_system.layers[2].thickness_m, 0.010465180361560904)
 
-        self.assertEqual(gs.gaps[0].gas[0].gas, "air")
-        self.assertEqual(gs.gaps[0].gas[0].ratio, 1)
-        self.assertEqual(gs.gaps[0].thickness, 0.0127)
+        self.assertEqual(self.double_glaze_blinds_system.gaps[0].gas[0].gas, "air")
+        self.assertEqual(self.double_glaze_blinds_system.gaps[0].gas[0].ratio, 1)
+        self.assertEqual(self.double_glaze_blinds_system.gaps[0].thickness, 0.0127)
 
-        self.assertEqual(gs.thickness, 0.026213180361560902)
+        self.assertEqual(self.double_glaze_blinds_system.thickness, 0.04196118036156091)
 
     def test_inner_shade_gap(self):
         """

@@ -137,3 +137,6 @@ class TestSky(unittest.TestCase):
         self.assertEqual(wea_data[-1].time.day, 31)
         self.assertEqual(wea_data[-1].dni, 0)
         self.assertEqual(wea_metadata.latitude, 37.72)
+
+if __name__ == "__main__":
+    unittest.main()

@@ -10,16 +10,15 @@ class TestGlazingSystem(unittest.TestCase):
     def setUpClass(cls):
         # Setup the resources directory - replace with your actual resources path
         cls.resources_dir = Path(__file__).parent / "Resources"
-
-    def setUp(self):
         # Create a new medium_office for each test - adjust based on how it's created in your tests
-        self.medium_office = fr.load_energyplus_model(ref_models["medium_office"])
-        glass_path = self.resources_dir / "CLEAR_3.DAT"
-        blinds_path = self.resources_dir / "igsdb_product_19732.json"
+        cls.medium_office = fr.load_energyplus_model(ref_models["medium_office"])
+        glass_path = cls.resources_dir / "CLEAR_3.DAT"
+        blinds_path = cls.resources_dir / "igsdb_product_19732.json"
         glass_layer = fr.LayerInput(glass_path)
         blinds_layer = fr.LayerInput(input_source=blinds_path, slat_angle_deg=45)
         single_glaze_blinds = [glass_layer, blinds_layer]
-        self.glazing_blinds_system = fr.create_glazing_system(name="gs1", layer_inputs=single_glaze_blinds, nproc=4, nsamp=1)
+        cls.glazing_blinds_system = fr.create_glazing_system(name="gs1", layer_inputs=single_glaze_blinds, nproc=4, nsamp=1)
+
 
     def test_add_proxy_geometry(self):
         rmodels = fr.epmodel_to_radmodel(self.medium_office)
