@@ -743,7 +743,6 @@ class PhaseMethod:
             rows = [str(WeaData(t, n, d, a, s)) for t, n, d, a, s in zip(time, dni, dhi, aod, sky_cover)]
             _wea += "\n".join(rows)
             _ncols = len(time)
-        print(_wea)
         smx = pr.gensdaymtx(
             _wea.encode(),
             outform="f",
@@ -751,7 +750,7 @@ class PhaseMethod:
             header=True,
             nthreads=self.config.settings.num_processors,
         )
-        smx = pr.getinfo(pr.Rcomb(transform="M", header=False, outform='f').add_input(smx)(), strip_header=True)
+        smx = pr.getinfo(pr.Rcomb(transform="m", header=False, outform='f').add_input(smx)(), strip_header=True)
         return load_binary_matrix(
             smx,
             nrows=BASIS_DIMENSION[self.config.settings.sky_basis] + 1,
@@ -1285,6 +1284,7 @@ class ThreePhaseMethod(PhaseMethod):
         time: datetime,
         dni: float,
         dhi: float,
+        sky_cover: float,
     ) -> np.ndarray:
         """Calculate menalonpic vertical illuminance.
 
@@ -1297,7 +1297,7 @@ class ThreePhaseMethod(PhaseMethod):
         Returns:
             Menalonpic vertical illuminance
         """
-        sky_matrix = self.get_melanopic_sky_matrix(time, dni, dhi)
+        sky_matrix = self.get_melanopic_sky_matrix(time, dni, dhi, sky_cover=sky_cover)
         res = []
         if isinstance(bsdf, list):
             if len(bsdf) != len(self.config.model.windows):

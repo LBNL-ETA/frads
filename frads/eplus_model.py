@@ -59,12 +59,12 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
                 gap_inputs.append(
                     epm.WindowMaterialGas(
                         gas_type=gap.gas[0].gas.capitalize(),
-                        thickness=gap.thickness,
+                        thickness=gap.thickness_m,
                     )
                 )
             else:
                 gas_dict = {
-                    "thickness": gap.thickness,
+                    "thickness": gap.thickness_m,
                     "number_of_gases_in_mixture": len(gap.gas),
                 }
                 for idx, gas in enumerate(gap.gas):
