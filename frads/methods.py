@@ -1308,7 +1308,6 @@ class ThreePhaseMethod(PhaseMethod):
             _vmx = self.sensor_window_matrices[sensor].array[idx][:, :, 0]
             _dmx = self.daylight_matrices[_name].array[:, :, 0]
             _smx = sky_matrix[:, :, 0]
-            breakpoint()
             res.append(np.linalg.multi_dot( [_vmx, _bsdf, _dmx, _smx]))
         return np.sum(res, axis=0)
 
