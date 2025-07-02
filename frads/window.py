@@ -613,7 +613,7 @@ def create_glazing_system(
     melanopic_back_reflectance = []
     if mbsdf:
         melanopic_back_transmittace, melanopic_back_reflectance = (
-            generate_melanopic_bsdf(layer_data, gaps)
+            generate_melanopic_bsdf(layer_data, gaps, nproc=nproc, nsamp=nsamp)
         )
 
     for index, data in enumerate(layer_data):
