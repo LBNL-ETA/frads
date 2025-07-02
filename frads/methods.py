@@ -714,6 +714,8 @@ class PhaseMethod:
         time: datetime | list[datetime],
         dni: float | list[float],
         dhi: float | list[float],
+        aod: float | list[float] = 0.112,
+        sky_cover: float | list[float] = 0.0,
     ) -> np.ndarray:
         """Generates a sky matrix based on the time, Direct Normal Irradiance (DNI), and
         Diffuse Horizontal Irradiance (DHI).
@@ -733,25 +735,29 @@ class PhaseMethod:
             isinstance(time, datetime)
             and isinstance(dni, (float, int))
             and isinstance(dhi, (float, int))
+            and isinstance(aod, (float, int))
+            and isinstance(sky_cover, (float, int))
         ):
-            _wea += str(WeaData(time, dni, dhi))
-        elif isinstance(time, list) and isinstance(dni, list) and isinstance(dhi, list):
-            rows = [str(WeaData(t, n, d)) for t, n, d in zip(time, dni, dhi)]
+            _wea += str(WeaData(time, dni, dhi, aod, sky_cover))
+        elif isinstance(time, list) and isinstance(dni, list) and isinstance(dhi, list) and isinstance(aod, list) and isinstance(sky_cover, list):
+            rows = [str(WeaData(t, n, d, a, s)) for t, n, d, a, s in zip(time, dni, dhi, aod, sky_cover)]
             _wea += "\n".join(rows)
             _ncols = len(time)
+        print(_wea)
         smx = pr.gensdaymtx(
             _wea.encode(),
-            outform="d",
+            outform="f",
             mfactor=int(self.config.settings.sky_basis[-1]),
-            header=False,
+            header=True,
+            nthreads=self.config.settings.num_processors,
         )
-        smx = pr.Rcomb(transform="M").add_input(smx)()
+        smx = pr.getinfo(pr.Rcomb(transform="M", header=False, outform='f').add_input(smx)(), strip_header=True)
         return load_binary_matrix(
             smx,
             nrows=BASIS_DIMENSION[self.config.settings.sky_basis] + 1,
             ncols=_ncols,
             ncomp=1,
-            dtype="d",
+            dtype="f",
         )
 
     def get_sky_matrix_from_wea(self, mfactor: int, sun_only=False, onesun=False):
@@ -1299,16 +1305,11 @@ class ThreePhaseMethod(PhaseMethod):
         for idx, _name in enumerate(self.config.model.windows):
             matrix_name = bsdf[_name]
             _bsdf = self.config.model.materials.matrices_mlnp[matrix_name].matrix_data
-            res.append(
-                np.linalg.multi_dot(
-                    [
-                        self.sensor_window_matrices[sensor].array[idx],
-                        _bsdf,
-                        self.daylight_matrices[_name].array,
-                        sky_matrix,
-                    ]
-                )
-            )
+            _vmx = self.sensor_window_matrices[sensor].array[idx][:, :, 0]
+            _dmx = self.daylight_matrices[_name].array[:, :, 0]
+            _smx = sky_matrix[:, :, 0]
+            breakpoint()
+            res.append(np.linalg.multi_dot( [_vmx, _bsdf, _dmx, _smx]))
         return np.sum(res, axis=0)
 
     def calculate_edgps(
@@ -1470,10 +1471,10 @@ class FivePhaseMethod(PhaseMethod):
 
     def _gen_blacked_out_octree(self):
         black_scene = b"\n".join(
-            pr.xform(s, modifier="black") for s in self.config.model.scene.files
+            pr.Xform(s, modifier="black")() for s in self.config.model.scene.files
         )
         if self.config.model.scene.bytes != b"":
-            black_scene += pr.xform(self.config.model.scene.bytes, modifier="black")
+            black_scene += pr.Xform(self.config.model.scene.bytes, modifier="black")()
         black = pr.Primitive("void", "plastic", "black", [], [0, 0, 0, 0, 0])
         glow = pr.Primitive("void", "glow", "glowing", [], [1, 1, 1, 0])
         with open(self.blacked_out_octree, "wb") as f:
