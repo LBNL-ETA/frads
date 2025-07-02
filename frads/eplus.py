@@ -501,6 +501,36 @@ class EnergyPlusSetup:
         # method(self.state, partial(func, self))
         method(self.state, func)
 
+    def _request_diffuse_horizontal_irradiance(self) -> None:
+        self.request_variable(
+            name="Site Diffuse Solar Radiation Rate per Area",
+            key="Environment",
+        )
+    
+    def _request_direct_normal_irradiance(self) -> None:
+        self.request_variable(
+            name="Site Direct Solar Radiation Rate per Area",
+            key="Environment",
+        )
+
+    def _request_sky_diffuse_solar_radiation_luminous_efficacy(self) -> None:
+        self.request_variable(
+            name="Site Sky Diffuse Solar Radiation Luminous Efficacy",
+            key="Environment",
+        )
+
+    def _request_beam_solar_radiation_luminous_efficacy(self) -> None:
+        self.request_variable(
+            name="Site Beam Solar Radiation Luminous Efficacy",
+            key="Environment",
+        )
+
+    def _request_total_sky_cover(self) -> None:
+        self.request_variable(
+            name="Site Total Sky Cover",
+            key="Environment",
+        )
+
     def _request_variables_from_callback(self, callable_nodes: list[ast.Call]) -> None:
         for node in callable_nodes:
             key_value_dict = {}
@@ -519,24 +549,26 @@ class EnergyPlusSetup:
                     raise ValueError(f"Invalid number of arguments in {node.func}.")
                 self.request_variable(**key_value_dict)
             elif node.func.attr == "get_diffuse_horizontal_irradiance":
-                self.request_variable(
-                    name="Site Diffuse Solar Radiation Rate per Area",
-                    key="Environment",
-                )
+                self._request_diffuse_horizontal_irradiance()
+            elif node.func.attr == "get_diffuse_horizontal_illuminance":
+                self._request_diffuse_horizontal_irradiance()
+                self._request_sky_diffuse_solar_radiation_luminous_efficacy()
             elif node.func.attr == "get_direct_normal_irradiance":
-                self.request_variable(
-                    name="Site Direct Solar Radiation Rate per Area",
-                    key="Environment",
-                )
+                self._request_direct_normal_irradiance()
+            elif node.func.attr == "get_direct_normal_illuminance":
+                self._request_direct_normal_irradiance()
+                self._request_beam_solar_radiation_luminous_efficacy()
+            elif node.func.attr == "get_total_sky_cover":
+                self._request_total_sky_cover()
+            elif node.func.attr == "calculate_mev":
+                self._request_diffuse_horizontal_irradiance()
+                self._request_direct_normal_irradiance()
+                self._request_sky_diffuse_solar_radiation_luminous_efficacy()
+                self._request_beam_solar_radiation_luminous_efficacy()
+                self._request_total_sky_cover()
             elif node.func.attr in ("calculate_wpi", "calculate_edgps"):
-                self.request_variable(
-                    name="Site Diffuse Solar Radiation Rate per Area",
-                    key="Environment",
-                )
-                self.request_variable(
-                    name="Site Direct Solar Radiation Rate per Area",
-                    key="Environment",
-                )
+                self._request_diffuse_horizontal_irradiance()
+                self._request_direct_normal_irradiance()
 
     def _check_actuators_from_callback(self, callable_nodes: list[ast.Call]) -> None:
         def get_zone_from_pair_arg(node: ast.Call) -> str:
@@ -632,7 +664,9 @@ class EnergyPlusSetup:
         Examples:
             >>> epsetup.get_direct_normal_illuminance()
         """
-        return self.get_direct_normal_irradiance() * 110
+        return self.get_direct_normal_irradiance() * self.get_variable_value(
+            "Site Beam Solar Radiation Luminous Efficacy", "Environment"
+        )
 
     def get_diffuse_horizontal_irradiance(self) -> float:
         """Get diffuse horizontal irradiance.
@@ -656,7 +690,20 @@ class EnergyPlusSetup:
         Example:
             epsetup.get_diffuse_horizontal_illuminance()
         """
-        return self.get_diffuse_horizontal_irradiance() * 110
+        return self.get_diffuse_horizontal_irradiance() * self.get_variable_value(
+            "Site Sky Diffuse Solar Radiation Luminous Efficacy", "Environment"
+        )
+
+    def get_total_sky_cover(self) -> float:
+        """Get total sky cover.
+
+        Returns:
+            Total sky cover in fraction.
+
+        Example:
+            epsetup.get_total_sky_cover()
+        """
+        return self.get_variable_value("Site Total Sky Cover", "Environment") / 10.0
 
     def calculate_wpi(self, zone: str, cfs_name: dict[str, str]) -> np.ndarray:
         """Calculate workplane illuminance in a zone.
@@ -703,9 +750,10 @@ class EnergyPlusSetup:
         date_time = self.get_datetime()
         dni = self.get_direct_normal_illuminance()
         dhi = self.get_diffuse_horizontal_illuminance()
+        sky_cover = self.get_total_sky_cover()
         view_name = next(iter(self.rconfigs[zone].model.views.keys()))
         return self.rworkflows[zone].calculate_mev(
-            view_name, cfs_name, date_time, dni, dhi
+            view_name, cfs_name, date_time, dni, dhi, sky_cover
         )
 
     def calculate_edgps(
