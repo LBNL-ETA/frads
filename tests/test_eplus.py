@@ -57,10 +57,20 @@ class TestWorkflow(unittest.TestCase):
         blinds_layer = fr.LayerInput(input_source=blinds_path, slat_angle_deg=45)
         single_glaze_blinds = [glass_layer, blinds_layer]
         single_glaze = [glass_layer]
-        self.glazing_blinds_system = fr.create_glazing_system(
-                name="gs1", layer_inputs=single_glaze_blinds, mbsdf=True, nproc=4, nsamp=1)
-        self.glazing_system = fr.create_glazing_system(name="gs1", layer_inputs=single_glaze, mbsdf=True, nproc=4, nsamp=1)
+        print("single blinds")
+        # self.glazing_blinds_system = fr.create_glazing_system(
+        #         name="gs1", layer_inputs=single_glaze_blinds, mbsdf=True, nproc=8, nsamp=2000)
+        self.glazing_blinds_system = fr.window.load_glazing_system(self.resources_dir / "gs1.json")
+        print("single ")
+        # self.glazing_system = fr.create_glazing_system(name="gs2", layer_inputs=single_glaze, mbsdf=True, nproc=8, nsamp=2000)
+        self.glazing_system = fr.window.load_glazing_system(self.resources_dir / "gs2.json")
+        print("done")
+        # self.glazing_blinds_system.save(self.resources_dir / "gs1.json")
+        # self.glazing_system.save(self.resources_dir / "gs2.json")
+        self.medium_office.add_glazing_system(self.glazing_blinds_system)
+        self.medium_office.add_glazing_system(self.glazing_system)
         epsetup = fr.EnergyPlusSetup(self.medium_office, enable_radiance=True, initialize_radiance=False)
+        epsetup.initialize_radiance(zones=["Perimeter_bot_ZN_1"], nproc=8)
         wpi_list = []
         def controller(state):
             if not epsetup.api.exchange.api_data_fully_ready(state):
@@ -72,17 +82,20 @@ class TestWorkflow(unittest.TestCase):
                 wpi = epsetup.calculate_wpi(
                     zone="Perimeter_bot_ZN_1",
                     cfs_name={
-                        "Perimeter_bot_ZN_1_Wall_South_Window": "ec01",
+                        "Perimeter_bot_ZN_1_Wall_South_Window": "gs1",
                     }, # {window: glazing system}
                 ) # an array of illuminance for all sensors in the zone
+                edgps, ev = epsetup.calculate_edgps(zone="Perimeter_bot_ZN_1", cfs_name={"Perimeter_bot_ZN_1_Wall_South_Window": "gs1"})
                 mev = epsetup.calculate_mev(zone="Perimeter_bot_ZN_1", cfs_name={
-                    "Perimeter_bot_ZN_1_Wall_South_Window": "ec01",
+                    "Perimeter_bot_ZN_1_Wall_South_Window": "gs1",
                 })
+                print(wpi, ev, mev)
                 wpi_list.append(wpi)
                 wpi_list.append(mev)
         epsetup.add_melanopic_bsdf(self.glazing_blinds_system)
         epsetup.add_melanopic_bsdf(self.glazing_system)
-        epsetup.set_callback("callback_begin_system_timestep_before_predictor", controller)
+        epsetup.set_callback("callback_begin_system_timestep_before_predictor",
+                             controller)
         epsetup.run(design_day=True)
 
 
