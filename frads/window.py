@@ -110,7 +110,7 @@ class Layer:
     slat_conductivity: float = 160.00
     nslats: int = 1
     opening_multipliers: OpeningMultipliers = field(default_factory=OpeningMultipliers)
-    shading_xml: None | str = None
+    shading_xml: str = ""
 
 
 @dataclass(slots=True)
@@ -142,10 +142,10 @@ class Gap:
     """
 
     gas: list[Gas]
-    thickness: float
+    thickness_m: float
 
     def __post_init__(self):
-        if self.thickness <= 0:
+        if self.thickness_m <= 0:
             raise ValueError("Gap thickness must be greater than 0.")
         if sum(g.ratio for g in self.gas) != 1:
             raise ValueError("The sum of the gas ratios must be 1.")
@@ -266,7 +266,7 @@ class GlazingSystem:
             for gs in gases:
                 gas_instances.append(Gas(gas=gs["gas"], ratio=gs["ratio"]))
             gap_instances.append(
-                Gap(gas=gas_instances, thickness=gap["thickness"], **gap)
+                Gap(gas=gas_instances, thickness_m=gap["thickness"], **gap)
             )
         return cls(layers=layer_instances, gaps=gap_instances, **data)
 
@@ -307,25 +307,27 @@ def generate_blinds_xml(
     nproc: int,
     nsamp: int,
 ) -> bytes:
+    width = 1
+    height = 1
     material_solar = pr.ShadingMaterial(r_sol_diff, r_sol_spec, 0)
     material_visible = pr.ShadingMaterial(r_vis_diff, r_vis_spec, 0)
     material_ir = pr.ShadingMaterial(r_ir, 0, 0)
     geom = pr.BlindsGeometry(
         depth=depth,
-        width=1,
-        height=1,
+        width=width,
+        height=height,
         nslats=nslats,
         angle=angle,
         rcurv=curvature,
     )
     sol_blinds = pr.generate_blinds_for_bsdf(material_solar, geom)
     vis_blinds = pr.generate_blinds_for_bsdf(material_visible, geom)
-    with open("temp.rad", "wb") as f:
-        f.write(vis_blinds)
     ir_blinds = pr.generate_blinds_for_bsdf(material_ir, geom)
-    sol_results = pr.generate_bsdf(sol_blinds, nproc=nproc, nsamp=nsamp)
-    vis_results = pr.generate_bsdf(vis_blinds, nproc=nproc, nsamp=nsamp)
-    ir_results = pr.generate_bsdf(ir_blinds, basis="u")
+    spacing = height / nslats
+    dim = pr.genbsdf.SamplingBox(0.5, 0.51, 0.5, 0.5 + spacing, -thickness, 0)
+    sol_results = pr.generate_bsdf(sol_blinds, dim=dim, nproc=nproc, nsamp=nsamp)
+    vis_results = pr.generate_bsdf(vis_blinds, dim=dim, nproc=nproc, nsamp=nsamp)
+    ir_results = pr.generate_bsdf(ir_blinds, dim=dim, basis="u")
     return pr.generate_xml(
         sol_results,
         vis_results,
@@ -363,7 +365,7 @@ def load_glazing_system(path: str | Path) -> GlazingSystem:
     for gap in gaps:
         gases = gap.pop("gas")
         gas_instances = [Gas(gas=gas["gas"], ratio=gas["ratio"]) for gas in gases]
-        gap_instances.append(Gap(gas=gas_instances, thickness=gap["thickness"]))
+        gap_instances.append(Gap(gas=gas_instances, thickness_m=gap["thickness_m"]))
     return GlazingSystem(layers=layer_instances, gaps=gap_instances, **data)
 
 
@@ -374,7 +376,7 @@ def create_pwc_gaps(gaps: list[Gap]):
         _gas = pwc.create_gas(
             [[g.ratio, getattr(pwc.PredefinedGasType, g.gas.upper())] for g in gap.gas]
         )
-        _gap = pwc.Layers.gap(gas=_gas, thickness=gap.thickness)
+        _gap = pwc.Layers.gap(gas=_gas, thickness=gap.thickness_m)
         pwc_gaps.append(_gap)
     return pwc_gaps
 
@@ -422,14 +424,14 @@ def _apply_opening_properties(
         pass
     elif layer_idx == 0:
         if gaps_list:
-            gap_thickness = gaps_list[0].thickness
+            gap_thickness = gaps_list[0].thickness_m
     elif layer_idx == total_layers_in_definition - 1:
         if gaps_list:
-            gap_thickness = gaps_list[layer_idx - 1].thickness
+            gap_thickness = gaps_list[layer_idx - 1].thickness_m
     else:  # Middle layer
         if gaps_list and len(gaps_list) > layer_idx:
             gap_thickness = min(
-                gaps_list[layer_idx - 1].thickness, gaps_list[layer_idx].thickness
+                gaps_list[layer_idx - 1].thickness_m, gaps_list[layer_idx].thickness_m
             )  #
 
     if gap_thickness > 0:
@@ -504,8 +506,6 @@ def _process_blind_definition_to_bsdf(
         nsamp,
     )  # meters
     actual_product_data = pwc.parse_bsdf_xml_string(xml)
-    with open("temp.xml", "wb") as f:
-        f.write(xml)
     layer.thickness_m = layer_thickness_m
     layer.conductivity = product_data.composition.material.conductivity
     layer.emissivity_front = emis_front
@@ -598,7 +598,7 @@ def create_glazing_system(
             thickness += layer.thickness_m
 
     for gap in gaps:
-        thickness += gap.thickness
+        thickness += gap.thickness_m
 
     glzsys = pwc.GlazingSystem(
         solid_layers=product_data_list,
@@ -992,6 +992,7 @@ def generate_coplanar_bsdf(
     gaps: list[Gap],
     outspec: pr.genbsdf.OutSpec = "y",
     nproc: int = 1,
+    nspec: int = 3,
     nsamp: int = 2000,
 ):
     """Generate coplanar BSDF for the given layers and gaps."""
@@ -1004,7 +1005,8 @@ def generate_coplanar_bsdf(
             primitives = []
             width = 1
             height = 1
-            total_thickness = sum(gap.thickness for gap in gaps)
+            total_thickness = sum(gap.thickness_m for gap in gaps)
+            total_thickness += sum(layer.thickness_m for layer in layers)
 
             # Start from z=0 (innermost) and work outward (negative z)
             current_z = 0
@@ -1060,7 +1062,7 @@ def generate_coplanar_bsdf(
                         len(layer_groups) - 1 - group_idx - 1
                     )  # Corresponding gap index
                     if gap_idx >= 0 and gap_idx < len(gaps):
-                        current_z -= gaps[gap_idx].thickness
+                        current_z -= gaps[gap_idx].thickness_m
 
                 elif group[0] == "fabric":
                     fabric_layer = layers[current_layer_idx]
@@ -1091,7 +1093,7 @@ def generate_coplanar_bsdf(
                         len(layer_groups) - 1 - group_idx - 1
                     )  # Corresponding gap index
                     if gap_idx >= 0 and gap_idx < len(gaps):
-                        current_z -= gaps[gap_idx].thickness
+                        current_z -= gaps[gap_idx].thickness_m
 
                 elif group[0] == "blinds":
                     blinds_layer = layers[current_layer_idx]
@@ -1107,17 +1109,25 @@ def generate_coplanar_bsdf(
                     )
 
                     # Generate blinds geometry
+                    # 0 1 0 1 -thickness 0
                     blinds = pr.generate_blinds_for_bsdf(
                         blinds_layer.shading_material, geom_spec
                     )
 
                     # Position blinds at polygon location
                     xmin, xmax, ymin, ymax, zmin, zmax = pr.ot.getbbox(blinds)
+                    thickness = zmax - zmin
                     blinds_centroid = np.array(
                         ((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
                     )
+                    translate_vector = polygon.centroid - blinds_centroid
+                    translate_vector_x = translate_vector[0]
+                    translate_vector_y = translate_vector[1]
+                    translate_vector_z = translate_vector[2] - thickness / 2
                     positioned_blinds = pr.Xform(blinds).translate(
-                        *(polygon.centroid - blinds_centroid)
+                        translate_vector_x,
+                        translate_vector_y,
+                        translate_vector_z,
                     )()
                     primitives.append(positioned_blinds)
 
@@ -1128,9 +1138,9 @@ def generate_coplanar_bsdf(
                         len(layer_groups) - 1 - group_idx - 1
                     )  # Corresponding gap index
                     if gap_idx >= 0 and gap_idx < len(gaps):
-                        gap_thickness = gaps[gap_idx].thickness
-                        blinds_space = blinds_layer.slat_width_m / 2
-                        current_z -= gap_thickness - blinds_space
+                        gap_thickness = gaps[gap_idx].thickness_m
+                        current_z -= gap_thickness
+                        current_z -= thickness
 
             device_file = tmpdir_path / "device.rad"
             with open(device_file, "wb") as f:
@@ -1153,6 +1163,7 @@ def generate_coplanar_bsdf(
                 outspec=outspec,
                 dim=sampling_box,
                 nproc=nproc,
+                nspec=nspec,
                 nsamp=nsamp,
             )
         finally:
@@ -1161,10 +1172,10 @@ def generate_coplanar_bsdf(
 
 
 def generate_melanopic_bsdf(
-    layers: list[Layer], gaps: list[Gap], nproc: int = 1, nsamp: int = 2000
+    layers: list[Layer], gaps: list[Gap], nproc: int = 1, nsamp: int = 2000, nspec: int = 20,
 ) -> tuple[list[list], list[list]]:
     """Generate melanopic BSDF for the glazing system."""
-    data = generate_coplanar_bsdf(layers, gaps, outspec="m", nproc=nproc, nsamp=nsamp)
+    data = generate_coplanar_bsdf(layers, gaps, outspec="m", nspec=nspec, nproc=nproc, nsamp=nsamp)
     back_transmittance = [
         list(map(float, row.split()))
         for row in data.back.transmittance.decode().splitlines()
