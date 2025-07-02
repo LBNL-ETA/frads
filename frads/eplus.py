@@ -7,6 +7,7 @@ import datetime
 import inspect
 import json
 import tempfile
+import textwrap
 import os
 from pathlib import Path
 from typing import Callable
@@ -108,11 +109,19 @@ class EnergyPlusSetup:
         self.actuators = []
         self._get_list_of_actuators()
 
-    def initialize_radiance(self, nproc: int = 1):
-        for v in self.rworkflows.values():
-            v.config.settings.save_matrices = True
-            v.config.settings.num_processors = nproc
-            v.generate_matrices(view_matrices=False)
+    def initialize_radiance(self, zones: None | list[str] = None, nproc: int = 1):
+        """Initialize Radiance for Three-Phase Method.
+
+        Args:
+            zones: List of zones to initialize. If None, initialize all zones.
+            nproc: Number of processors to use for generating matrices.
+        """
+        if zones is None:
+            zones = list(self.rworkflows.keys())
+        for zone in zones:
+            self.rworkflows[zone].config.settings.save_matrices = True
+            self.rworkflows[zone].config.settings.num_processors = nproc
+            self.rworkflows[zone].generate_matrices(view_matrices=False)
 
 
     def close(self):
@@ -591,7 +600,8 @@ class EnergyPlusSetup:
             func: Callback function.
         """
         source_code = inspect.getsource(func)
-        tree = ast.parse(source_code)
+        dedented_source = textwrap.dedent(source_code)
+        tree = ast.parse(dedented_source)
         callable_nodes = []
 
         for node in ast.walk(tree):
