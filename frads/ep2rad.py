@@ -906,8 +906,8 @@ def create_settings(ep_model: EnergyPlusModel, epw_file: None | str) -> dict:
         settings.update(
             {
                 "latitude": site.latitude,
-                "longitude": site.longitude,
-                "time_zone": site.time_zone,
+                "longitude": site.longitude * -1,
+                "time_zone": site.time_zone * -15,
                 "site_elevation": site.elevation,
             }
         )
