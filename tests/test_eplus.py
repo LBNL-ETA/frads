@@ -59,7 +59,7 @@ class TestWorkflow(unittest.TestCase):
         single_glaze = [glass_layer]
         print("single blinds")
         # self.glazing_blinds_system = fr.create_glazing_system(
-        #         name="gs1", layer_inputs=single_glaze_blinds, mbsdf=True, nproc=8, nsamp=2000)
+        #         name="gs1", layer_inputs=single_glaze_blinds, mbsdf=True, nproc=32, nsamp=2000)
         self.glazing_blinds_system = fr.window.load_glazing_system(self.resources_dir / "gs1.json")
         print("single ")
         # self.glazing_system = fr.create_glazing_system(name="gs2", layer_inputs=single_glaze, mbsdf=True, nproc=8, nsamp=2000)
@@ -82,14 +82,15 @@ class TestWorkflow(unittest.TestCase):
                 wpi = epsetup.calculate_wpi(
                     zone="Perimeter_bot_ZN_1",
                     cfs_name={
-                        "Perimeter_bot_ZN_1_Wall_South_Window": "gs1",
+                        "Perimeter_bot_ZN_1_Wall_South_Window": "gs2",
                     }, # {window: glazing system}
                 ) # an array of illuminance for all sensors in the zone
-                edgps, ev = epsetup.calculate_edgps(zone="Perimeter_bot_ZN_1", cfs_name={"Perimeter_bot_ZN_1_Wall_South_Window": "gs1"})
+                skycover = epsetup.get_total_sky_cover()
+                edgps, ev = epsetup.calculate_edgps(zone="Perimeter_bot_ZN_1", cfs_name={"Perimeter_bot_ZN_1_Wall_South_Window": "gs2"})
                 mev = epsetup.calculate_mev(zone="Perimeter_bot_ZN_1", cfs_name={
-                    "Perimeter_bot_ZN_1_Wall_South_Window": "gs1",
+                    "Perimeter_bot_ZN_1_Wall_South_Window": "gs2",
                 })
-                print(wpi, ev, mev)
+                print(wpi, ev, mev, skycover)
                 wpi_list.append(wpi)
                 wpi_list.append(mev)
         epsetup.add_melanopic_bsdf(self.glazing_blinds_system)
