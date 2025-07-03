@@ -997,7 +997,7 @@ def generate_coplanar_bsdf(
 ):
     """Generate coplanar BSDF for the given layers and gaps."""
     original_dir = os.getcwd()
-    with tempfile.TemporaryDirectory(delete=False) as tmpdir:
+    with tempfile.TemporaryDirectory() as tmpdir:
         try:
             os.chdir(tmpdir)
             tmpdir_path = Path(tmpdir)
