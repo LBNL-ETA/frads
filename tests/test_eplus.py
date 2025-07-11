@@ -78,7 +78,7 @@ class TestWorkflow(unittest.TestCase):
             # get the current time
             datetime = epsetup.get_datetime()
             # only calculate workplane illuminance during daylight hours
-            if  datetime.hour >= 8 and datetime.hour < 18:
+            if  datetime.hour >= 11 and datetime.hour < 13:
                 wpi = epsetup.calculate_wpi(
                     zone="Perimeter_bot_ZN_1",
                     cfs_name={
@@ -90,7 +90,8 @@ class TestWorkflow(unittest.TestCase):
                 mev = epsetup.calculate_mev(zone="Perimeter_bot_ZN_1", cfs_name={
                     "Perimeter_bot_ZN_1_Wall_South_Window": "gs2",
                 })
-                print(wpi, ev, mev, skycover)
+                # print(wpi, ev, mev, skycover)
+                print(ev, mev, skycover)
                 wpi_list.append(wpi)
                 wpi_list.append(mev)
         epsetup.add_melanopic_bsdf(self.glazing_blinds_system)
