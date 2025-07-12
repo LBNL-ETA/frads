@@ -151,7 +151,7 @@ class TestWindow(unittest.TestCase):
         self.assertEqual(self.double_glaze_system.gaps[0].gas[0].ratio, 0.1)
         self.assertEqual(self.double_glaze_system.gaps[0].gas[1].gas, "argon")
         self.assertEqual(self.double_glaze_system.gaps[0].gas[1].ratio, 0.9)
-        self.assertEqual(self.double_glaze_system.gaps[0].thickness, 0.03)
+        self.assertEqual(self.double_glaze_system.gaps[0].thickness_m, 0.03)
 
     def test_venetian_blinds(self):
         """
@@ -169,7 +169,7 @@ class TestWindow(unittest.TestCase):
 
         self.assertEqual(self.double_glaze_blinds_system.gaps[0].gas[0].gas, "air")
         self.assertEqual(self.double_glaze_blinds_system.gaps[0].gas[0].ratio, 1)
-        self.assertEqual(self.double_glaze_blinds_system.gaps[0].thickness, 0.0127)
+        self.assertEqual(self.double_glaze_blinds_system.gaps[0].thickness_m, 0.0127)
 
         self.assertEqual(self.double_glaze_blinds_system.thickness, 0.04196118036156091)
 
@@ -191,11 +191,11 @@ class TestWindow(unittest.TestCase):
 
         self.assertEqual(gs.gaps[0].gas[0].gas, "air")
         self.assertEqual(gs.gaps[0].gas[0].ratio, 1)
-        self.assertEqual(gs.gaps[0].thickness, 0.01)
+        self.assertEqual(gs.gaps[0].thickness_m, 0.01)
 
         self.assertEqual(gs.gaps[1].gas[0].gas, "air")
         self.assertEqual(gs.gaps[1].gas[0].ratio, 1)
-        self.assertEqual(gs.gaps[1].thickness, 0.005)
+        self.assertEqual(gs.gaps[1].thickness_m, 0.005)
 
         self.assertEqual(gs.thickness, 0.022096)
 
