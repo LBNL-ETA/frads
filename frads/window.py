@@ -266,7 +266,7 @@ class GlazingSystem:
             for gs in gases:
                 gas_instances.append(Gas(gas=gs["gas"], ratio=gs["ratio"]))
             gap_instances.append(
-                Gap(gas=gas_instances, thickness_m=gap["thickness"], **gap)
+                Gap(gas=gas_instances, thickness_m=gap["thickness_m"], **gap)
             )
         return cls(layers=layer_instances, gaps=gap_instances, **data)
 
@@ -669,12 +669,20 @@ def get_glazing_brtdfunc(name, filenames: list[str | Path]) -> pr.Primitive:
 
 def get_pane_rgb(spectral_data: dict, coated_side: str) -> PaneRGB:
     photopic_wvl = range(380, 781, 10)
-    tvf = [spectral_data[w][0] for w in photopic_wvl]
-    rvf = [spectral_data[w][1] for w in photopic_wvl]
-    rvb = [spectral_data[w][2] for w in photopic_wvl]
-    tf_x, tf_y, tf_z = pr.spec_xyz(tvf, 380, 780)
-    rf_x, rf_y, rf_z = pr.spec_xyz(rvf, 380, 780)
-    rb_x, rb_y, rb_z = pr.spec_xyz(rvb, 380, 780)
+    # Filter wavelengths to only include those present in spectral_data
+    available_wvl = [w for w in photopic_wvl if w in spectral_data]
+    if not available_wvl:
+        raise ValueError("No spectral data available in the photopic range (380-780nm)")
+    
+    tvf = [spectral_data[w][0] for w in available_wvl]
+    rvf = [spectral_data[w][1] for w in available_wvl]
+    rvb = [spectral_data[w][2] for w in available_wvl]
+    # Use the actual wavelength range from available data
+    min_wvl = min(available_wvl)
+    max_wvl = max(available_wvl)
+    tf_x, tf_y, tf_z = pr.spec_xyz(tvf, min_wvl, max_wvl)
+    rf_x, rf_y, rf_z = pr.spec_xyz(rvf, min_wvl, max_wvl)
+    rb_x, rb_y, rb_z = pr.spec_xyz(rvb, min_wvl, max_wvl)
     tf_rgb = pr.xyz_rgb(tf_x, tf_y, tf_z)
     rf_rgb = pr.xyz_rgb(rf_x, rf_y, rf_z)
     rb_rgb = pr.xyz_rgb(rb_x, rb_y, rb_z)
@@ -701,12 +709,20 @@ def get_layer_rgb(layer: pwc.ProductData) -> PaneRGB:
         )
         for d in layer.measurements
     }
-    tvf = [hemi[w][0] for w in photopic_wvl]
-    rvf = [hemi[w][2] for w in photopic_wvl]
-    rvb = [hemi[w][3] for w in photopic_wvl]
-    tf_x, tf_y, tf_z = pr.spec_xyz(tvf, 380, 780)
-    rf_x, rf_y, rf_z = pr.spec_xyz(rvf, 380, 780)
-    rb_x, rb_y, rb_z = pr.spec_xyz(rvb, 380, 780)
+    # Filter wavelengths to only include those present in hemi data
+    available_wvl = [w for w in photopic_wvl if w in hemi]
+    if not available_wvl:
+        raise ValueError("No spectral data available in the photopic range (380-780nm)")
+    
+    tvf = [hemi[w][0] for w in available_wvl]
+    rvf = [hemi[w][2] for w in available_wvl]
+    rvb = [hemi[w][3] for w in available_wvl]
+    # Use the actual wavelength range from available data
+    min_wvl = min(available_wvl)
+    max_wvl = max(available_wvl)
+    tf_x, tf_y, tf_z = pr.spec_xyz(tvf, min_wvl, max_wvl)
+    rf_x, rf_y, rf_z = pr.spec_xyz(rvf, min_wvl, max_wvl)
+    rb_x, rb_y, rb_z = pr.spec_xyz(rvb, min_wvl, max_wvl)
     tf_rgb = pr.xyz_rgb(tf_x, tf_y, tf_z)
     rf_rgb = pr.xyz_rgb(rf_x, rf_y, rf_z)
     rb_rgb = pr.xyz_rgb(rb_x, rb_y, rb_z)
