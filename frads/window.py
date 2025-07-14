@@ -3,7 +3,6 @@ import os
 import math
 import tempfile
 from dataclasses import asdict, dataclass, field
-from enum import Enum
 from pathlib import Path
 from typing import Sequence
 
@@ -23,14 +22,10 @@ M_PER_MM = 0.001
 NM_PER_MM = 1e3
 
 
-class WCProductType(Enum):
-    SHADING = "shading"
-    GLAZING = "glazing"
-
-
-class WCProductSubType(Enum):
-    VENETIAN = "venetian"
-    FABRIC = "fabric"
+SHADING = "shading"
+GLAZING = "glazing"
+VENETIAN = "venetian"
+FABRIC = "fabric"
 
 
 @dataclass(slots=True)
@@ -256,6 +251,7 @@ class GlazingSystem:
                     emissivity_back=layer["emissivity_back"],
                     ir_transmittance=layer["ir_transmittance"],
                     shading_material=shading_material,
+                    spectral_data={int(k): v for k, v in layer["spectral_data"].items()},
                 )
             )
         gaps = data.pop("gaps")
@@ -358,6 +354,7 @@ def load_glazing_system(path: str | Path) -> GlazingSystem:
                 emissivity_back=layer["emissivity_back"],
                 ir_transmittance=layer["ir_transmittance"],
                 shading_material=shading_material,
+                spectral_data={int(k): v for k, v in layer["spectral_data"].items()},
             )
         )
     gaps = data.pop("gaps")
@@ -394,7 +391,7 @@ def _parse_input_source(
         elif path.suffix == ".xml":
             product_data = pwc.parse_bsdf_xml_file(str(path))
             if product_data.product_type == "" or product_data.product_type is None:
-                product_data.product_type = WCProductType.SHADING.value
+                product_data.product_type = SHADING
             return product_data
         else:
             return pwc.parse_optics_file(str(path))
@@ -404,7 +401,7 @@ def _parse_input_source(
         except json.JSONDecodeError:
             product_data = pwc.parse_bsdf_xml_string(input_source.decode())
             if product_data.product_type == "" or product_data.product_type is None:
-                product_data.product_type = WCProductType.SHADING.value
+                product_data.product_type = SHADING
             return product_data
 
 
@@ -567,8 +564,8 @@ def create_glazing_system(
         if product_data is None:
             raise ValueError("Invalid layer type")
         layer = get_layer_data(product_data)
-        if product_data.product_type == WCProductType.SHADING.value:
-            if product_data.product_subtype == WCProductSubType.VENETIAN.value:
+        if product_data.product_type == SHADING:
+            if product_data.product_subtype == VENETIAN:
                 actual_product_data = _process_blind_definition_to_bsdf(
                     layer_inp, product_data, layer, nproc=nproc, nsamp=nsamp
                 )
@@ -576,7 +573,7 @@ def create_glazing_system(
                 product_data_list.append(actual_product_data)
                 thickness += layer.thickness_m
             else:
-                layer.product_type = "fabric"
+                layer.product_type = FABRIC
                 with open(layer_inp.input_source, "r") as f:
                     layer.shading_xml = f.read()
                 layer_data.append(layer)
@@ -671,6 +668,7 @@ def get_pane_rgb(spectral_data: dict, coated_side: str) -> PaneRGB:
     photopic_wvl = range(380, 781, 10)
     # Filter wavelengths to only include those present in spectral_data
     available_wvl = [w for w in photopic_wvl if w in spectral_data]
+    breakpoint()
     if not available_wvl:
         raise ValueError("No spectral data available in the photopic range (380-780nm)")
     
@@ -908,7 +906,7 @@ def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[bytes]:
             primitives.append(mat.bytes)
             primitives.append(geom.bytes)
             current_index += glazing_layer_count
-        elif group[0] == "fabric":
+        elif group[0] == FABRIC:
             mat_name = f"mat_{gs.name}_fabric_{current_index}"
             geom_name = f"{gs.name}_fabric_{current_index}"
             xml_name = f"{gs.name}_fabric_{current_index}.xml"
@@ -1082,7 +1080,7 @@ def generate_coplanar_bsdf(
                     if gap_idx >= 0 and gap_idx < len(gaps):
                         current_z -= gaps[gap_idx].thickness_m
 
-                elif group[0] == "fabric":
+                elif group[0] == FABRIC:
                     fabric_layer = layers[current_layer_idx]
 
                     mat_name = f"mat_fabric_{group_idx}"
