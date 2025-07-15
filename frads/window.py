@@ -716,7 +716,6 @@ def get_pane_rgb(spectral_data: dict, coated_side: str) -> PaneRGB:
     photopic_wvl = range(380, 781, 10)
     # Filter wavelengths to only include those present in spectral_data
     available_wvl = [w for w in photopic_wvl if w in spectral_data]
-    breakpoint()
     if not available_wvl:
         raise ValueError("No spectral data available in the photopic range (380-780nm)")
 
