@@ -640,13 +640,13 @@ class PhaseMethod:
 
     def get_wea_header(self, unit: int = 1):
         meta_data = WeaMetaData(
-            city = str(self.config.settings.latitude),
-            country = str(self.config.settings.longitude),
-            latitude = self.config.settings.latitude,
-            longitude = self.config.settings.longitude,
-            timezone = self.config.settings.time_zone,
-            elevation = self.config.settings.site_elevation,
-            unit = unit,
+            city=str(self.config.settings.latitude),
+            country=str(self.config.settings.longitude),
+            latitude=self.config.settings.latitude,
+            longitude=self.config.settings.longitude,
+            timezone=self.config.settings.time_zone,
+            elevation=self.config.settings.site_elevation,
+            unit=unit,
         )
         return meta_data.wea_header()
 
@@ -739,8 +739,17 @@ class PhaseMethod:
             and isinstance(sky_cover, (float, int))
         ):
             _wea += str(WeaData(time, dni, dhi, aod, sky_cover))
-        elif isinstance(time, list) and isinstance(dni, list) and isinstance(dhi, list) and isinstance(aod, list) and isinstance(sky_cover, list):
-            rows = [str(WeaData(t, n, d, a, s)) for t, n, d, a, s in zip(time, dni, dhi, aod, sky_cover)]
+        elif (
+            isinstance(time, list)
+            and isinstance(dni, list)
+            and isinstance(dhi, list)
+            and isinstance(aod, list)
+            and isinstance(sky_cover, list)
+        ):
+            rows = [
+                str(WeaData(t, n, d, a, s))
+                for t, n, d, a, s in zip(time, dni, dhi, aod, sky_cover)
+            ]
             _wea += "\n".join(rows)
             _ncols = len(time)
         smx = pr.gensdaymtx(
@@ -750,7 +759,10 @@ class PhaseMethod:
             header=True,
             nthreads=self.config.settings.num_processors,
         )
-        smx = pr.getinfo(pr.Rcomb(transform="m", header=False, outform='f').add_input(smx)(), strip_header=True)
+        smx = pr.getinfo(
+            pr.Rcomb(transform="m", header=False, outform="f").add_input(smx)(),
+            strip_header=True,
+        )
         return load_binary_matrix(
             smx,
             nrows=BASIS_DIMENSION[self.config.settings.sky_basis] + 1,
@@ -1289,11 +1301,12 @@ class ThreePhaseMethod(PhaseMethod):
         """Calculate menalonpic vertical illuminance.
 
         Args:
-            view: view name, must be in config.model.views
+            sensor: sensor name, must be in config.model.sensors
             bsdf: a dictionary of window name as key and bsdf matrix or matrix name as value
             time: datetime object
             dni: direct normal irradiance
             dhi: diffuse horizontal irradiance
+            sky_cover: sky cover fraction
         Returns:
             Menalonpic vertical illuminance
         """
@@ -1308,7 +1321,7 @@ class ThreePhaseMethod(PhaseMethod):
             _vmx = self.sensor_window_matrices[sensor].array[idx][:, :, 0]
             _dmx = self.daylight_matrices[_name].array[:, :, 0]
             _smx = sky_matrix[:, :, 0]
-            res.append(np.linalg.multi_dot( [_vmx, _bsdf, _dmx, _smx]))
+            res.append(np.linalg.multi_dot([_vmx, _bsdf, _dmx, _smx]))
         return np.sum(res, axis=0)
 
     def calculate_edgps(

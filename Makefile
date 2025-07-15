@@ -18,6 +18,14 @@ install:
 
 docs:
 	pip install mkdocs "mkdocstrings[python]" mkdocs-material
+	mkdocs build
+
+docs-serve:
+	pip install mkdocs "mkdocstrings[python]" mkdocs-material
+	mkdocs serve
+
+docs-deploy:
+	pip install mkdocs "mkdocstrings[python]" mkdocs-material
 	mkdocs gh-deploy
 
 build:
@@ -45,4 +53,4 @@ clean:
 deep-clean: clean
 	$(RM) -r .venv
 
-.PHONY: venv install build test clean docs test_window test_eplus
+.PHONY: venv install build test clean docs docs-serve docs-deploy test_window test_eplus

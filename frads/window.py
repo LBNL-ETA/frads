@@ -584,8 +584,11 @@ def create_glazing_system(
 
     Args:
         name: Name of the glazing system.
-        layers: List of layers.
+        layer_inputs: List of layer inputs.
         gaps: List of gaps.
+        nproc: Number of processes for parallel computation.
+        nsamp: Number of samples for Monte Carlo integration.
+        mbsdf: Whether to use matrix BSDF.
 
     Returns:
         GlazingSystem object.

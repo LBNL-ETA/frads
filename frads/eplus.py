@@ -21,11 +21,24 @@ import numpy as np
 from pyenergyplus.api import EnergyPlusAPI
 
 
-def ep_datetime_parser(inp: str):
-    """Parse date and time from EnergyPlus output.
+def ep_datetime_parser(inp: str) -> datetime.datetime:
+    """Parse date and time from EnergyPlus output format.
+
+    EnergyPlus outputs dates and times in "MM/DD HH:MM:SS" format. This function
+    handles the special case where EnergyPlus uses "24:00:00" to represent midnight
+    of the next day.
 
     Args:
-        inp: Date and time string from EnergyPlus output.
+        inp: Date and time string from EnergyPlus output (e.g., "01/15 14:30:00").
+
+    Returns:
+        A datetime object representing the parsed date and time.
+
+    Examples:
+        >>> ep_datetime_parser("01/15 14:30:00")
+        datetime.datetime(1900, 1, 15, 14, 30)
+        >>> ep_datetime_parser("12/31 24:00:00")  # Midnight of next day
+        datetime.datetime(1901, 1, 1, 0, 0)
     """
     date, time = inp.strip().split()
     month, day = [int(i) for i in date.split("/")]
@@ -122,7 +135,6 @@ class EnergyPlusSetup:
             self.rworkflows[zone].config.settings.save_matrices = True
             self.rworkflows[zone].config.settings.num_processors = nproc
             self.rworkflows[zone].generate_matrices(view_matrices=False)
-
 
     def close(self):
         self.api.state_manager.delete_state(self.state)
@@ -506,7 +518,7 @@ class EnergyPlusSetup:
             name="Site Diffuse Solar Radiation Rate per Area",
             key="Environment",
         )
-    
+
     def _request_direct_normal_irradiance(self) -> None:
         self.request_variable(
             name="Site Direct Solar Radiation Rate per Area",
@@ -792,7 +804,9 @@ class EnergyPlusSetup:
 
     def add_melanopic_bsdf(self, gs: GlazingSystem):
         for _, zone in self.rworkflows.items():
-            zone.config.model.materials.matrices_mlnp[gs.name] = MatrixConfig(matrix_data=np.array(gs.melanopic_back_transmittance))
+            zone.config.model.materials.matrices_mlnp[gs.name] = MatrixConfig(
+                matrix_data=np.array(gs.melanopic_back_transmittance)
+            )
 
 
 def load_idf(fpath: str | Path) -> dict:
@@ -841,19 +855,28 @@ def load_idf(fpath: str | Path) -> dict:
 
 
 def load_energyplus_model(fpath: str | Path) -> EnergyPlusModel:
-    """Load EnergyPlus model from JSON file.
+    """Load EnergyPlus model from IDF or epJSON file.
+
+    Supports loading EnergyPlus models from both IDF (Input Data File) and
+    epJSON (EnergyPlus JSON) formats. IDF files are automatically converted
+    to epJSON format during loading.
 
     Args:
-        fpath: Path to JSON file.
+        fpath: Path to the EnergyPlus model file (.idf or .epJSON/.json).
 
     Returns:
-        EnergyPlusModel object.
+        EnergyPlusModel object containing the parsed building model data.
 
     Raises:
-        ValueError: If file is not an IDF or epJSON file.
+        ValueError: If file extension is not .idf, .epJSON, or .json.
+        FileNotFoundError: If the specified file does not exist.
 
     Examples:
-        >>> model = load_energyplus_model("model.json")
+        >>> # Load from IDF file
+        >>> model = load_energyplus_model("building.idf")
+        >>> # Load from epJSON file
+        >>> model = load_energyplus_model("building.epJSON")
+        >>> print(f"Building has {len(model.zones)} zones")
     """
     fpath = Path(fpath) if isinstance(fpath, str) else fpath
     if fpath.suffix == ".idf":

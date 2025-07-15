@@ -1,6 +1,6 @@
 site_name: Frads
 site_description: Building lighting and energy simulation control in Python
-strict: true
+strict: false
 repo_url: https://github.com/LBNL-ETA/frads/
 
 theme:
@@ -59,11 +59,12 @@ plugins:
     handlers:
       python:
         options:
-          member_order: source
           separate_signature: true
           show_source: false
           show_root_heading: true
           merge_init_into_class: true
+          extra:
+            member_order: source
 
 nav:
   - Get Started:
@@ -77,28 +78,20 @@ nav:
     #     - Five Phase Method: usage/phase/fivephase.md
   - How-To Guides:
     - how-to/index.md
-  - CLI Manual:
-    - manual/index.md
-    - mrad:
-      - manual/mrad/index.md
-      - mrad init: manual/mrad/init.md
-      - mrad run: manual/mrad/run.md
-    - gen:
-      - manual/gen/index.md
-      - glaze: manual/gen/glaze.md
-      - grid: manual/gen/grid.md
-      - matrix:
-        - manual/gen/matrix/index.md
-        - point-sky: manual/gen/matrix/point_sky.md
-        - view-sky: manual/gen/matrix/view_sky.md
-        - surface-sky: manual/gen/matrix/surface_sky.md
-        - point-surface: manual/gen/matrix/point_surface.md
-        - view-surface: manual/gen/matrix/view_surface.md
-        - surface-surface: manual/gen/matrix/surface_surface.md
-        - point-sun: manual/gen/matrix/point_sun.md
-        - view-sun: manual/gen/matrix/view_sun.md
-        - ncp: manual/gen/matrix/ncp.md
-      - room: manual/gen/room.md
+    - EnergyPlus Guides:
+      - Simple EnergyPlus simulation: how-to/guide_ep1.md
+      - EnergyPlus Guide 2: how-to/guide_ep2.md
+      - EnergyPlus Guide 3: how-to/guide_ep3.md
+    - Radiance Guides:
+      - Radiance Guide 1: how-to/guide_rad1.md
+      - Radiance Guide 2: how-to/guide_rad2.md
+      - Radiance Guide 3: how-to/guide_rad3.md
+      - Radiance Guide 7: how-to/guide_rad7.md
+    - Combined Guides:
+      - Radiance-EnergyPlus Guide 1: how-to/guide_radep1.md
+      - Radiance-EnergyPlus Guide 2: how-to/guide_radep2.md
+      - Radiance-EnergyPlus Guide 3: how-to/guide_radep3.md
+
   - Reference:
     - WorkflowConfig: ref/config.md
     - TwoPhaseMethod: ref/twophase.md

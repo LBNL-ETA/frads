@@ -119,12 +119,22 @@ def parse_epw(epw_str: str) -> tuple:
 
 
 def parse_wea(wea_str: str) -> tuple[WeaMetaData, list[WeaData]]:
-    """
-    Parse a wea file in its entirety.
+    """Parse a WEA weather file.
+
     Args:
-        wea_str: String containing wea file.
+        wea_str: String containing the complete WEA file content.
+
     Returns:
-        tuple of meta data and wea data.
+        A tuple containing:
+            - WeaMetaData: Location and site information
+            - list[WeaData]: List of weather data entries for each time step
+
+    Examples:
+        >>> with open('weather.wea', 'r') as f:
+        ...     content = f.read()
+        >>> metadata, data = parse_wea(content)
+        >>> print(f"Location: {metadata.city}")
+        >>> print(f"Data points: {len(data)}")
     """
     lines = wea_str.splitlines()
     place = lines[0].split(" ", 1)[1]
@@ -282,22 +292,25 @@ def gen_perez_sky(
     grefl: None | float = None,
     rotate: None | float = None,
 ) -> bytes:
-    """Generate a perez sky using gendaylit.
+    """Generate a Perez sky model using the gendaylit Radiance command.
+
+    Creates a realistic sky luminance distribution based on the Perez all-weather
+    sky model, which accounts for varying sky conditions from clear to overcast.
 
     Args:
-        dt: A datetime object.
-        latitude: A latitude value.
-        longitude: A longitude value.
-        timezone: A timezone value.
-        year: A year value.
-        dirnorm: A direct normal value.
-        diffhor: A diffuse horizontal value.
-        dirhor: A direct horizontal value.
-        dirnorm_illum: A direct normal illuminance value.
-        diffhor_illum: A diffuse horizontal illuminance value.
-        solar: If True, solar will be generated.
-        grefl: A ground reflectance value.
-        rotate: A rotation value.
+        dt: Date and time for the sky calculation.
+        latitude: Site latitude in degrees (positive North, negative South).
+        longitude: Site longitude in degrees (positive East, negative West).
+        timezone: Standard meridian for timezone in degrees.
+        year: Year for the calculation (optional, uses dt.year if None).
+        dirnorm: Direct normal irradiance in W/m² (optional).
+        diffhor: Diffuse horizontal irradiance in W/m² (optional).
+        dirhor: Direct horizontal irradiance in W/m² (optional).
+        dirnorm_illum: Direct normal illuminance in lux (optional).
+        diffhor_illum: Diffuse horizontal illuminance in lux (optional).
+        solar: If True, include solar disk in the sky model.
+        grefl: Ground reflectance (0.0-1.0, default varies by season).
+        rotate: Sky rotation angle in degrees (optional).
 
     Returns:
         bytes: the sky primitive.
@@ -365,8 +378,29 @@ def solar_angle(
     day: int,
     hour,
 ) -> tuple[float, float]:
-    """
-    Simplified translation from the Radiance sun.c and gensky.c code.
+    """Calculate solar altitude and azimuth angles for a given location and time.
+
+    This is a simplified translation from the Radiance sun.c and gensky.c code.
+    Computes the solar position using astronomical formulas.
+
+    Args:
+        lat: Latitude in degrees (positive for North, negative for South).
+        lon: Longitude in degrees (positive for East, negative for West).
+        mer: Standard meridian for the time zone in degrees.
+        month: Month (1-12).
+        day: Day of month (1-31).
+        hour: Hour in decimal format (e.g., 13.5 for 1:30 PM).
+
+    Returns:
+        A tuple containing:
+            - altitude: Solar altitude angle in radians (angle above horizon)
+            - azimuth: Solar azimuth angle in radians (angle from North, clockwise)
+
+    Examples:
+        >>> # Calculate sun position for Oakland, CA on June 21st at noon
+        >>> alt, az = solar_angle(37.8, -122.3, -120, 6, 21, 12.0)
+        >>> print(f"Altitude: {math.degrees(alt):.1f}°")
+        >>> print(f"Azimuth: {math.degrees(az):.1f}°")
     """
     latitude_r = math.radians(lat)
     longitude_r = math.radians(lon)
