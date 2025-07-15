@@ -241,6 +241,14 @@ class GlazingSystem:
         for layer in layers:
             smat = layer.pop("shading_material")
             shading_material = pr.ShadingMaterial(**smat)
+
+            # Handle opening_multipliers nested dataclass
+            opening_multipliers_data = layer.get("opening_multipliers", {})
+            if isinstance(opening_multipliers_data, dict):
+                opening_multipliers = OpeningMultipliers(**opening_multipliers_data)
+            else:
+                opening_multipliers = OpeningMultipliers()
+
             layer_instances.append(
                 Layer(
                     product_name=layer["product_name"],
@@ -250,19 +258,34 @@ class GlazingSystem:
                     emissivity_front=layer["emissivity_front"],
                     emissivity_back=layer["emissivity_back"],
                     ir_transmittance=layer["ir_transmittance"],
+                    flipped=layer.get("flipped", False),
+                    spectral_data={
+                        int(k): v for k, v in layer["spectral_data"].items()
+                    },
+                    coated_side=layer.get("coated_side", ""),
                     shading_material=shading_material,
-                    spectral_data={int(k): v for k, v in layer["spectral_data"].items()},
+                    slat_width_m=layer.get("slat_width_m", 0.0160),
+                    slat_spacing_m=layer.get("slat_spacing_m", 0.0120),
+                    slat_thickness_m=layer.get("slat_thickness_m", 0.0006),
+                    slat_curve_m=layer.get("slat_curve_m", 0.0),
+                    slat_angle_deg=layer.get("slat_angle_deg", 90.0),
+                    slat_conductivity=layer.get("slat_conductivity", 160.00),
+                    nslats=layer.get("nslats", 1),
+                    opening_multipliers=opening_multipliers,
+                    shading_xml=layer.get("shading_xml", ""),
                 )
             )
         gaps = data.pop("gaps")
         gap_instances = []
         for gap in gaps:
-            gas_instances = []
             gases = gap.pop("gas")
-            for gs in gases:
-                gas_instances.append(Gas(gas=gs["gas"], ratio=gs["ratio"]))
+            gas_instances = [Gas(gas=gas["gas"], ratio=gas["ratio"]) for gas in gases]
             gap_instances.append(
-                Gap(gas=gas_instances, thickness_m=gap["thickness_m"], **gap)
+                Gap(
+                    gas=gas_instances,
+                    thickness_m=gap["thickness_m"],
+                    **{k: v for k, v in gap.items() if k not in ["gas", "thickness_m"]},
+                )
             )
         return cls(layers=layer_instances, gaps=gap_instances, **data)
 
@@ -344,6 +367,14 @@ def load_glazing_system(path: str | Path) -> GlazingSystem:
     for layer in layers:
         smat = layer.pop("shading_material")
         shading_material = pr.ShadingMaterial(**smat)
+
+        # Handle opening_multipliers nested dataclass
+        opening_multipliers_data = layer.get("opening_multipliers", {})
+        if isinstance(opening_multipliers_data, dict):
+            opening_multipliers = OpeningMultipliers(**opening_multipliers_data)
+        else:
+            opening_multipliers = OpeningMultipliers()
+
         layer_instances.append(
             Layer(
                 product_name=layer["product_name"],
@@ -353,8 +384,19 @@ def load_glazing_system(path: str | Path) -> GlazingSystem:
                 emissivity_front=layer["emissivity_front"],
                 emissivity_back=layer["emissivity_back"],
                 ir_transmittance=layer["ir_transmittance"],
-                shading_material=shading_material,
+                flipped=layer.get("flipped", False),
                 spectral_data={int(k): v for k, v in layer["spectral_data"].items()},
+                coated_side=layer.get("coated_side", ""),
+                shading_material=shading_material,
+                slat_width_m=layer.get("slat_width_m", 0.0160),
+                slat_spacing_m=layer.get("slat_spacing_m", 0.0120),
+                slat_thickness_m=layer.get("slat_thickness_m", 0.0006),
+                slat_curve_m=layer.get("slat_curve_m", 0.0),
+                slat_angle_deg=layer.get("slat_angle_deg", 90.0),
+                slat_conductivity=layer.get("slat_conductivity", 160.00),
+                nslats=layer.get("nslats", 1),
+                opening_multipliers=opening_multipliers,
+                shading_xml=layer.get("shading_xml", ""),
             )
         )
     gaps = data.pop("gaps")
@@ -362,7 +404,13 @@ def load_glazing_system(path: str | Path) -> GlazingSystem:
     for gap in gaps:
         gases = gap.pop("gas")
         gas_instances = [Gas(gas=gas["gas"], ratio=gas["ratio"]) for gas in gases]
-        gap_instances.append(Gap(gas=gas_instances, thickness_m=gap["thickness_m"]))
+        gap_instances.append(
+            Gap(
+                gas=gas_instances,
+                thickness_m=gap["thickness_m"],
+                **{k: v for k, v in gap.items() if k not in ["gas", "thickness_m"]},
+            )
+        )
     return GlazingSystem(layers=layer_instances, gaps=gap_instances, **data)
 
 
@@ -671,7 +719,7 @@ def get_pane_rgb(spectral_data: dict, coated_side: str) -> PaneRGB:
     breakpoint()
     if not available_wvl:
         raise ValueError("No spectral data available in the photopic range (380-780nm)")
-    
+
     tvf = [spectral_data[w][0] for w in available_wvl]
     rvf = [spectral_data[w][1] for w in available_wvl]
     rvb = [spectral_data[w][2] for w in available_wvl]
@@ -711,7 +759,7 @@ def get_layer_rgb(layer: pwc.ProductData) -> PaneRGB:
     available_wvl = [w for w in photopic_wvl if w in hemi]
     if not available_wvl:
         raise ValueError("No spectral data available in the photopic range (380-780nm)")
-    
+
     tvf = [hemi[w][0] for w in available_wvl]
     rvf = [hemi[w][2] for w in available_wvl]
     rvb = [hemi[w][3] for w in available_wvl]
@@ -1188,10 +1236,16 @@ def generate_coplanar_bsdf(
 
 
 def generate_melanopic_bsdf(
-    layers: list[Layer], gaps: list[Gap], nproc: int = 1, nsamp: int = 2000, nspec: int = 20,
+    layers: list[Layer],
+    gaps: list[Gap],
+    nproc: int = 1,
+    nsamp: int = 2000,
+    nspec: int = 20,
 ) -> tuple[list[list], list[list]]:
     """Generate melanopic BSDF for the glazing system."""
-    data = generate_coplanar_bsdf(layers, gaps, outspec="m", nspec=nspec, nproc=nproc, nsamp=nsamp)
+    data = generate_coplanar_bsdf(
+        layers, gaps, outspec="m", nspec=nspec, nproc=nproc, nsamp=nsamp
+    )
     back_transmittance = [
         list(map(float, row.split()))
         for row in data.back.transmittance.decode().splitlines()
