@@ -665,6 +665,7 @@ class PhaseMethod:
         dni: float | list[float],
         dhi: float | list[float],
         solar_spectrum: bool = False,
+        orient: float = 0.0,
     ) -> np.ndarray:
         """Generates a sky matrix based on the time, Direct Normal Irradiance (DNI), and
         Diffuse Horizontal Irradiance (DHI).
@@ -673,6 +674,8 @@ class PhaseMethod:
             time: The specific time for the matrix.
             dni: The Direct Normal Irradiance value.
             dhi: The Diffuse Horizontal Irradiance value.
+            solar_spectrum: Whether to use the solar spectrum or not.
+            orient: The orientation of the matrix.
 
         Returns:
             numpy.ndarray: The generated sky matrix, with dimensions based on the
@@ -700,6 +703,7 @@ class PhaseMethod:
             mfactor=int(self.config.settings.sky_basis[-1]),
             header=False,
             solar_radiance=solar_spectrum,
+            rotate=orient,
         )
         return load_binary_matrix(
             smx,
