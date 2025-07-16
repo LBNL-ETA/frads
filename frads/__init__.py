@@ -91,6 +91,7 @@ from .window import (
     Gas,
     GlazingSystem,
     create_glazing_system,
+    load_glazing_system,
     LayerInput,
 )
 from .geom import gen_grid, parse_polygon
@@ -126,6 +127,7 @@ __all__ = [
     "WorkflowConfig",
     "XENON",
     "create_glazing_system",
+    "load_glazing_system",
     "ep_datetime_parser",
     "epmodel_to_radmodel",
     "gen_grid",
