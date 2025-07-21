@@ -276,11 +276,11 @@ class EnergyPlusSetup:
         """Set construction state for a surface.
 
         Args:
-            window: The name of the surface to set the cfs state for.
+            window: The name of the surface to set the CFS state for.
             cfs_state: The name of the complex fenestration system (CFS) state to set the surface to.
 
         Examples:
-            >>> epsetup.actuate_construction_state("window1", "cfs1")
+            >>> epsetup.actuate_cfs_state("window1", "cfs1")
         """
         self.actuate(
             component_type="Surface",
@@ -772,21 +772,23 @@ class EnergyPlusSetup:
         self, zone: str, cfs_name: dict[str, str]
     ) -> tuple[float, float]:
         """Calculate enhanced simplified daylight glare probability in a zone.
-        The view is positioned at the center of the zone with direction facing
-        the windows, weighted by the window area.
+
+        The view is positioned at the center of the zone by default, with direction
+        facing the windows weighted by window area. Users can modify the view position
+        and direction through rconfig before calling initialize_radiance().
 
         Args:
             zone: Name of the zone.
             cfs_name: Dictionary of windows and their complex fenestration state.
 
         Returns:
-            Enhanced simplified daylight glare probability.
+            Tuple of (enhanced simplified DGP, simplified DGP).
 
         Raises:
             KeyError: If zone not found in model.
 
         Examples:
-            >>> epsetup.calculate_edgps("Zone1", "CFS1")
+            >>> edgp, sdgp = epsetup.calculate_edgps("Zone1", {"window1": "state1"})
         """
         date_time = self.get_datetime()
         dni = self.get_direct_normal_irradiance()

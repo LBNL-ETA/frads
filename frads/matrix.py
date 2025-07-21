@@ -1,6 +1,26 @@
-"""
-This module contains routines to generate sender and receiver objects, generate
-matrices by calling either rfluxmtx or rcontrib.
+"""Matrix generation and manipulation for Radiance simulations.
+
+This module provides classes and functions for creating sender and receiver objects,
+generating view factor and daylight matrices using Radiance tools (rfluxmtx, rcontrib),
+and performing matrix operations for lighting simulations.
+
+Key Components:
+    Sender Classes:
+        - SensorSender: Point sensors for illuminance calculations
+        - ViewSender: Camera views for luminance images
+        - SurfaceSender: Surface-based senders with sampling basis
+
+    Receiver Classes:
+        - SurfaceReceiver: Surface-based receivers with sampling basis
+        - SkyReceiver: Sky dome receiver for daylight calculations
+        - SunReceiver: Solar disc receiver for direct sun calculations
+
+    Matrix Classes:
+        - Matrix: General matrix for view factor and daylight calculations
+        - SunMatrix: Specialized matrix for sun-only calculations
+
+The module supports various sampling bases (Klems, Reinhart-Tregenza, Shirley-Chiu)
+and can generate both dense and sparse matrices for memory efficiency.
 """
 
 import gc
@@ -38,20 +58,27 @@ BASIS_DIMENSION = {
 
 
 class SensorSender:
-    """Sender object as a list of sensors.
+    """Sender object representing a collection of point sensors.
+
+    This class creates a sender object from a list of point sensors, where each
+    sensor is defined by position and direction vectors. Used for illuminance
+    calculations at specific points in space.
 
     Attributes:
-        sensors: A list of sensors, each sensor is a list of 6 numbers
-        content: Sensor encoded for Radiance
-        yres: Number of sensors
+        sensors: List of sensors, each containing 6 float values [x, y, z, dx, dy, dz]
+            representing position (x,y,z) and direction (dx,dy,dz) vectors.
+        content: Sensor data encoded as bytes for Radiance input.
+        yres: Number of unique sensor locations (before ray multiplication).
     """
 
     def __init__(self, sensors: list[list[float]], ray_count: int = 1):
-        """Initialize a sender object with a list of sensors:
+        """Initialize a sensor sender object.
 
         Args:
-            sensors: A list of sensors, each sensor is a list of 6 numbers
-            ray_count: Number of rays per sensor
+            sensors: List of sensors, each containing 6 float values [x, y, z, dx, dy, dz]
+                representing position and direction vectors.
+            ray_count: Number of rays to generate per sensor for Monte Carlo sampling.
+                Higher values improve accuracy but increase computation time.
         """
         self.sensors = [i for i in sensors for _ in range(ray_count)]
         self.content = (
@@ -65,16 +92,30 @@ class SensorSender:
 
 
 class ViewSender:
-    """Sender object as a view.
+    """Sender object representing a camera view for luminance calculations.
+
+    This class creates a sender object from a camera view definition, generating
+    rays for each pixel in the view. Used for creating luminance images and
+    view-based daylight analysis.
 
     Attributes:
-        view: A view object
-        content: View encoded for Radiance
-        xres: x resolution
-        yres: y resolution
+        view: Pyradiance View object defining camera parameters (position, direction, etc.).
+        content: View rays encoded as bytes for Radiance input.
+        xres: Horizontal resolution (number of pixels in x-direction).
+        yres: Vertical resolution (number of pixels in y-direction).
     """
 
-    def __init__(self, view: pr.View, ray_count=1, xres=800, yres=800):
+    def __init__(
+        self, view: pr.View, ray_count: int = 1, xres: int = 800, yres: int = 800
+    ):
+        """Initialize a view sender object.
+
+        Args:
+            view: Pyradiance View object defining camera parameters.
+            ray_count: Number of rays per pixel for anti-aliasing and Monte Carlo sampling.
+            xres: Horizontal resolution in pixels.
+            yres: Vertical resolution in pixels.
+        """
         self.view = view
         self.xres = xres
         self.yres = yres
@@ -117,12 +158,17 @@ class ViewSender:
 
 
 class SurfaceSender:
-    """Sender object as a list of surface primitives.
+    """Sender object representing surfaces with directional sampling.
+
+    This class creates a sender object from surface primitives using a specified
+    sampling basis. Used for calculating inter-surface view factors and daylight
+    transmission through surfaces like windows.
 
     Attributes:
-        surfaces: A list of surface primitives
-        basis: Sender sampling basis
-        content: Surface encoded for Radiance
+        surfaces: List of surface primitives (polygons or rings) to use as senders.
+        basis: Sampling basis string (e.g., 'kf', 'r4', 'sc6') defining directional
+            discretization for the surface.
+        content: Surface data encoded as string for Radiance rfluxmtx input.
     """
 
     def __init__(
@@ -130,15 +176,17 @@ class SurfaceSender:
         surfaces: list[pr.Primitive],
         basis: str,
         left_hand: bool = False,
-        offset: bool = None,
+        offset: float | None = None,
     ):
-        """Instantiate a SurfaceSender object.
+        """Initialize a surface sender object.
 
         Args:
-            surfaces: A list of surface primitives
-            basis: Sender sampling basis
-            left_hand: Whether to use left-hand coordinate system
-            offset: Offset of the sender surface
+            surfaces: List of surface primitives (polygons or rings) to use as senders.
+            basis: Sampling basis string defining directional discretization
+                (e.g., 'kf' for Klems full, 'r4' for Reinhart 4-division).
+            left_hand: Whether to use left-hand coordinate system for basis orientation.
+            offset: Distance to offset the sender surface along its normal vector.
+                Useful for avoiding self-intersection in calculations.
         """
         self.surfaces = [s for s in surfaces if s.ptype in ("polygon", "ring")]
         self.basis = basis
@@ -151,14 +199,27 @@ class SurfaceSender:
 
 
 class Receiver:
-    """Base class for receiver objects.
+    """Base class for all receiver objects in matrix calculations.
+
+    This abstract base class defines the common interface for receiver objects
+    that collect light from senders. All receiver types inherit from this class
+    and implement specific encoding for different receiver geometries.
 
     Attributes:
-        basis: Receiver sampling basis
-        content: Receiver encoded for Radiance
+        basis: Sampling basis string defining directional discretization for the receiver.
+        content: Receiver data encoded as string for Radiance input.
     """
 
-    def __init__(self, basis):
+    def __init__(self, basis: str):
+        """Initialize a receiver object.
+
+        Args:
+            basis: Sampling basis string (e.g., 'kf', 'r4', 'sc6', 'u') defining
+                the directional discretization scheme for the receiver.
+
+        Raises:
+            ValueError: If the basis string format is invalid.
+        """
         check_index = 0
         if basis[0] == "-":
             check_index = 1
@@ -175,23 +236,40 @@ class Receiver:
 
 
 class SurfaceReceiver(Receiver):
-    """Receiver object as a list of surface primitives.
+    """Receiver object representing surfaces that collect light.
+
+    This class creates a receiver object from surface primitives using a specified
+    sampling basis. Used for calculating how much light surfaces receive from
+    various sources in daylight and artificial lighting simulations.
 
     Attributes:
-        surfaces: A list of surface primitives
-        basis: Receiver sampling basis
-        content: Surface encoded for Radiance
+        surfaces: List of surface primitives (polygons or rings) acting as receivers.
+        basis: Sampling basis string defining directional discretization.
+        content: Surface data encoded as string for Radiance rfluxmtx input.
     """
 
     def __init__(
         self,
         surfaces: list[pr.Primitive],
         basis: str,
-        left_hand=False,
-        offset=None,
-        source="glow",
-        out=None,
+        left_hand: bool = False,
+        offset: float | None = None,
+        source: str = "glow",
+        out: str | None = None,
     ):
+        """Initialize a surface receiver object.
+
+        Args:
+            surfaces: List of surface primitives (polygons or rings) to use as receivers.
+            basis: Sampling basis string defining directional discretization.
+            left_hand: Whether to use left-hand coordinate system for basis orientation.
+            offset: Distance to offset the receiver surface along its normal vector.
+            source: Light source type for the receiver ('glow' or 'light').
+            out: Optional output file path for matrix results.
+
+        Raises:
+            ValueError: If surfaces are not primitives or contain invalid types.
+        """
         super().__init__(basis)
         if not isinstance(surfaces[0], pr.Primitive):
             raise ValueError("Surface must be a primitive", surfaces)
@@ -207,14 +285,25 @@ class SurfaceReceiver(Receiver):
 
 
 class SkyReceiver(Receiver):
-    """Sky as receiver object.
+    """Receiver object representing the sky dome for daylight calculations.
+
+    This class creates a receiver object that represents the entire sky dome,
+    including both sky and ground hemispheres. Used in daylight matrix calculations
+    to capture contributions from all sky directions.
 
     Attributes:
-        basis: Receiver sampling basis
-        content: Sky encoded for Radiance
+        basis: Sampling basis string defining sky patch discretization.
+        content: Sky dome definition encoded as string for Radiance input.
     """
 
-    def __init__(self, basis, out=None):
+    def __init__(self, basis: str, out: str | None = None):
+        """Initialize a sky receiver object.
+
+        Args:
+            basis: Sampling basis string defining sky patch discretization
+                (e.g., 'kf' for Klems full, 'r4' for Reinhart 4-division).
+            out: Optional output file path for matrix results.
+        """
         super().__init__(basis)
         self.content = ""
         if out is not None:
@@ -230,16 +319,16 @@ class SkyReceiver(Receiver):
 
 
 class SunReceiver(Receiver):
-    """Sun as receiver object.
-    The number of suns is reduced depending on the input.
-    If an annual sun_matrix is provided, only the non-zero
-    solar position is used. If window_normals are provided,
-    only the suns that are visible through the window are used.
+    """Receiver object representing discrete solar positions for direct sun calculations.
+
+    This class creates a receiver object that represents the sun at discrete positions
+    based on a Reinhart-Tregenza sky division. The number of active sun positions
+    can be reduced based on annual solar data or window visibility constraints.
 
     Attributes:
-        basis: Receiver sampling basis
-        content: Sun encoded for Radiance
-        modifiers: Sun modifier names
+        basis: Sampling basis string (must be Reinhart-Tregenza format like 'r4').
+        content: Sun positions encoded as Radiance light sources.
+        modifiers: List of sun modifier names for active solar positions.
     """
 
     def __init__(
@@ -249,13 +338,19 @@ class SunReceiver(Receiver):
         window_normals: None | list[np.ndarray] = None,
         full_mod: bool = False,
     ):
-        """Initialize a sun receiver.
+        """Initialize a sun receiver object.
 
         Args:
-            basis: Sampling basis
-            sun_matrix: Annual sun matrix
-            window_normals: List of window normals
-            full_mod: Use full set of sun modifiers
+            basis: Sampling basis string (must be Reinhart-Tregenza format like 'r4').
+            sun_matrix: Optional annual sun matrix to filter out zero-contribution
+                solar positions. Shape should be (time_steps, sun_positions, components).
+            window_normals: Optional list of window normal vectors to filter out
+                sun positions not visible through windows.
+            full_mod: If True, include all sun modifiers regardless of filtering.
+                If False, only include modifiers for active sun positions.
+
+        Raises:
+            ValueError: If basis is not a valid Reinhart-Tregenza format.
         """
         super().__init__(basis)
         if not basis.startswith("r") and not basis[-1].isdigit():
@@ -285,18 +380,23 @@ class SunReceiver(Receiver):
 
 
 class Matrix:
-    """Base Matrix object.
+    """General matrix object for daylight and view factor calculations.
+
+    This class represents a transfer matrix between senders and receivers, encoding
+    how light travels from source points/surfaces to destination points/surfaces.
+    Used for daylight simulations, view factor calculations, and lighting analysis.
 
     Attributes:
-        sender: Sender object
-        receivers: List of receiver objects
-        array: Matrix array, this is usually where the matrix data is stored
-        ncols: Number of columns
-        nrows: Number of rows
-        dtype: Matrix data type
-        ncomp: Number of components
-        octree: Octree file used to generate the matrix
-        surfaces: List of environment surface primitives
+        sender: Sender object (sensors, view, or surface) that emits light.
+        receivers: List of receiver objects that collect light.
+        array: Numpy array or list of arrays storing the matrix data with shape
+            (nrows, ncols, ncomp) where ncomp is typically 3 for RGB.
+        ncols: Number of columns (receiver basis size) or list of sizes for multiple receivers.
+        nrows: Number of rows (sender basis size or sensor count).
+        dtype: Matrix data type ('d' for double, 'f' for float).
+        ncomp: Number of color components (typically 3 for RGB).
+        octree: Path to octree file used for ray tracing acceleration.
+        surfaces: List of environment surface primitives for the scene.
     """
 
     def __init__(
@@ -306,13 +406,17 @@ class Matrix:
         octree: None | str = None,
         surfaces: None | list[pr.Primitive] = None,
     ):
-        """Initialize a matrix.
+        """Initialize a matrix object.
 
         Args:
-            sender: Sender object
-            receivers: List of receiver objects
-            octree: Octree file used to generate the matrix
-            surfaces: List of environment surface file paths
+            sender: Sender object (SensorSender, ViewSender, or SurfaceSender).
+            receivers: List of receiver objects (SurfaceReceiver, SkyReceiver, or SunReceiver).
+                Multiple receivers are only supported for SurfaceReceiver types.
+            octree: Optional path to octree file for ray tracing.
+            surfaces: Optional list of environment surface primitives for the scene.
+
+        Raises:
+            ValueError: If sender/receiver types are invalid or incompatible.
         """
         if not isinstance(sender, (SensorSender, ViewSender, SurfaceSender)):
             raise ValueError(
@@ -353,18 +457,16 @@ class Matrix:
         to_file: bool = False,
         memmap: bool = False,
     ) -> None:
-        """Call rfluxmtx to generate the matrix.
+        """Generate the matrix using Radiance rfluxmtx tool.
 
         Args:
-            params: List of rfluxmtx parameters
-            nproc: Number of processes to use
-            sparse: Use sparse matrix format
-            to_file: Indicate the matrix will be written to file
-                directly as specified by rfluxmtx markup. As a
-                result, the matrix will not be stored in memory
-                as numpy array.
-            memmap: Use memory mapping (out-of-core) to store
-                the matrix, which is useful for large matrices.
+            params: List of rfluxmtx command-line parameters (e.g., ['-ab', '3', '-ad', '1000']).
+            nproc: Number of parallel processes to use for calculation.
+            sparse: If True, convert result to sparse matrix format for memory efficiency.
+            to_file: If True, write matrix directly to file without storing in memory.
+                Useful for very large matrices that exceed available RAM.
+            memmap: If True, use memory mapping to store matrix data on disk.
+                Allows handling of matrices larger than available RAM.
         """
         surface_file = None
         rays = None
@@ -461,27 +563,42 @@ class Matrix:
 
 
 class SunMatrix(Matrix):
-    """Sun Matrix object, specialized for sun-only matrices.
+    """Specialized matrix object for direct solar radiation calculations.
+
+    This class extends the base Matrix class to handle sun-only calculations using
+    the Radiance rcontrib tool. It's optimized for sparse matrices since most
+    solar positions contribute zero radiation at any given time.
 
     Attributes:
-        sender: Sender object
-        receiver: Receiver object
-        octree: Octree file
-        surfaces: List of surface files
-        array: Matrix array
-        nrows: Number of rows
-        ncols: Number of columns
-        dtype: Data type
-        ncomp: Number of components
+        sender: Sender object (SensorSender or ViewSender only).
+        receiver: SunReceiver object representing discrete solar positions.
+        octree: Path to octree file for ray tracing acceleration.
+        surfaces: List of environment surface file paths.
+        array: Sparse matrix array storing sun contribution data.
+        nrows: Number of rows (sender basis size or sensor count).
+        ncols: Number of columns (solar position count).
+        dtype: Matrix data type ('d' for double, 'f' for float).
+        ncomp: Number of color components (typically 3 for RGB).
     """
 
     def __init__(
         self,
         sender: SensorSender | ViewSender,
         receiver: SunReceiver,
-        octree: None | str,
-        surfaces: None | list[str] = None,
+        octree: str | None,
+        surfaces: list[str] | None = None,
     ):
+        """Initialize a sun matrix object.
+
+        Args:
+            sender: Sender object (SensorSender or ViewSender only).
+            receiver: SunReceiver object representing discrete solar positions.
+            octree: Optional path to octree file for ray tracing acceleration.
+            surfaces: Optional list of environment surface file paths.
+
+        Raises:
+            TypeError: If sender is a SurfaceSender (not supported for sun matrices).
+        """
         if isinstance(sender, SurfaceSender):
             raise TypeError("SurfaceSender cannot be used with SunMatrix")
         super().__init__(sender, [receiver], octree, surfaces=surfaces)
@@ -496,15 +613,20 @@ class SunMatrix(Matrix):
         radmtx: bool = False,
         sparse: bool = False,
     ) -> None | bytes:
-        """Call rcontrib to generate a matrix and store it in memory
-        as a numpy array.
+        """Generate the sun matrix using Radiance rcontrib tool.
 
         Args:
-            parameters: List of rcontrib parameters
-            nproc: Number of processes to use
-            radmtx: If true, return the matrix bytes from rcontrib directly
-            sparse: Use sparse matrix format, this is usually a good idea
-                given the nature of sun-only matrices.
+            parameters: List of rcontrib command-line parameters (e.g., ['-ab', '1', '-ad', '512']).
+            nproc: Number of parallel processes to use for calculation.
+            radmtx: If True, return raw matrix bytes instead of processing into numpy array.
+            sparse: If True, store result as sparse matrix format (recommended for sun matrices
+                due to their inherently sparse nature).
+
+        Returns:
+            Raw matrix bytes if radmtx=True, otherwise None (matrix stored in self.array).
+
+        Raises:
+            TypeError: If receiver is not a SunReceiver object.
         """
         if not isinstance(self.receiver, SunReceiver):
             raise TypeError("SunMatrix must have a SunReceiver")
@@ -583,15 +705,21 @@ class SunMatrix(Matrix):
             )
 
 
-def parse_rad_header(header_str: str) -> tuple:
-    """Parse a Radiance matrix file header.
+def parse_rad_header(header_str: str) -> tuple[int, int, int, str]:
+    """Parse a Radiance matrix file header to extract matrix dimensions and format.
 
     Args:
-        header_str: header as string
+        header_str: Header string from a Radiance matrix file containing metadata.
+
     Returns:
-        A tuple contain nrow, ncol, ncomp, datatype
+        Tuple containing (nrows, ncols, ncomp, dtype) where:
+            - nrows: Number of matrix rows
+            - ncols: Number of matrix columns
+            - ncomp: Number of color components (typically 3 for RGB)
+            - dtype: Data type string (e.g., 'double', 'float')
+
     Raises:
-        ValueError: if any of NROWS NCOLS NCOMP FORMAT is not found.
+        ValueError: If any required header entries (NROWS, NCOLS, NCOMP, FORMAT) are missing.
     """
     compiled = re.compile(
         r" NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ", flags=re.X
@@ -607,14 +735,14 @@ def parse_rad_header(header_str: str) -> tuple:
 
 
 def load_matrix(file: bytes | str | Path, dtype: str = "float") -> np.ndarray:
-    """Load a Radiance matrix file into numpy array.
+    """Load a Radiance matrix file into a numpy array.
 
     Args:
-        file: a file path
-        dtype: data type
+        file: Path to Radiance matrix file or raw matrix bytes.
+        dtype: Data type for the output array ('float' or 'double').
 
     Returns:
-        A numpy array
+        Numpy array with shape (nrows, ncols, ncomp) containing the matrix data.
     """
     npdtype = np.double if dtype.startswith("d") else np.single
     mtx = pr.rmtxop(file, outform=dtype[0].lower())
@@ -627,18 +755,18 @@ def load_matrix(file: bytes | str | Path, dtype: str = "float") -> np.ndarray:
 def load_binary_matrix(
     buffer: bytes, nrows: int, ncols: int, ncomp: int, dtype: str, header: bool = False
 ) -> np.ndarray:
-    """Load a matrix in binary format into a numpy array.
+    """Load a binary matrix buffer into a numpy array.
 
     Args:
-        buffer: buffer to read from
-        nrows: number of rows
-        ncols: number of columns
-        ncomp: number of components
-        dtype: data type
-        header: if True, strip header
+        buffer: Raw binary data containing the matrix.
+        nrows: Number of matrix rows.
+        ncols: Number of matrix columns.
+        ncomp: Number of color components (typically 3 for RGB).
+        dtype: Data type string ('d' for double, 'f' for float).
+        header: If True, strip Radiance header from buffer before parsing.
 
     Returns:
-        The matrix as a numpy array
+        Numpy array with shape (nrows, ncols, ncomp) containing the matrix data.
     """
     npdtype = np.double if dtype.startswith("d") else np.single
     if header:
@@ -647,18 +775,24 @@ def load_binary_matrix(
 
 
 def matrix_multiply_rgb(
-    *mtx: np.ndarray, weights: None | list[float] = None
+    *mtx: np.ndarray, weights: list[float] | None = None
 ) -> np.ndarray:
-    """Multiply matrices as numpy ndarray.
-    linalg.multi_dot figures out the multiplication order
-    but uses more memory.
+    """Multiply RGB matrices using optimized matrix multiplication.
+
+    Performs matrix multiplication on RGB matrices by multiplying each color
+    channel separately. Uses numpy's multi_dot for optimal multiplication order.
 
     Args:
-        mtx: matrices to multiply
-        weights: weights for each component
+        *mtx: Variable number of matrices to multiply, each with shape (..., ..., 3).
+        weights: Optional RGB weights [r_weight, g_weight, b_weight] to combine
+            color channels into a single weighted result.
 
     Returns:
-        The result as a numpy array
+        Result matrix with same shape as input matrices. If weights provided,
+        returns single-channel weighted combination, otherwise returns RGB matrix.
+
+    Raises:
+        ValueError: If weights list doesn't contain exactly 3 values.
     """
     resr = np.linalg.multi_dot([m[:, :, 0] for m in mtx])
     resg = np.linalg.multi_dot([m[:, :, 1] for m in mtx])
@@ -675,20 +809,26 @@ def sparse_matrix_multiply_rgb_vtds(
     tmx: np.ndarray,
     dmx: np.ndarray,
     smx: np.ndarray,
-    weights: None | list[float] = None,
+    weights: list[float] | None = None,
 ) -> np.ndarray:
-    """Multiply sparse view, transmission, daylight,
-    and sky matrices. (ThreePhaseMethod)
+    """Multiply view, transmission, daylight, and sky matrices for three-phase method.
+
+    Performs the matrix multiplication sequence V × T × D × S for three-phase daylight
+    calculations, handling sparse matrices efficiently for memory optimization.
 
     Args:
-        vmx: view matrix (sparse)
-        tmx: transmission matrix (non-sparse)
-        dmx: daylight matrix (sparse)
-        smx: sky matrix (sparse)
-        weights: weights for RGB channels
+        vmx: View matrix (sparse) with shape (3, view_points, surface_patches).
+        tmx: Transmission matrix (dense) with shape (surface_patches, sky_patches, 3).
+        dmx: Daylight matrix (sparse) with shape (3, sky_patches, sky_directions).
+        smx: Sky matrix (sparse) with shape (3, sky_directions, time_steps).
+        weights: Optional RGB weights to combine color channels into weighted result.
 
     Returns:
-        The result as a numpy array (non sparse)
+        Dense numpy array with final illuminance/luminance values. Shape depends on
+        whether weights are provided (single channel vs RGB).
+
+    Raises:
+        ValueError: If weights length doesn't match number of matrix channels.
     """
     if weights is not None:
         if len(weights) != vmx.shape[0]:
@@ -709,14 +849,18 @@ def sparse_matrix_multiply_rgb_vtds(
 
 
 def to_sparse_matrix3(mtx: np.ndarray, mtype: str = "csr") -> np.ndarray:
-    """Convert a three-channel matrix to sparse matrix.
+    """Convert a three-channel RGB matrix to sparse matrix format.
 
     Args:
-        mtx: a three-channel matrix
-        mtype: matrix type
+        mtx: Dense matrix with shape (..., ..., 3) representing RGB data.
+        mtype: Sparse matrix type ('csr' for compressed sparse row,
+            'lil' for list of lists format).
 
     Returns:
-        An array of sparse matrix
+        Numpy array containing 3 sparse matrices, one for each RGB channel.
+
+    Raises:
+        ValueError: If matrix doesn't have exactly 3 channels.
     """
     sparser = {
         "csr": csr_matrix,
@@ -737,22 +881,29 @@ def rfluxmtx_markup(
     surfaces: list[pr.Primitive],
     basis: str,
     left_hand: bool = False,
-    offset: None | float = None,
+    offset: float | None = None,
     source: str = "glow",
-    out: None | str = None,
+    out: str | None = None,
 ) -> str:
-    """Mark up surfaces for rfluxmtx.
+    """Generate rfluxmtx markup for surface primitives.
+
+    Creates properly formatted Radiance scene description with rfluxmtx directives
+    for matrix generation. Handles basis orientation, surface offsetting, and
+    source material assignment.
 
     Args:
-        surfaces: list of surfaces
-        basis: basis type
-        left_hand: left hand coordinate system
-        offset: offset
-        source: source type
-        out: output file
+        surfaces: List of surface primitives (polygons or rings) to mark up.
+        basis: Sampling basis string (e.g., 'kf', 'r4', 'sc6') for directional discretization.
+        left_hand: If True, use left-hand coordinate system for basis orientation.
+        offset: Distance to offset surfaces along their normal vectors.
+        source: Light source material type ('glow' or 'light').
+        out: Optional output file path for matrix results.
 
     Returns:
-        Marked up primitives as strings (to be written to a file for rfluxmtx)
+        String containing formatted Radiance scene with rfluxmtx directives.
+
+    Raises:
+        ValueError: If multiple surface modifiers found or invalid source type.
     """
     modifier_set = {p.modifier for p in surfaces}
     source_modifier = f"rflx{surfaces[0].modifier}{random_string(10)}"
@@ -817,17 +968,22 @@ def surfaces_view_factor(
     env: list[pr.Primitive],
     ray_count: int = 10000,
 ) -> dict[str, dict[str, list[float]]]:
-    """Calculate surface to surface view factor using rfluxmtx.
+    """Calculate surface-to-surface view factors using rfluxmtx.
+
+    Computes geometric view factors between surfaces, representing the fraction
+    of radiation leaving one surface that directly reaches another surface.
 
     Args:
-        surfaces: list of surface primitives that we want to calculate view factor for.
-            Surface normal needs to be facing outward.
-        env: list of environment primitives that our surfaces will be exposed to.
-            Surface normal needs to be facing inward.
-        ray_count: number of rays spawned for each surface.
+        surfaces: List of surface primitives to calculate view factors for.
+            Surface normals must face outward (away from the surface).
+        env: List of environment surface primitives that surfaces are exposed to.
+            Surface normals must face inward (toward the calculation domain).
+        ray_count: Number of rays to spawn from each surface for Monte Carlo integration.
+            Higher values improve accuracy but increase computation time.
 
     Returns:
-        A dictionary of view factors, where the key is the surface identifier.
+        Nested dictionary where outer keys are source surface identifiers and
+        inner keys are target surface identifiers, with values being RGB view factors.
     """
     view_factors = {}
     surfaces_env = env + surfaces

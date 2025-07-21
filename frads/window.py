@@ -359,7 +359,22 @@ def generate_blinds_xml(
 
 
 def load_glazing_system(path: str | Path) -> GlazingSystem:
-    """Load a glazing system from a JSON file."""
+    """Load a glazing system from a JSON file.
+
+    Args:
+        path: Path to the JSON file containing glazing system definition.
+
+    Returns:
+        GlazingSystem object with loaded optical and thermal properties.
+
+    Raises:
+        FileNotFoundError: If the specified file does not exist.
+        ValueError: If the JSON file format is invalid.
+
+    Examples:
+        >>> gs = load_glazing_system("my_window.json")
+        >>> print(f"U-factor: {gs.u_factor}")
+    """
     with open(path, "r") as f:
         data = json.load(f)
     layers = data.pop("layers")
@@ -584,26 +599,25 @@ def create_glazing_system(
 
     Args:
         name: Name of the glazing system.
-        layer_inputs: List of layer inputs.
-        gaps: List of gaps.
+        layer_inputs: List of layer inputs containing material specifications.
+        gaps: List of gaps between layers (auto-generated if None).
         nproc: Number of processes for parallel computation.
         nsamp: Number of samples for Monte Carlo integration.
-        mbsdf: Whether to use matrix BSDF.
+        mbsdf: Whether to generate melanopic BSDF data.
 
     Returns:
-        GlazingSystem object.
+        GlazingSystem object containing optical and thermal properties.
 
     Raises:
-        ValueError: Invalid layer type.
+        ValueError: Invalid layer type or input format.
 
     Examples:
-        >>> create_glazing_system(
-        ...     "test",
-        ...     [
-        ...         Path("glass.json"),
-        ...         Path("venetian.xml"),
-        ...     ],
-        ... )
+        >>> from frads import LayerInput
+        >>> layers = [
+        ...     LayerInput("glass.json"),
+        ...     LayerInput("venetian.xml")
+        ... ]
+        >>> gs = create_glazing_system("double_glazed", layers)
     """
     if gaps is None:
         gaps = [Gap([Gas("air", 1)], 0.0127) for _ in range(len(layer_inputs) - 1)]
@@ -960,6 +974,7 @@ def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[bytes]:
             mat_name = f"mat_{gs.name}_fabric_{current_index}"
             geom_name = f"{gs.name}_fabric_{current_index}"
             xml_name = f"{gs.name}_fabric_{current_index}.xml"
+            breakpoint()
             # Get aBSDF primitive
             with open(xml_name, "w") as f:
                 f.write(gs.layers[current_index].shading_xml)
