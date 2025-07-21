@@ -319,7 +319,7 @@ class Settings:
     overwrite: bool = False
     save_matrices: bool = False
     matrix_dir: str = field(default="Matrices")
-    sky_basis: str = field(default="r1")
+    sky_basis: str = field(default="r4")
     window_basis: str = field(default="kf")
     non_coplanar_basis: str = field(default="kf")
     sun_basis: str = field(default="r6")
