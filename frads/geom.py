@@ -77,7 +77,7 @@ class Polygon:
         )
         results = [pt1]
         results.append(new_other_vert[0])
-        results.extend(reversed(new_other_vert[1:]))
+        results.extend(new_other_vert[1:])
         results.append(new_other_vert[0])
         results.extend(self._vertices)
         return Polygon(results)
@@ -92,14 +92,17 @@ class Polygon:
         return False
 
     def _calculate_normal(self):
-        vector1 = self._vertices[1] - self._vertices[0]
-        normal_vector = np.array((0.0, 0.0, 0.0))
-        for i in range(2, len(self._vertices)):
-            vector2 = self._vertices[i] - self._vertices[0]
-            normal_vector = np.cross(vector1, vector2)
-            if np.linalg.norm(normal_vector) > 0:
-                break
-        return normal_vector / np.linalg.norm(normal_vector)
+        normal = np.zeros(3)
+        for i in range(len(self._vertices)):
+            v1 = self._vertices[i]
+            v2 = self._vertices[(i + 1) % len(self._vertices)]
+            normal[0] += (v1[1] - v2[1]) * (v1[2] + v2[2])
+            normal[1] += (v1[2] - v2[2]) * (v1[0] + v2[0])
+            normal[2] += (v1[0] - v2[0]) * (v1[1] + v2[1])
+        norm = np.linalg.norm(normal)
+        if norm < np.finfo(float).eps:
+            raise ValueError("Cannot compute normal - degenerate polygon")
+        return normal / norm
 
     def _calculate_area(self) -> np.ndarray:
         total = np.array((0.0, 0.0, 0.0))
