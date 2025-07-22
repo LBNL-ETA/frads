@@ -54,5 +54,30 @@ class TestGeometry(unittest.TestCase):
         self.assertEqual(res123, answer123)
         self.assertEqual(res1234, answer1234)
 
+    def test_trim_window(self):
+        wall_width = 50
+        wall_height = 3
+        window_width = 50
+        window_height = 1.2
+        sill_height = 1.2
+        south_wall = geom.Polygon([
+            np.array((0, 0, 0)),
+            np.array((wall_width, 0, 0)),
+            np.array((wall_width, 0, wall_height)),
+            np.array((0, 0, wall_height)),
+        ])
+        window = geom.Polygon([
+            np.array((0, 0, sill_height)),
+            np.array((0, 0, sill_height + window_height)),
+            np.array((window_width, 0, sill_height + window_height)),
+            np.array((window_width, 0, sill_height)),
+        ])
+        trimmed_wall = south_wall - window
+        print(trimmed_wall)
+        print(trimmed_wall.normal)
+        self.assertEqual(trimmed_wall.normal[0], 0)
+        self.assertEqual(trimmed_wall.normal[1], -1)
+        self.assertEqual(trimmed_wall.normal[2], 0)
+
 if __name__== "__main__":
     unittest.main()
