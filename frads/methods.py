@@ -311,6 +311,7 @@ class Settings:
         sensor_window_matrix: Sensor window matrix sampling parameters
         view_window_matrix: View window matrix sampling parameters
         daylight_matrix: Daylight matrix sampling parameters
+        output_directory: The directory to save the output files.
     """
 
     name: str = field(default="")
@@ -391,6 +392,7 @@ class Settings:
         default_factory=lambda: ["-ab", "5", "-ad", "8192", "-lw", "5e-5"]
     )
     files_mtime: list[float] = field(init=False, default_factory=list)
+    output_directory: str = field(default="./")
 
     def __post_init__(self):
         if self.wea_file != "":
@@ -609,11 +611,11 @@ class PhaseMethod:
             self.wea_data = None
 
         # Setup Temp and Octrees directory
-        self.tmpdir = Path("Temp")
-        self.tmpdir.mkdir(exist_ok=True)
-        self.octdir = Path("Octrees")
+        self.outdir = Path(self.config.settings.output_directory)
+        self.outdir.mkdir(exist_ok=True)
+        self.octdir = self.outdir / "Octrees"
         self.octdir.mkdir(exist_ok=True)
-        self.mtxdir = Path(self.config.settings.matrix_dir)
+        self.mtxdir = self.outdir / "Matrices"
         self.mtxdir.mkdir(exist_ok=True)
         self.mfile = (self.mtxdir / self.config.hash_str).with_suffix(".npz")
 

@@ -77,6 +77,7 @@ class EnergyPlusSetup:
         enable_radiance: bool = False,
         nproc: int = 1,
         initialize_radiance: bool = True,
+        output_directory: str = "./",
     ):
         """Class for setting up and running EnergyPlus simulations.
 
@@ -98,7 +99,10 @@ class EnergyPlusSetup:
         self.rworkflows = {}
         if enable_radiance:
             self.rmodels = fr.epmodel_to_radmodel(
-                epmodel, epw_file=weather_file, add_views=True
+                epmodel,
+                epw_file=weather_file,
+                add_views=True,
+                output_directory=output_directory,
             )
             self.rconfigs = {
                 k: fr.WorkflowConfig.from_dict(v) for k, v in self.rmodels.items()

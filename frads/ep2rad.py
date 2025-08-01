@@ -888,12 +888,15 @@ class EnergyPlusToRadianceModelConverter:
         return valid
 
 
-def create_settings(ep_model: EnergyPlusModel, epw_file: None | str) -> dict:
+def create_settings(
+    ep_model: EnergyPlusModel, epw_file: None | str, output_directory: str
+) -> dict:
     """Create settings dictionary for Radiance model.
 
     Args:
         ep_model: EnergyPlus model.
         epw_file: EnergyPlus weather file path.
+        output_directory: Output directory for Radiance files.
 
     Returns:
         dict: Radiance settings.
@@ -909,6 +912,7 @@ def create_settings(ep_model: EnergyPlusModel, epw_file: None | str) -> dict:
                 "longitude": site.longitude * -1,
                 "time_zone": site.time_zone * -15,
                 "site_elevation": site.elevation,
+                "output_directory": output_directory,
             }
         )
     return settings
@@ -919,6 +923,7 @@ def epmodel_to_radmodel(
     epw_file: None | str = None,
     add_views: bool = True,
     views: None | dict[str, dict[str, pr.View]] = None,
+    output_directory: str = None,
 ) -> dict:
     """Convert EnergyPlus model to Radiance models where each zone is a separate model.
 
@@ -937,7 +942,7 @@ def epmodel_to_radmodel(
     """
     model_parser = EnergyPlusToRadianceModelConverter(ep_model)
     zone_models = model_parser.parse()
-    settings = create_settings(ep_model, epw_file)
+    settings = create_settings(ep_model, epw_file, output_directory)
     rad_models = {
         zname: {"settings": settings, "model": zmodel}
         for zname, zmodel in zone_models.items()

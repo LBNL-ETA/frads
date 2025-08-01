@@ -974,7 +974,6 @@ def get_proxy_geometry(window: Polygon, gs: GlazingSystem) -> list[bytes]:
             mat_name = f"mat_{gs.name}_fabric_{current_index}"
             geom_name = f"{gs.name}_fabric_{current_index}"
             xml_name = f"{gs.name}_fabric_{current_index}.xml"
-            breakpoint()
             # Get aBSDF primitive
             with open(xml_name, "w") as f:
                 f.write(gs.layers[current_index].shading_xml)
@@ -1114,7 +1113,9 @@ def generate_coplanar_bsdf(
 
                     # Generate spectral data for glazing layers
                     glazing_layers = layers[
-                        current_layer_idx - glazing_layer_count + 1 : current_layer_idx
+                        current_layer_idx
+                        - glazing_layer_count
+                        + 1 : current_layer_idx
                         + 1
                     ]
                     glazing_material_bytes = get_spectral_multi_layer_optics(
