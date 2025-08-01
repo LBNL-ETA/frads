@@ -722,6 +722,7 @@ class PhaseMethod:
         dhi: float | list[float],
         aod: float | list[float] = 0.112,
         sky_cover: float | list[float] = 0.0,
+        outdir: str = "./",
     ) -> np.ndarray:
         """Generates a sky matrix based on the time, Direct Normal Irradiance (DNI), and
         Diffuse Horizontal Irradiance (DHI).
@@ -764,6 +765,7 @@ class PhaseMethod:
             mfactor=int(self.config.settings.sky_basis[-1]),
             header=True,
             nthreads=self.config.settings.num_processors,
+            out_dir=outdir,
         )
         smx = pr.getinfo(
             pr.Rcomb(transform="M", header=False, outform="f").add_input(smx)(),
@@ -1316,7 +1318,10 @@ class ThreePhaseMethod(PhaseMethod):
         Returns:
             Menalonpic vertical illuminance
         """
-        sky_matrix = self.get_melanopic_sky_matrix(time, dni, dhi, sky_cover=sky_cover)
+        outdir = self.config.settings.output_directory
+        sky_matrix = self.get_melanopic_sky_matrix(
+            time, dni, dhi, sky_cover=sky_cover, outdir=outdir
+        )
         res = []
         if isinstance(bsdf, list):
             if len(bsdf) != len(self.config.model.windows):

@@ -901,7 +901,7 @@ def create_settings(
     Returns:
         dict: Radiance settings.
     """
-    settings = {"method": "3", "sky_basis": "r1"}
+    settings = {"method": "3", "sky_basis": "r1", "output_directory": output_directory}
     if epw_file:
         settings["epw_file"] = epw_file
     else:
@@ -912,7 +912,6 @@ def create_settings(
                 "longitude": site.longitude * -1,
                 "time_zone": site.time_zone * -15,
                 "site_elevation": site.elevation,
-                "output_directory": output_directory,
             }
         )
     return settings
