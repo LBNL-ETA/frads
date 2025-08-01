@@ -766,7 +766,7 @@ class PhaseMethod:
             nthreads=self.config.settings.num_processors,
         )
         smx = pr.getinfo(
-            pr.Rcomb(transform="m", header=False, outform="f").add_input(smx)(),
+            pr.Rcomb(transform="M", header=False, outform="f").add_input(smx)(),
             strip_header=True,
         )
         return load_binary_matrix(
