@@ -922,7 +922,7 @@ def epmodel_to_radmodel(
     epw_file: None | str = None,
     add_views: bool = True,
     views: None | dict[str, dict[str, pr.View]] = None,
-    output_directory: str = None,
+    output_directory: str = "./",
 ) -> dict:
     """Convert EnergyPlus model to Radiance models where each zone is a separate model.
 
