@@ -1379,7 +1379,7 @@ class ThreePhaseMethod(PhaseMethod):
             if (_pgs := self.config.model.windows[wname].proxy_geometry) != {}:
                 stdins.append(_pgs[sname])
 
-        octree = f"{random_string(5)}.oct"
+        octree = self.octdir / f"{random_string(5)}.oct"
         with open(octree, "wb") as f:
             f.write(pr.oconv(stdin=b"".join(stdins), octree=self.octree))
 
