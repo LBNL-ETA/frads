@@ -481,8 +481,8 @@ class EnergyPlusSetup:
                 timestamp_at_beginning_of_interval=epm.EPBoolean.yes,
             )
         }
-
-        with open(f"{output_prefix}.json", "w") as wtr:
+        epjson_path = os.path.join(output_directory, f"{output_prefix}.json")
+        with open(epjson_path, "w") as wtr:
             wtr.write(
                 self.model.model_dump_json(
                     by_alias=True, exclude_none=True, exclude_unset=True
@@ -490,7 +490,7 @@ class EnergyPlusSetup:
             )
 
         self.api.runtime.set_console_output_status(self.state, not silent)
-        self.api.runtime.run_energyplus(self.state, [*opt, f"{output_prefix}.json"])
+        self.api.runtime.run_energyplus(self.state, [*opt, epjson_path])
 
     def set_callback(self, method_name: str, func: Callable):
         """Set callback function for EnergyPlus runtime API.
