@@ -1,5 +1,6 @@
 """Typical Radiance matrix-based simulation workflows"""
 
+import copy
 import hashlib
 import logging
 import os
@@ -515,7 +516,11 @@ class WorkflowConfig:
             self.settings = Settings(**self.settings)
         if isinstance(self.model, dict):
             self.model = Model(**self.model)
-        self.hash_str = hashlib.md5(str(self.__dict__).encode()).hexdigest()[:16]
+        tmp_dict = copy.copy(self.__dict__)
+        tmp_settings = copy.copy(self.__dict__["settings"])
+        tmp_settings.output_directory = ""
+        tmp_dict["settings"] = tmp_settings
+        self.hash_str = hashlib.md5(str(tmp_dict).encode()).hexdigest()[:16]
 
     @staticmethod
     def from_dict(obj: dict) -> "WorkflowConfig":
