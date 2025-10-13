@@ -90,13 +90,13 @@ epmodel.fenestration_surface_detailed
 
 Use `EnergyPlusModel.add_glazing_system()` to easily add glazing system (complex fenestration systems) to the `construction_complex_fenestration_state` object in the EnergyPlus model.
 
-First, use the `GlazingSystem` class to create a glazing system. Then use `EnergyPlusModel.add_glazing_system()` to add the glazing system to the EnergyPlus. See [How to create a glazing system?](guide_ep2.md) for more details.
+First, use the `create_glazing_system()` function to create a glazing system. Then use `EnergyPlusModel.add_glazing_system()` to add the glazing system to the EnergyPlus. See [How to create a glazing system?](guide_ep2.md) for more details.
 
 ``` python
 epmodel.add_glazing_system(gs1) # (1) 
 ```
 
-1.  `gs1 = fr.create_glazing_system(name="gs1", layers=["product1.json", "product2.json"])`
+1.  `gs1 = fr.create_glazing_system(name="gs1", layer_inputs=[fr.LayerInput("product1.json"), fr.LayerInput("product2.json")])`
     
 ### Lighting
 

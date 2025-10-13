@@ -90,13 +90,14 @@ Call `create_glazing_system` to create a glazing system. See [How to create a gl
 ```python 
 gs_ec01 = fr.create_glazing_system(
     name="ec01",
-    layers=[
-        "igsdb_product_7405.json", # electrochromic glass Tvis: 0.01
-        "igsdb_product_364.json", # clear glass
+    layer_inputs=[
+        fr.LayerInput("igsdb_product_7405.json"), # electrochromic glass Tvis: 0.01
+        fr.LayerInput("igsdb_product_364.json"), # clear glass
     ],
     gaps=[
         fr.Gap(
-            [fr.Gas("air", 0.1), fr.Gas("argon", 0.9)], 0.0127
+            gas=[fr.Gas("air", 0.1), fr.Gas("argon", 0.9)], 
+            thickness_m=0.0127
         )
     ],
 )
@@ -106,9 +107,9 @@ gs_ec01 = fr.create_glazing_system(
     ```python
     gs_ec06 = fr.create_glazing_system(
         name="ec06",
-        layers=[
-            "igsdb_product_7407.json", 
-            "igsdb_product_364.json",
+        layer_inputs=[
+            fr.LayerInput("igsdb_product_7407.json"), 
+            fr.LayerInput("igsdb_product_364.json"),
         ],
         gaps=[
             fr.Gap(
@@ -119,9 +120,9 @@ gs_ec01 = fr.create_glazing_system(
 
     gs_ec18 = fr.create_glazing_system(
         name="ec18",
-        layers=[
-            "igsdb_product_7404.json",
-            "igsdb_product_364.json",
+        layer_inputs=[
+            fr.LayerInput("igsdb_product_7404.json"),
+            fr.LayerInput("igsdb_product_364.json"),
         ],
         gaps=[
             fr.Gap(
@@ -132,9 +133,9 @@ gs_ec01 = fr.create_glazing_system(
 
     gs_ec60 = fr.create_glazing_system(
         name="ec60",
-        layers=[
-            "igsdb_product_7406.json",
-            "igsdb_product_364.json",
+        layer_inputs=[
+            fr.LayerInput("igsdb_product_7406.json"),
+            fr.LayerInput("igsdb_product_364.json"),
         ],
         gaps=[
             fr.Gap(

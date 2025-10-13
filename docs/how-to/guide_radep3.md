@@ -45,16 +45,19 @@ epmodel = fr.load_energyplus_model("RefBldgMediumOfficeNew2004_southzone.idf")
 
 ### 1.2 Create glazing systems (Complex Fenestration States)
 
+Create a glazing system using `create_glazing_system()` with layer inputs and gaps. Each `LayerInput` object specifies a glazing or shading (fabric or venetian blinds) material. Gaps between layers are defined with `Gap` objects containing gas composition and thickness.
+
 ```python title="Create a glazing system"
 gs_ec01 = fr.create_glazing_system(
     name="ec01",
-    layers=[
-        "igsdb_product_7405.json",
-        "CLEAR_3.DAT",
+    layer_inputs=[
+        fr.LayerInput("igsdb_product_7405.json"),
+        fr.LayerInput("CLEAR_3.DAT"),
     ],
     gaps=[
         fr.Gap(
-            [fr.Gas("air", 0.1), fr.Gas("argon", 0.9)], 0.0127
+            gas=[fr.Gas("air", 0.1), fr.Gas("argon", 0.9)], 
+            thickness_m=0.0127
         )
     ],
 )
