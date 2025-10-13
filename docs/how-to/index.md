@@ -10,7 +10,7 @@
 
 5. How to simulate annual glare index using five-phase method?
 
-6. How to simulate annual melanopic equivalent daylight illuminance?
+6. [How to simulate annual melanopic equivalent daylight illuminance?](guide_rad6.md)
 
 7. [How to calculate daylight factor?](guide_rad7.md)
 
