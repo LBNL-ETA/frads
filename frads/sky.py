@@ -104,8 +104,8 @@ def parse_epw(epw_str: str) -> tuple:
                 datetime.datetime(year, month, day, hour, 30),
                 dir_norm,
                 dif_hor,
-                cc,
                 aod,
+                cc,
             )
         )
     city = epw_header[1]
@@ -348,7 +348,7 @@ def gen_wea(
     location: None | str = None,
 ) -> str:
     """Generate wea file from datetime, location, and sky."""
-    if len(datetimes) != len(dirnorm) != len(diffhor):
+    if not (len(datetimes) == len(dirnorm) == len(diffhor)):
         raise ValueError("datetimes, dirnorm, and diffhor must be the same length")
     rows = []
     if location is None or location == "":
@@ -424,7 +424,7 @@ def solar_angle(
     )
     azimuth = -math.atan2(
         math.cos(solar_decline) * math.sin(solar_time * (math.pi / 12.0)),
-        -math.cos(latitude_r) * math.sin(solar_time)
+        -math.cos(latitude_r) * math.sin(solar_time * (math.pi / 12))
         - math.sin(latitude_r)
         * math.cos(solar_decline)
         * math.cos(solar_time * (math.pi / 12)),

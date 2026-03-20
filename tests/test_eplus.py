@@ -2,16 +2,17 @@ from pathlib import Path
 import unittest
 
 import frads as fr
-from pyenergyplus.dataset import ref_models
+
+_RESOURCES = Path(__file__).parent / "Resources"
+_MEDIUM_OFFICE = _RESOURCES / "RefBldgMediumOfficeNew2004_Chicago_epJSON.epJSON"
+
 
 class TestGlazingSystem(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # Setup the resources directory - replace with your actual resources path
-        cls.resources_dir = Path(__file__).parent / "Resources"
-        # Create a new medium_office for each test - adjust based on how it's created in your tests
-        cls.medium_office = fr.load_energyplus_model(ref_models["medium_office"])
+        cls.resources_dir = _RESOURCES
+        cls.medium_office = fr.load_energyplus_model(_MEDIUM_OFFICE)
         glass_path = cls.resources_dir / "CLEAR_3.DAT"
         blinds_path = cls.resources_dir / "igsdb_product_19732.json"
         glass_layer = fr.LayerInput(glass_path)
@@ -49,7 +50,7 @@ class TestWorkflow(unittest.TestCase):
 
     def test_run(self):
         # Simplified test - just test basic functionality without full simulation
-        self.medium_office = fr.load_energyplus_model(ref_models["medium_office"])
+        self.medium_office = fr.load_energyplus_model(_MEDIUM_OFFICE)
         glass_path = self.resources_dir / "CLEAR_3.DAT"
         glass_layer = fr.LayerInput(glass_path)
         single_glaze = [glass_layer]

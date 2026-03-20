@@ -353,7 +353,7 @@ class SunReceiver(Receiver):
             ValueError: If basis is not a valid Reinhart-Tregenza format.
         """
         super().__init__(basis)
-        if not basis.startswith("r") and not basis[-1].isdigit():
+        if not (basis.startswith("r") and basis[-1].isdigit()):
             raise ValueError("Invalid Reinhart/Treganza basis", basis)
         mf = int(basis[-1])
         nbins = 144 * mf**2 + 1
@@ -470,6 +470,7 @@ class Matrix:
         """
         surface_file = None
         rays = None
+        params = list(params)
         params.append("-n")
         params.append(f"{nproc}")
         logger.info("Generating matrix...")
@@ -632,6 +633,7 @@ class SunMatrix(Matrix):
             raise TypeError("SunMatrix must have a SunReceiver")
         xres, yres = None, None
         inform = "a"
+        parameters = list(parameters)
         parameters.append("-n")
         parameters.append(f"{nproc}")
         parameters.append("-h")
@@ -722,7 +724,7 @@ def parse_rad_header(header_str: str) -> tuple[int, int, int, str]:
         ValueError: If any required header entries (NROWS, NCOLS, NCOMP, FORMAT) are missing.
     """
     compiled = re.compile(
-        r" NROWS=(.*) | NCOLS=(.*) | NCOMP=(.*) | FORMAT=(.*) ", flags=re.X
+        r"NROWS=(.*)|NCOLS=(.*)|NCOMP=(.*)|FORMAT=(.*)"
     )
     matches = compiled.findall(header_str)
     if len(matches) != 4:

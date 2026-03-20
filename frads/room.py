@@ -270,7 +270,7 @@ def make_window_wwr(base: Polygon, wwr: float) -> tuple[Polygon, WindowSurface]:
         primitive=polygon_primitive(
             polygon=window_polygon,
             modifier="glass_60",
-            identifier="void",
+            identifier="window",
         ),
     )
 
@@ -368,31 +368,31 @@ def create_south_facing_room(
         [
             np.array((width, depth, 0)),
             np.array((0, depth, 0)),
-            np.array((0, depth, floor_floor)),
-            np.array((width, depth, floor_floor)),
+            np.array((0, depth, floor_ceiling)),
+            np.array((width, depth, floor_ceiling)),
         ]
     )
     base_swall = Polygon(
         [
             np.array((0, 0, 0)),
             np.array((width, 0, 0)),
-            np.array((width, 0, floor_floor)),
-            np.array((0, 0, floor_floor)),
+            np.array((width, 0, floor_ceiling)),
+            np.array((0, 0, floor_ceiling)),
         ]
     )
     base_ewall = Polygon(
         [
             np.array((width, 0, 0)),
             np.array((width, depth, 0)),
-            np.array((width, depth, floor_floor)),
-            np.array((width, 0, floor_floor)),
+            np.array((width, depth, floor_ceiling)),
+            np.array((width, 0, floor_ceiling)),
         ]
     )
     base_wwall = Polygon(
         [
             np.array((0, 0, 0)),
-            np.array((0, 0, floor_floor)),
-            np.array((0, depth, floor_floor)),
+            np.array((0, 0, floor_ceiling)),
+            np.array((0, depth, floor_ceiling)),
             np.array((0, depth, 0)),
         ]
     )

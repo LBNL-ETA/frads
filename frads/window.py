@@ -142,7 +142,7 @@ class Gap:
     def __post_init__(self):
         if self.thickness_m <= 0:
             raise ValueError("Gap thickness must be greater than 0.")
-        if sum(g.ratio for g in self.gas) != 1:
+        if not math.isclose(sum(g.ratio for g in self.gas), 1.0, rel_tol=1e-6):
             raise ValueError("The sum of the gas ratios must be 1.")
 
 
@@ -192,17 +192,17 @@ class GlazingSystem:
         """Save the glazing system to a file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             _tmpdir = Path(tmpdir)
-            with open(_tvf := _tmpdir / "tbv", "w") as f:
+            with open(_tvf := _tmpdir / "tfv", "w") as f:
                 f.write(self._matrix_to_str(self.visible_front_transmittance))
-            with open(_tvb := _tmpdir / "tfv", "w") as f:
+            with open(_tvb := _tmpdir / "tbv", "w") as f:
                 f.write(self._matrix_to_str(self.visible_back_transmittance))
             with open(_rvf := _tmpdir / "rfv", "w") as f:
                 f.write(self._matrix_to_str(self.visible_front_reflectance))
             with open(_rvb := _tmpdir / "rbv", "w") as f:
                 f.write(self._matrix_to_str(self.visible_back_reflectance))
-            with open(_tsf := _tmpdir / "tbs", "w") as f:
+            with open(_tsf := _tmpdir / "tfs", "w") as f:
                 f.write(self._matrix_to_str(self.solar_front_transmittance))
-            with open(_tsb := _tmpdir / "tfs", "w") as f:
+            with open(_tsb := _tmpdir / "tbs", "w") as f:
                 f.write(self._matrix_to_str(self.solar_back_transmittance))
             with open(_rsf := _tmpdir / "rfs", "w") as f:
                 f.write(self._matrix_to_str(self.solar_front_reflectance))
@@ -535,15 +535,15 @@ def _process_blind_definition_to_bsdf(
     rf_sol_spec = dual_band_values["Rf_sol_specular"]
     rf_vis_diff = dual_band_values["Rf_vis_diffuse"]
     rf_vis_spec = dual_band_values["Rf_vis_specular"]
-    geometry_def = product_data.geometry
-    material_def = product_data.material_definition
+    geometry_def = product_data.composition.geometry
+    material_def = product_data.composition.material
     slat_spacing_m = geometry_def.slat_spacing * M_PER_MM
     tir = material_def.ir_transmittance
     nslats = int(1 / slat_spacing_m) if slat_spacing_m > 0 else 1
     slat_depth_m = geometry_def.slat_width * M_PER_MM
     slat_curvature_m = geometry_def.slat_curvature * M_PER_MM
-    emis_front = material_def.emissivity_front  #
-    emis_back = material_def.emissivity_back  #
+    emis_front = material_def.emissivity_front
+    emis_back = material_def.emissivity_back
     layer_name = product_data.product_name
     layer_thickness_m = slat_depth_m * math.cos(math.radians(defin.slat_angle_deg))
     if tir != 0:
@@ -569,15 +569,15 @@ def _process_blind_definition_to_bsdf(
     )  # meters
     actual_product_data = pwc.parse_bsdf_xml_string(xml)
     layer.thickness_m = layer_thickness_m
-    layer.conductivity = product_data.material_definition.conductivity
+    layer.conductivity = material_def.conductivity
     layer.emissivity_front = emis_front
     layer.emissivity_back = emis_back
     layer.ir_transmittance = tir
     layer.product_type = "blinds"
     layer.slat_width_m = slat_depth_m
     layer.slat_spacing_m = slat_spacing_m
-    layer.slat_thickness_m = product_data.material_definition.thickness * M_PER_MM
-    layer.slat_conductivity = product_data.material_definition.conductivity
+    layer.slat_thickness_m = material_def.thickness * M_PER_MM
+    layer.slat_conductivity = material_def.conductivity
     layer.slat_curve_m = slat_curvature_m
     layer.flipped = defin.flipped
     layer.shading_material = pr.ShadingMaterial(rf_vis_diff, rf_vis_spec, 0)
@@ -721,7 +721,7 @@ def get_glazing_brtdfunc(name, filenames: list[str | Path]) -> pr.Primitive:
     for filename in filenames:
         fpath = Path(filename)
         if fpath.suffix == ".json":
-            product_data = pwc.parse_json_files(str(filename))
+            product_data = pwc.parse_json_file(str(filename))
         else:
             product_data = pwc.parse_optics_file(str(filename))
         rgb = get_layer_rgb(product_data)

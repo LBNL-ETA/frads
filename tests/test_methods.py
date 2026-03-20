@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 
 import pyradiance as pr
-from pyenergyplus.dataset import ref_models, weather_files
+from pyenergyplus.dataset import weather_files
 import frads as fr
 
 
@@ -269,7 +269,9 @@ class TestMethods(unittest.TestCase):
         # Use minimal parameters for faster testing
         clear_glass_path = self.resources_dir / "CLEAR_3.DAT"
         layers = [fr.window.LayerInput(clear_glass_path)]
-        epmodel = fr.load_energyplus_model(ref_models["medium_office"])
+        epmodel = fr.load_energyplus_model(
+            Path(__file__).parent / "Resources" / "RefBldgMediumOfficeNew2004_Chicago_epJSON.epJSON"
+        )
         gs_simple = fr.create_glazing_system(
             name="simple_glass",
             layer_inputs=layers,

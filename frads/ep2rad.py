@@ -467,7 +467,7 @@ def check_outward(polygon: Polygon, zone_center: np.ndarray) -> bool:
     """Check whether a surface is facing outside."""
     outward = True
     angle2center = angle_between(polygon.normal, zone_center - polygon.centroid)
-    if angle2center < math.pi / 4:
+    if angle2center < math.pi / 2:
         outward = False
     return outward
 
@@ -949,7 +949,7 @@ def epmodel_to_radmodel(
     }
     if not add_views:
         for model in rad_models.values():
-            model["views"] = {}
+            model["model"]["views"] = {}
     for model in rad_models.values():
         model["surfaces"] = {}
 

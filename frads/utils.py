@@ -111,7 +111,7 @@ def neutral_trans_prim(
         A material primtive
     """
     color = trans + refl
-    t_diff = trans / color
+    t_diff = trans / color if color != 0 else 0.0
     tspec = 0
     err_msg = "reflectance, speculariy, and roughness have to be 0-1"
     assert all(0 <= i <= 1 for i in [spec, refl, rough]), err_msg
@@ -147,6 +147,8 @@ def color_plastic_prim(
     green_eff = 0.59
     blue_eff = 0.11
     weighted = red * red_eff + green * green_eff + blue * blue_eff
+    if weighted == 0:
+        return Primitive(mod, "plastic", ident, [], [0.0, 0.0, 0.0, specu, rough])
     matr = round(red / weighted * refl, 3)
     matg = round(green / weighted * refl, 3)
     matb = round(blue / weighted * refl, 3)

@@ -315,7 +315,7 @@ def convexhull(points: list[np.ndarray], normal: np.ndarray) -> Polygon:
             p12 = np.linalg.norm(p - points[i + 1])
             p23 = np.linalg.norm(points[i + 1] - points[i + 2])
             p13 = np.linalg.norm(p - points[i + 2])
-            if (p12 + p23) == p13:
+            if abs(p12 + p23 - p13) < 1e-10:
                 to_remove.append(points[i + 1])
     points.pop()
     points.pop()

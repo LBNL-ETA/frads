@@ -446,7 +446,7 @@ class Model:
         self.views_cfg = True
         self.surfaces_cfg = True
 
-        if self.scene == SceneConfig() or self.scene == {}:
+        if not self.scene.files and not self.scene.bytes:
             self.scene_cfg = False
         if self.windows == {}:
             self.windows_cfg = False
@@ -498,6 +498,10 @@ class WorkflowConfig:
     hash_str: str = field(init=False)
 
     def __post_init__(self):
+        if isinstance(self.settings, dict):
+            self.settings = Settings(**self.settings)
+        if isinstance(self.model, dict):
+            self.model = Model(**self.model)
         if (
             not self.model.sensors_cfg
             and not self.model.views_cfg
@@ -512,10 +516,6 @@ class WorkflowConfig:
             raise ValueError(
                 f"Windows must be specified in Model for the {self.settings.method} method"
             )
-        if isinstance(self.settings, dict):
-            self.settings = Settings(**self.settings)
-        if isinstance(self.model, dict):
-            self.model = Model(**self.model)
         tmp_dict = copy.copy(self.__dict__)
         tmp_settings = copy.copy(self.__dict__["settings"])
         tmp_settings.output_directory = ""
@@ -641,9 +641,8 @@ class PhaseMethod:
         the class is used as a context manager. Cleans up the
         Temp and Octrees directory.
         """
-        rmtree("Octrees")
-        rmtree("Matrices")
-        rmtree("Temp")
+        rmtree(self.octdir, ignore_errors=True)
+        rmtree(self.mtxdir, ignore_errors=True)
 
     def get_wea_header(self, unit: int = 1):
         meta_data = WeaMetaData(
@@ -951,7 +950,6 @@ class TwoPhaseMethod(PhaseMethod):
         )
         for idx in range(0, sky_matrix.shape[1], chunksize):
             end = min(idx + chunksize, sky_matrix.shape[1])
-            _chunksize = end - idx
             res = matrix_multiply_rgb(
                 self.view_sky_matrices[view].array,
                 sky_matrix[:, idx:end, :],
@@ -1025,11 +1023,6 @@ class ThreePhaseMethod(PhaseMethod):
                 self.window_bsdfs[_name] = self.config.model.materials.matrices[
                     window.matrix_name
                 ].matrix_data
-                window_basis = [
-                    k
-                    for k, v in BASIS_DIMENSION.items()
-                    if v == self.window_bsdfs[_name].shape[0]
-                ][0]
             else:
                 # raise ValueError("No matrix data or file available", _name)
                 logger.info(f"No matrix data or file available: {_name}")
@@ -1177,7 +1170,8 @@ class ThreePhaseMethod(PhaseMethod):
             if len(bsdf) != len(self.config.model.windows):
                 raise ValueError("Number of BSDF should match number of windows.")
         for idx, _name in enumerate(self.config.model.windows):
-            _bsdf = self.config.model.materials.matrices[bsdf[_name]].matrix_data
+            _bsdf_key = bsdf[idx] if isinstance(bsdf, list) else bsdf[_name]
+            _bsdf = self.config.model.materials.matrices[_bsdf_key].matrix_data
             res.append(
                 matrix_multiply_rgb(
                     self.sensor_window_matrices[sensor].array[idx],

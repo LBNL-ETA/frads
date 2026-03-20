@@ -127,11 +127,8 @@ class EnergyPlusModel(epmodel.EnergyPlusModel):
             raise ValueError("Zone not found in model.")
         if zone not in self.zone:
             raise ValueError(f"{zone} not found in model.")
-        if self.lights is None:
-            raise ValueError("Lights not found in model.")
-        dict2 = copy.deepcopy(self.lights)
-
         if self.lights is not None:
+            dict2 = copy.deepcopy(self.lights)
             for k, v in dict2.items():
                 if v.zone_or_zonelist_or_space_or_spacelist_name == zone:
                     if replace:
