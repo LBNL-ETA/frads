@@ -79,26 +79,29 @@ nav:
   - How-To Guides:
     - how-to/index.md
     - EnergyPlus Guides:
-      - Simple EnergyPlus simulation: how-to/guide_ep1.md
-      - EnergyPlus Guide 2: how-to/guide_ep2.md
-      - EnergyPlus Guide 3: how-to/guide_ep3.md
+      - Simple EnergyPlus Simulation: how-to/guide_ep1.md
+      - Create a Glazing System: how-to/guide_ep2.md
+      - Set Up a Callback Function: how-to/guide_ep3.md
     - Radiance Guides:
-      - Radiance Guide 1: how-to/guide_rad1.md
-      - Radiance Guide 2: how-to/guide_rad2.md
-      - Radiance Guide 3: how-to/guide_rad3.md
-      - Radiance Guide 7: how-to/guide_rad7.md
+      - Simple rtrace Workflow: how-to/guide_rad1.md
+      - Workflow Configuration: how-to/guide_rad2.md
+      - Workplane Illuminance and eDGPs: how-to/guide_rad3.md
+      - Melanopic Illuminance: how-to/guide_rad6.md
+      - Daylight Factor: how-to/guide_rad7.md
     - Combined Guides:
-      - Radiance-EnergyPlus Guide 1: how-to/guide_radep1.md
-      - Radiance-EnergyPlus Guide 2: how-to/guide_radep2.md
-      - Radiance-EnergyPlus Guide 3: how-to/guide_radep3.md
+      - Enable Radiance in EnergyPlus: how-to/guide_radep1.md
+      - Dynamic Shading and Daylight Dimming: how-to/guide_radep2.md
+      - Spatial Daylight Autonomy: how-to/guide_radep3.md
 
   - Reference:
     - WorkflowConfig: ref/config.md
     - TwoPhaseMethod: ref/twophase.md
     - ThreePhaseMethod: ref/threephase.md
     - FivePhaseMethod: ref/fivephase.md
-    - matrix: ref/matrix.md
+    - Matrix: ref/matrix.md
     - EnergyPlus: ref/eplus.md
     - GlazingSystem: ref/window.md
     - Sky: ref/sky.md
+    - Geometry: ref/geom.md
+    - Utilities: ref/utils.md
 
