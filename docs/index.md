@@ -1,6 +1,6 @@
 # Welcome to frads documentation
 
-**Version: 2.1.8**
+**Version: 2.1.15**
 
 Frads is an open-source library providing high-level abstraction of Radiance matrix-based simulation workflows.
 
@@ -20,9 +20,6 @@ The documentation consists of two parts:
 
 1. [How-To Guides](how-to/index.md): Scenario-based how-to guides
 2. [Reference](ref/config.md): Code API documentation
-
-## Installation
-You can find installation instructions on our [README](https://github.com/LBNL-ETA/frads#installation).
 
 ## Project Overview
 

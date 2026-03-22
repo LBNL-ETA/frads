@@ -14,7 +14,7 @@ Daylight factor (DF) is the ratio of the interior horizontal illuminance to the 
 ## 0. Import the required classes and functions
 
 ```python
-import datatime
+import datetime
 import frads as fr
 import pyradiance as pr
 import numpy as np

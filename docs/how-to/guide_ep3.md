@@ -120,7 +120,7 @@ def controller(state):
         return
     # get the current number of occupants in the zone
     num_occupants = epsetup.get_variable_value(
-        variable_name="Zone People Occupant Count",
+        name="Zone People Occupant Count",
         key="Perimeter_bot_ZN_1",
     )
     if num_occupants > 0:

@@ -53,7 +53,7 @@ To calculate melanopic illuminance, you need to create glazing systems with mela
 Create a double-pane glazing system with electrochromic glass:
 
 ```python
-gs2 = fr.create_glazing_system(
+gs1 = fr.create_glazing_system(
     name="gs1",
     layer_inputs=[
         fr.LayerInput("igsdb_product_7406.json"),  # electrochromic glass
