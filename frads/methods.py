@@ -498,10 +498,6 @@ class WorkflowConfig:
     hash_str: str = field(init=False)
 
     def __post_init__(self):
-        if isinstance(self.settings, dict):
-            self.settings = Settings(**self.settings)
-        if isinstance(self.model, dict):
-            self.model = Model(**self.model)
         if (
             not self.model.sensors_cfg
             and not self.model.views_cfg
