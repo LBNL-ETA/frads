@@ -1,7 +1,7 @@
 import copy
 
-import epmodel
-import epmodel.epmodel as epm
+from pyenergyplus import model as epmodel
+from pyenergyplus.model import model as epm
 
 from frads.window import GlazingSystem
 

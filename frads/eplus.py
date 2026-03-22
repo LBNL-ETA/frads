@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Callable
 
-from epmodel import epmodel as epm
+from pyenergyplus.model import model as epm
 import frads as fr
 from frads.eplus_model import EnergyPlusModel
 from .window import GlazingSystem

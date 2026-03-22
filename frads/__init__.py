@@ -96,7 +96,7 @@ from .window import (
 )
 from .geom import gen_grid, parse_polygon
 
-__version__ = "2.1.14"
+__version__ = "2.1.15"
 
 logger: logging.Logger = logging.getLogger(__name__)
 

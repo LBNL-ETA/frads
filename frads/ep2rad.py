@@ -14,7 +14,7 @@ from frads.geom import (
     gen_grid,
 )
 from frads.eplus_model import EnergyPlusModel
-from epmodel.epmodel import (
+from pyenergyplus.model.model import (
     BuildingSurfaceDetailed,
     FenestrationSurfaceDetailed,
     Material,
