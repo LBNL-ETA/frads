@@ -1,37 +1,89 @@
-![Install + Test](https://github.com/LBNL-ETA/frads/actions/workflows/main.yml/badge.svg)
-[![Upload Python Package](https://github.com/LBNL-ETA/frads/actions/workflows/python-publish.yml/badge.svg)](https://github.com/LBNL-ETA/frads/actions/workflows/python-publish.yml)
-![Downloads](https://img.shields.io/pypi/dm/frads.svg)
-# _frads_: Framework for lighting and energy simulation
+# frads: Framework for Radiance and EnergyPlus Simulation
 
-This is the repository for _frads_ development. _frads_ faciliates lighting and energy simulation by calling Radiance and EnergyPlus
-within the Python environment. Radiance is a free and open-source, raytracing-based lighting engine that is used extensively
-by engineering firms for innovative solar control, lighting, and daylighting design to improve the energy efficiency of buildings.
-With matrix algebraic methods, climate-based annual simulations can now be conducted in less than two minutes. _frads_ automates setup
-of these simulations by providing end users with an open-source, high-level abstraction of the Radiance command-line workflow (Unix toolbox model),
-helping to reduce the steep learning curve and associated user errors. _frads_ also provides the necessary infrastructure needed for seamless
-integration of Radiance and other modeling tools, such as EnergyPlus.
+[![Install + Test](https://github.com/LBNL-ETA/frads/actions/workflows/main.yml/badge.svg)](https://github.com/LBNL-ETA/frads/actions/workflows/main.yml)
+[![PyPI](https://img.shields.io/pypi/v/frads.svg)](https://pypi.org/project/frads/)
+[![Downloads](https://img.shields.io/pypi/dm/frads.svg)](https://pypi.org/project/frads/)
+[![Python](https://img.shields.io/pypi/pyversions/frads.svg)](https://pypi.org/project/frads/)
 
-## [Documentation](https://lbnl-eta.github.io/frads/)
+`frads` is a Python library for building lighting and energy simulation. It provides high-level abstractions over [Radiance](https://www.radiance-online.org) and [EnergyPlus](https://energyplus.net), automating matrix-based annual daylight simulation workflows and enabling Radiance–EnergyPlus co-simulation.
 
-## Contact/ Support
-We welcome beta users of _frads_. Feel free to post questions and suggestions in the Discussion section of this GitHub site or contact the principal author at taoningwang@lbl.gov.
-Information about Radiance can be found at: https://www.radiance-online.org .
-The Radiance community is active and welcomes new users via the Radiance Discourse site or Unmet Hours.
+## Features
 
-## Testing
-_frads_ uses Radiance tools in its implementation. Radiance models have been rigorously tested and validated using laboratory and outdoor field data, demonstrating its superior  performance in delivering photometrically accurate, photorealistic results. Each Radiance commit and release is tested using the GitHub Action system.  Unit tests were developed for most of the major Radiance programs. Tests are performed using Radiance _radcompare_, which was designed specifically to test Monte Carlo ray-tracing algorithms.
-Integration tests are the main type of test performed for _frads_ commit and releases.  These tests also use the GitHub Action system.
-
-## Releases
-_frads_ is a work in progress (see to-do list below). _frads_ has been tested on the latest official release of Radiance (September 2020, v5.3) but may not have been tested on the latest HEAD release, which contains source code changes made as recently as yesterday. _frads_ has also been tested on the latest official EnergyPlus release (> v9.3).
+- **Matrix-based daylight simulation** — automates 2-phase, 3-phase, and 5-phase Radiance workflows for fast, accurate annual simulations
+- **EnergyPlus co-simulation** — couples Radiance illuminance calculations with EnergyPlus at each timestep via the EnergyPlus Python API
+- **Complex fenestration systems** — creates and manages BSDF glazing systems (electrochromic, venetian blinds, fabric shades) using [pyWinCalc](https://github.com/LBNL-ETA/pyWinCalc)
+- **Dynamic shading control** — implements occupancy-based daylight dimming, glare control, and thermal pre-cooling in a single simulation loop
+- **Sky and weather** — parses EPW/WEA files and generates Perez all-weather and CIE sky models
 
 ## Installation
 
-See the [installation guide](https://lbnl-eta.github.io/frads/install/) for full instructions.
+```bash
+pip install frads
+```
 
+All dependencies, including Radiance (via `pyradiance`) and EnergyPlus (via `pyenergyplus_lbnl`), are installed automatically.
 
-## Reference
+## Quick Start
 
-Wang, T., "Frads: A Python Library for Radiance Simulation Control", 2021 Radiance workshop, Bilbao, Spain, August 19, 2021, [ppt](https://www.radiance-online.org/community/workshops/2021-bilbao-spain-2/presentations/19_thursday/frads.pdf) , [voice recording](https://www.radiance-online.org/community/workshops/2021-bilbao-spain-2)
+**Run a Radiance three-phase annual simulation:**
 
-Wang, T., Ward, G., and Lee, E.S. (2021), A Python Library for Radiance Matrix-based Simulation Control and EnergyPlus Integration, Proceedings of Building Simulation 2021, International Building Performance Simulation Association, Bruges, September 1-3, 2021. Publication to be posted: [pdf](https://www.researchgate.net/publication/358969936_A_Python_Library_for_Radiance_Matrix-based_Simulation_Control_and_EnergyPlus_Integration)
+```python
+import frads as fr
+
+cfg = fr.WorkflowConfig.from_dict({
+    "settings": {
+        "method": "3phase",
+        "wea_file": "weather.wea",
+    },
+    "model": {
+        "scene": {"files": ["walls.rad", "floor.rad", "ceiling.rad"]},
+        "windows": {"window1": {"file": "window.rad", "matrix_name": "bsdf1"}},
+        "materials": {
+            "files": ["materials.mat"],
+            "matrices": {"bsdf1": {"matrix_file": "window.xml"}},
+        },
+        "sensors": {"workplane": {"file": "grid.txt"}},
+    },
+})
+
+workflow = fr.ThreePhaseMethod(cfg)
+workflow.generate_matrices()
+illuminance = workflow.calculate_sensor(
+    sensor="workplane",
+    bsdf={"window1": "bsdf1"},
+    time=..., dni=800, dhi=100,
+)
+```
+
+**Run an EnergyPlus simulation with Radiance daylighting:**
+
+```python
+import frads as fr
+
+epmodel = fr.load_energyplus_model("office.idf")
+epmodel.add_glazing_system(
+    fr.create_glazing_system("clear", [fr.LayerInput("clear.json")])
+)
+
+with fr.EnergyPlusSetup(epmodel, "weather.epw", enable_radiance=True) as eps:
+    def controller(state):
+        if not eps.api.exchange.api_data_fully_ready(state):
+            return
+        wpi = eps.calculate_wpi(zone="Zone1", cfs_name={"Window1": "clear"})
+        eps.actuate_lighting_power("Zone1_Lights", (1 - min(wpi.mean() / 500, 1)) * 1000)
+
+    eps.set_callback("callback_begin_system_timestep_before_predictor", controller)
+    eps.run(annual=True)
+```
+
+## Documentation
+
+Full documentation, how-to guides, and API reference are at **[lbnl-eta.github.io/frads](https://lbnl-eta.github.io/frads/)**.
+
+## Citation
+
+Wang, T., Ward, G., and Lee, E.S. (2021). A Python Library for Radiance Matrix-based Simulation Control and EnergyPlus Integration. *Proceedings of Building Simulation 2021*, IBPSA, Bruges. [PDF](https://www.researchgate.net/publication/358969936_A_Python_Library_for_Radiance_Matrix-based_Simulation_Control_and_EnergyPlus_Integration)
+
+## License
+
+Framework for Radiance Simulation Control (frads) Copyright (c) 2019, The Regents of the University of California, through Lawrence Berkeley National Laboratory (subject to receipt of any required approvals from the U.S. Dept. of Energy). All rights reserved. See [license.txt](license.txt) for details.
