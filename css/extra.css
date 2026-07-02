@@ -1,0 +1,13 @@
+h2 {
+    color: #007681;
+}
+
+h3 {
+    color: #007681;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+    font-weight: bold;
+}
