@@ -325,9 +325,22 @@ def convexhull(points: list[np.ndarray], normal: np.ndarray) -> Polygon:
 
 
 def polygon_center(*polygons):
-    """Calculate the center from polygons."""
-    centroids = [p.centroid for p in polygons]
-    return Polygon(centroids).centroid
+    """Calculate the center from polygons.
+
+    Uses the arithmetic mean of the per-polygon centroids. Wrapping the
+    centroids in a ``Polygon`` and taking that polygon's centroid computes
+    the same value (``Polygon.centroid`` is the vertex mean), but raises
+    ``ValueError: Cannot compute normal - degenerate polygon`` whenever the
+    centroids are collinear or arranged symmetrically so that the Newell
+    normal vanishes -- e.g. the six face centroids of any box-shaped zone.
+
+    Args:
+        polygons: Polygon objects.
+
+    Returns:
+        The center of the polygons as a numpy array.
+    """
+    return np.mean([p.centroid for p in polygons], axis=0)
 
 
 def get_polygon_limits(polygon_list: Sequence[Polygon], offset: float = 0.0):

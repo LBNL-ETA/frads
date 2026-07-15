@@ -79,5 +79,39 @@ class TestGeometry(unittest.TestCase):
         self.assertEqual(trimmed_wall.normal[1], -1)
         self.assertEqual(trimmed_wall.normal[2], 0)
 
+    def test_polygon_center_box_zone(self):
+        """polygon_center works for the six faces of a box-shaped zone.
+
+        The six face centroids of a box are arranged symmetrically around
+        the zone center, so their Newell normal vanishes. Wrapping them in a
+        Polygon (previous implementation) raised 'Cannot compute normal -
+        degenerate polygon'; the center must instead be the centroid mean.
+        """
+        lx, ly, lz = 2.0, 4.0, 3.0
+        p0 = np.array((0, 0, 0))
+        faces = [
+            geom.Polygon([p0, (lx, 0, 0), (lx, ly, 0), (0, ly, 0)]),          # floor
+            geom.Polygon([(0, 0, lz), (lx, 0, lz), (lx, ly, lz), (0, ly, lz)]),  # ceiling
+            geom.Polygon([p0, (lx, 0, 0), (lx, 0, lz), (0, 0, lz)]),          # south
+            geom.Polygon([p0, (0, ly, 0), (0, ly, lz), (0, 0, lz)]),          # west
+            geom.Polygon([(lx, 0, 0), (lx, ly, 0), (lx, ly, lz), (lx, 0, lz)]),  # east
+            geom.Polygon([(0, ly, 0), (lx, ly, 0), (lx, ly, lz), (0, ly, lz)]),  # north
+        ]
+        center = geom.polygon_center(*faces)
+        np.testing.assert_allclose(center, [lx / 2, ly / 2, lz / 2])
+
+    def test_polygon_center_equals_centroid_mean(self):
+        """polygon_center is the arithmetic mean of the polygon centroids."""
+        square = geom.Polygon(
+            [np.array((0, 0, 0)), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+        )
+        shifted = geom.Polygon(
+            [np.array((2, 0, 1)), (3, 0, 1), (3, 1, 1), (2, 1, 1)]
+        )
+        center = geom.polygon_center(square, shifted)
+        expected = np.mean([square.centroid, shifted.centroid], axis=0)
+        np.testing.assert_allclose(center, expected)
+
+
 if __name__== "__main__":
     unittest.main()
