@@ -531,6 +531,50 @@ class WorkflowConfig:
         return WorkflowConfig(settings, model)
 
 
+MATRIX_CACHE_SCHEMA_VERSION = 2
+
+
+def _matrix_cache_prefixes(mdata, mfile, *name_groups) -> tuple[str, str, str]:
+    """Return the (view, sensor, surface) key prefixes for a matrix cache.
+
+    Schema v2 cache files namespace per-entity keys as ``view_{name}_...``,
+    ``sensor_{name}_...`` and ``surface_{name}_...``. Legacy (v1) files used
+    the bare entity name for every group, so a view and a sensor (or surface)
+    sharing a name were saved under the same key -- the later group silently
+    overwrote the earlier one and load_matrices restored a corrupted matrix
+    without any error. Legacy files are therefore only accepted when no names
+    collide across groups.
+
+    Args:
+        mdata: The mapping loaded from the ``.npz`` cache file.
+        mfile: Path of the cache file, used in the error message.
+        name_groups: One iterable of entity names per group (views, sensors,
+            surfaces, ...) stored in the cache.
+
+    Returns:
+        The ("view_", "sensor_", "surface_") prefixes for schema v2 files,
+        or three empty strings for a collision-free legacy file.
+
+    Raises:
+        ValueError: If the file is a legacy cache and entity names collide
+            across groups (the cached arrays are corrupted).
+    """
+    if "_schema_version" in mdata:
+        return "view_", "sensor_", "surface_"
+    seen: set = set()
+    for group in name_groups:
+        colliding = seen.intersection(group)
+        if colliding:
+            raise ValueError(
+                f"Matrix cache {mfile} predates key namespacing and contains "
+                f"colliding entity names {sorted(colliding)}: the cached "
+                "arrays were silently overwritten on save and are corrupted. "
+                "Delete the file or set settings.overwrite to regenerate."
+            )
+        seen.update(group)
+    return "", "", ""
+
+
 class PhaseMethod:
     """Base class for phase methods.
 
@@ -876,10 +920,13 @@ class TwoPhaseMethod(PhaseMethod):
         if not self.mfile.exists():
             raise FileNotFoundError("Matrices file not found")
         mdata = np.load(self.mfile)
+        vp, sp, _ = _matrix_cache_prefixes(
+            mdata, self.mfile, self.view_sky_matrices, self.sensor_sky_matrices
+        )
         for view, mtx in self.view_sky_matrices.items():
-            mtx.array = mdata[f"{view}_sky_matrix"]
+            mtx.array = mdata[f"{vp}{view}_sky_matrix"]
         for sensor, mtx in self.sensor_sky_matrices.items():
-            mtx.array = mdata[f"{sensor}_sky_matrix"]
+            mtx.array = mdata[f"{sp}{sensor}_sky_matrix"]
 
     def calculate_view(
         self, view: str, time: datetime, dni: float, dhi: float
@@ -977,11 +1024,11 @@ class TwoPhaseMethod(PhaseMethod):
         """Save matrices to a .npz file in the Matrices directory.
         File name is the hash string of the configuration.
         """
-        matrices = {}
+        matrices = {"_schema_version": np.int64(MATRIX_CACHE_SCHEMA_VERSION)}
         for view, mtx in self.view_sky_matrices.items():
-            matrices[f"{view}_sky_matrix"] = mtx.array
+            matrices[f"view_{view}_sky_matrix"] = mtx.array
         for sensor, mtx in self.sensor_sky_matrices.items():
-            matrices[f"{sensor}_sky_matrix"] = mtx.array
+            matrices[f"sensor_{sensor}_sky_matrix"] = mtx.array
         np.savez(self.mtxdir / self.config.hash_str, **matrices)
 
 
@@ -1095,13 +1142,20 @@ class ThreePhaseMethod(PhaseMethod):
         """Load matrices from a .npz file in the Matrices directory."""
         logger.info(f"Loading matrices from {self.mfile}")
         mdata = np.load(self.mfile)
+        vp, sp, fp = _matrix_cache_prefixes(
+            mdata,
+            self.mfile,
+            self.view_window_matrices,
+            self.sensor_window_matrices,
+            self.surface_window_matrices,
+        )
         for view, mtx in self.view_window_matrices.items():
-            if (key := f"{view}_window_matrix") in mdata:
+            if (key := f"{vp}{view}_window_matrix") in mdata:
                 mtx.array = mdata[key]
         for sensor, mtx in self.sensor_window_matrices.items():
-            mtx.array = mdata[f"{sensor}_window_matrix"]
+            mtx.array = mdata[f"{sp}{sensor}_window_matrix"]
         for surface, mtx in self.surface_window_matrices.items():
-            mtx.array = mdata[f"{surface}_window_matrix"]
+            mtx.array = mdata[f"{fp}{surface}_window_matrix"]
         for name, mtx in self.daylight_matrices.items():
             mtx.array = mdata[f"{name}_daylight_matrix"]
 
@@ -1401,16 +1455,20 @@ class ThreePhaseMethod(PhaseMethod):
         """Saves the view window matrices, sensor window matrices, and daylight matrices
         to a NumPy `.npz` file.
 
-        The matrices are saved with keys formed by concatenating the corresponding
-        view, sensor, or window name with '_window_matrix' or '_daylight_matrix'.
+        Window matrices are saved under group-namespaced keys
+        ('view_{name}_window_matrix', 'sensor_{name}_window_matrix',
+        'surface_{name}_window_matrix') so that a view, sensor, or surface
+        sharing the same name cannot overwrite each other; daylight matrices
+        use '{window}_daylight_matrix'. The file carries a '_schema_version'
+        entry (currently 2) that load_matrices uses to detect legacy files.
         """
-        matrices = {}
+        matrices = {"_schema_version": np.int64(MATRIX_CACHE_SCHEMA_VERSION)}
         for view, mtx in self.view_window_matrices.items():
-            matrices[f"{view}_window_matrix"] = mtx.array
+            matrices[f"view_{view}_window_matrix"] = mtx.array
         for sensor, mtx in self.sensor_window_matrices.items():
-            matrices[f"{sensor}_window_matrix"] = mtx.array
+            matrices[f"sensor_{sensor}_window_matrix"] = mtx.array
         for surface, mtx in self.surface_window_matrices.items():
-            matrices[f"{surface}_window_matrix"] = mtx.array
+            matrices[f"surface_{surface}_window_matrix"] = mtx.array
         for window, mtx in self.daylight_matrices.items():
             matrices[f"{window}_daylight_matrix"] = mtx.array
         np.savez(self.mfile, **matrices)
@@ -1700,24 +1758,30 @@ class FivePhaseMethod(PhaseMethod):
         """ """
         logger.info(f"Loading matrices from {self.mfile}")
         mdata = np.load(self.mfile, allow_pickle=True)
+        vp, sp, _ = _matrix_cache_prefixes(
+            mdata,
+            self.mfile,
+            self.view_window_matrices,
+            self.sensor_window_matrices,
+        )
         for view, mtx in self.view_window_matrices.items():
-            mtx.array = mdata[f"{view}_window_matrix"]
+            mtx.array = mdata[f"{vp}{view}_window_matrix"]
         for sensor, mtx in self.sensor_window_matrices.items():
-            mtx.array = mdata[f"{sensor}_window_matrix"]
+            mtx.array = mdata[f"{sp}{sensor}_window_matrix"]
         for window, mtx in self.daylight_matrices.items():
             mtx.array = mdata[f"{window}_daylight_matrix"]
         for view, mtx in self.view_window_direct_matrices.items():
-            mtx.array = mdata[f"{view}_window_direct_matrix"]
+            mtx.array = mdata[f"{vp}{view}_window_direct_matrix"]
         for sensor, mtx in self.sensor_window_direct_matrices.items():
-            mtx.array = mdata[f"{sensor}_window_direct_matrix"]
+            mtx.array = mdata[f"{sp}{sensor}_window_direct_matrix"]
         for window, mtx in self.daylight_direct_matrices.items():
             mtx.array = mdata[f"{window}_daylight_direct_matrix"]
         for sensor, mtx in self.sensor_sun_direct_matrices.items():
-            mtx.array = mdata[f"{sensor}_sun_direct_matrix"]
+            mtx.array = mdata[f"{sp}{sensor}_sun_direct_matrix"]
         for view, mtx in self.view_sun_direct_matrices.items():
-            mtx.array = mdata[f"{view}_sun_direct_matrix"]
+            mtx.array = mdata[f"{vp}{view}_sun_direct_matrix"]
         for view, mtx in self.view_sun_direct_illuminance_matrices.items():
-            mtx.array = mdata[f"{view}_sun_direct_illuminance_matrix"]
+            mtx.array = mdata[f"{vp}{view}_sun_direct_illuminance_matrix"]
 
     def calculate_view_from_wea(self, view: str):
         logger.info("Step 1/2: Generating sky matrix from wea")
@@ -1815,25 +1879,25 @@ class FivePhaseMethod(PhaseMethod):
         return res3 - res3d + rescd
 
     def save_matrices(self):
-        matrices = {}
+        matrices = {"_schema_version": np.int64(MATRIX_CACHE_SCHEMA_VERSION)}
         for view, mtx in self.view_window_matrices.items():
-            matrices[f"{view}_window_matrix"] = mtx.array
+            matrices[f"view_{view}_window_matrix"] = mtx.array
         for sensor, mtx in self.sensor_window_matrices.items():
-            matrices[f"{sensor}_window_matrix"] = mtx.array
+            matrices[f"sensor_{sensor}_window_matrix"] = mtx.array
         for window, mtx in self.daylight_matrices.items():
             matrices[f"{window}_daylight_matrix"] = mtx.array
         for view, mtx in self.view_window_direct_matrices.items():
-            matrices[f"{view}_window_direct_matrix"] = mtx.array
+            matrices[f"view_{view}_window_direct_matrix"] = mtx.array
         for sensor, mtx in self.sensor_window_direct_matrices.items():
-            matrices[f"{sensor}_window_direct_matrix"] = mtx.array
+            matrices[f"sensor_{sensor}_window_direct_matrix"] = mtx.array
         for window, mtx in self.daylight_direct_matrices.items():
             matrices[f"{window}_daylight_direct_matrix"] = mtx.array
         for sensor, mtx in self.sensor_sun_direct_matrices.items():
-            matrices[f"{sensor}_sun_direct_matrix"] = mtx.array
+            matrices[f"sensor_{sensor}_sun_direct_matrix"] = mtx.array
         for view, mtx in self.view_sun_direct_matrices.items():
-            matrices[f"{view}_sun_direct_matrix"] = mtx.array
+            matrices[f"view_{view}_sun_direct_matrix"] = mtx.array
         for view, mtx in self.view_sun_direct_illuminance_matrices.items():
-            matrices[f"{view}_sun_direct_illuminance_matrix"] = mtx.array
+            matrices[f"view_{view}_sun_direct_illuminance_matrix"] = mtx.array
         np.savez_compressed(self.mfile, **matrices)
 
 
