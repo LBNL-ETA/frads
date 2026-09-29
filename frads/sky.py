@@ -320,7 +320,7 @@ def gen_perez_sky(
         latitude,
         longitude,
         timezone,
-        year,
+        year=dt.year if year is None else year,
         dirnorm=dirnorm,
         diffhor=diffhor,
         dirhor=dirhor,

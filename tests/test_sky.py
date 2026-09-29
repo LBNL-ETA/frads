@@ -22,6 +22,23 @@ wea_path = test_dir / "Resources" / "oak.wea"
 
 class TestSky(unittest.TestCase):
 
+    def test_gen_perez_sky_year(self):
+        """Use the requested year, or the datetime year, for solar position."""
+        dt = datetime(2019, 9, 25, 8, 45)
+        for kwargs, expected_year in (({}, 2019), ({"year": None}, 2019),
+                                      ({"year": 2020}, 2020)):
+            with self.subTest(kwargs=kwargs):
+                result = sky.gen_perez_sky(
+                    dt, 48.1983, -16.3669, -15,
+                    dirnorm=111, diffhor=89, **kwargs,
+                )
+                expected = pr.gendaylit(
+                    dt, 48.1983, -16.3669, -15,
+                    year=expected_year, dirnorm=111, diffhor=89,
+                )
+                self.assertIn(f"-y {expected_year}".encode(), result.splitlines()[0])
+                self.assertTrue(result.startswith(expected))
+
     # def test_basis_glow():
     #     basis = "r1"
     #     result = sky.basis_glow(basis)
